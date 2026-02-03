@@ -692,6 +692,9 @@ public class User {
     }
 
     public void resetUserStats() {
+        if (Main.isTestMode() || Main.isAiHarnessMode() || Boolean.parseBoolean(System.getProperty("xmage.skipUserStats", "false"))) {
+            return;
+        }
         if (userData == null) {
             return;
         }

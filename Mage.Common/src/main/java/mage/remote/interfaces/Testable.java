@@ -12,5 +12,7 @@ public interface Testable {
 
     boolean isTestMode();
 
+    boolean isAiHarnessMode();
+
     boolean cheatShow(UUID gameId, UUID playerId);
 }

@@ -281,7 +281,7 @@ public class TableController {
         Deck deck = Deck.load(deckList, false, false);
 
         // deck - validate
-        if (!Main.isTestMode() && !table.getValidator().validate(deck)) {
+        if (!Main.isTestMode() && !Main.isAiHarnessMode() && !table.getValidator().validate(deck)) {
             StringBuilder sb = new StringBuilder("You (").append(name).append(") have an invalid deck for the selected ").append(table.getValidator().getName()).append(" Format. \n\n");
             List<DeckValidatorError> errorsList = table.getValidator().getErrorsListSorted();
             errorsList.stream().forEach(error -> {

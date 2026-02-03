@@ -65,6 +65,10 @@ public class TablesPanel extends javax.swing.JPanel {
 
     private static final Logger LOGGER = Logger.getLogger(TablesPanel.class);
     private static final int[] DEFAULT_COLUMNS_WIDTH = {35, 150, 100, 50, 120, 180, 80, 120, 80, 60, 40, 40, 60};
+    private static final String AI_HARNESS_AUTO_START_PROP = "xmage.aiHarness.autoStart";
+    private static final String AI_HARNESS_DECKS_DIR = "release/sample-decks/Commander";
+    private static boolean aiHarnessAutoStartTriggered = false;
+    private static boolean aiHarnessAutoWatchTriggered = false;
 
     // ping timeout (warning, must be less than UserManagerImpl.USER_CONNECTION_TIMEOUTS_CHECK_SECS)
     public static final int PING_SERVER_SECS = 20;
@@ -759,9 +763,12 @@ public class TablesPanel extends javax.swing.JPanel {
         this.roomId = roomId;
         UUID chatRoomId = null;
         if (SessionHandler.getSession() != null) {
-            btnQuickStart2Player.setVisible(SessionHandler.isTestMode());
-            btnQuickStart4Player.setVisible(SessionHandler.isTestMode());
-            btnQuickStartMCTS.setVisible(SessionHandler.isTestMode());
+            boolean testMode = SessionHandler.isTestMode();
+            boolean aiHarnessMode = SessionHandler.isAiHarnessMode();
+            btnQuickStart2Player.setVisible(testMode);
+            btnQuickStartMCTS.setVisible(testMode);
+            btnQuickStart4Player.setVisible(testMode || aiHarnessMode);
+            btnQuickStart4Player.setText(aiHarnessMode ? "Quick 4 AI Commander" : "Quick 4 player");
             gameChooser.init();
             chatRoomId = SessionHandler.getRoomChatId(roomId).orElse(null);
         }
@@ -782,6 +789,7 @@ public class TablesPanel extends javax.swing.JPanel {
             startUpdateTasks(true);
             this.setVisible(true);
             this.repaint();
+            maybeAutoStartAiHarnessGame();
         } else {
             hideTables();
         }
@@ -1678,6 +1686,65 @@ public class TablesPanel extends javax.swing.JPanel {
     }//GEN-LAST:event_btnNewTournamentActionPerformed
 
     private void createTestGame(String gameName, String gameType, boolean useMonteCarloAI) {
+        PlayerType aiType = useMonteCarloAI ? PlayerType.COMPUTER_MONTE_CARLO : PlayerType.COMPUTER_MAD;
+        int numPlayers = gameName.contains("2") || gameName.contains("Monte Carlo") ? 2 : 4;
+        createQuickGame(gameName, gameType, aiType, numPlayers, true);
+    }
+
+    private void createAiHarnessGame() {
+        createQuickGame("Commander AI Harness", "Commander Free For All", PlayerType.COMPUTER_MAD, 4, false);
+    }
+
+    private void maybeAutoStartAiHarnessGame() {
+        if (aiHarnessAutoStartTriggered) {
+            return;
+        }
+        if (!SessionHandler.isAiHarnessMode()) {
+            return;
+        }
+        if (!Boolean.parseBoolean(System.getProperty(AI_HARNESS_AUTO_START_PROP, "false"))) {
+            return;
+        }
+        aiHarnessAutoStartTriggered = true;
+        SwingUtilities.invokeLater(this::createAiHarnessGame);
+    }
+
+    private void maybeAutoWatchAiHarnessTable(UUID tableId) {
+        if (aiHarnessAutoWatchTriggered) {
+            return;
+        }
+        if (!SessionHandler.isAiHarnessMode()) {
+            return;
+        }
+        aiHarnessAutoWatchTriggered = true;
+        Thread watcher = new Thread(() -> {
+            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+            while (System.currentTimeMillis() < deadline) {
+                Collection<TableView> tables = SessionHandler.getTables(roomId);
+                for (TableView tableView : tables) {
+                    if (!tableId.equals(tableView.getTableId())) {
+                        continue;
+                    }
+                    if (TableState.DUELING.equals(tableView.getTableState())) {
+                        LOGGER.info("AI harness auto-watch table " + tableId);
+                        SessionHandler.watchTable(roomId, tableId);
+                        return;
+                    }
+                }
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            LOGGER.warn("AI harness auto-watch timed out for table " + tableId);
+        }, "AIHarness-AutoWatch");
+        watcher.setDaemon(true);
+        watcher.start();
+    }
+
+    private void createQuickGame(String gameName, String gameType, PlayerType aiType, int numPlayers, boolean includeHuman) {
         TableView table;
         try {
             String testDeckFile = "test.dck";
@@ -1693,14 +1760,18 @@ public class TablesPanel extends javax.swing.JPanel {
             }
             DeckCardLists testDeck = DeckImporter.importDeckFromFile(testDeckFile, false);
 
-            PlayerType aiType = useMonteCarloAI ? PlayerType.COMPUTER_MONTE_CARLO : PlayerType.COMPUTER_MAD;
-            int numPlayers = gameName.contains("2") || gameName.contains("Monte Carlo") ? 2 : 4;
             boolean multiPlayer = numPlayers > 2;
+            int aiPlayers = includeHuman ? numPlayers - 1 : numPlayers;
+            List<DeckCardLists> aiDecks = null;
+            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
+                aiDecks = pickAiHarnessDecks(aiPlayers, testDeck);
+            }
 
             MatchOptions options = new MatchOptions(gameName, gameType, multiPlayer);
-            options.getPlayerTypes().add(PlayerType.HUMAN);
-            options.getPlayerTypes().add(aiType);
-            for (int i = 2; i < numPlayers; i++) {
+            if (includeHuman) {
+                options.getPlayerTypes().add(PlayerType.HUMAN);
+            }
+            for (int i = 0; i < aiPlayers; i++) {
                 options.getPlayerTypes().add(aiType);
             }
             options.setDeckType("Variant Magic - Freeform Commander");
@@ -1714,19 +1785,90 @@ public class TablesPanel extends javax.swing.JPanel {
             options.setRollbackTurnsAllowed(true);
             options.setQuitRatio(100);
             options.setMinimumRating(0);
+            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
+                options.setSpectatorsAllowed(true);
+            }
             String serverAddress = SessionHandler.getSession().getServerHost();
             options.setBannedUsers(IgnoreList.getIgnoredUsers(serverAddress));
             table = SessionHandler.createTable(roomId, options);
 
-            SessionHandler.joinTable(roomId, table.getTableId(), "Human", PlayerType.HUMAN, 1, testDeck, "");
-            SessionHandler.joinTable(roomId, table.getTableId(), "Computer" + (multiPlayer ? " 2" : ""), aiType, 1, testDeck, "");
-            for (int i = 2; i < numPlayers; i++) {
-                SessionHandler.joinTable(roomId, table.getTableId(), "Computer " + (i + 1), aiType, 1, testDeck, "");
+            if (includeHuman) {
+                SessionHandler.joinTable(roomId, table.getTableId(), "Human", PlayerType.HUMAN, 1, testDeck, "");
+            }
+            for (int i = 0; i < aiPlayers; i++) {
+                String aiName;
+                if (includeHuman && numPlayers == 2) {
+                    aiName = "Computer";
+                } else {
+                    int displayIndex = includeHuman ? i + 2 : i + 1;
+                    aiName = "Computer " + displayIndex;
+                }
+                DeckCardLists deckToUse = aiDecks != null ? aiDecks.get(i) : testDeck;
+                SessionHandler.joinTable(roomId, table.getTableId(), aiName, aiType, 1, deckToUse, "");
             }
             SessionHandler.startMatch(roomId, table.getTableId());
+            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
+                maybeAutoWatchAiHarnessTable(table.getTableId());
+            }
         } catch (HeadlessException ex) {
             handleError(ex);
         }
+    }
+
+    private List<DeckCardLists> pickAiHarnessDecks(int count, DeckCardLists fallbackDeck) {
+        List<File> deckFiles = findAiHarnessDeckFiles();
+        if (deckFiles.isEmpty()) {
+            LOGGER.warn("AI harness decks not found; using fallback deck.");
+            return Collections.nCopies(count, fallbackDeck);
+        }
+        Collections.shuffle(deckFiles, RandomUtil.getRandom());
+        List<DeckCardLists> decks = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            File deckFile = deckFiles.get(i % deckFiles.size());
+            DeckCardLists deck = null;
+            try {
+                deck = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
+            } catch (Exception ex) {
+                LOGGER.warn("AI harness failed to load deck " + deckFile.getPath() + ", using fallback.", ex);
+            }
+            if (deck == null) {
+                deck = fallbackDeck;
+            }
+            decks.add(deck);
+        }
+        LOGGER.info("AI harness using " + decks.size() + " commander decks from " + deckFiles.get(0).getParent());
+        return decks;
+    }
+
+    private List<File> findAiHarnessDeckFiles() {
+        File root = new File(AI_HARNESS_DECKS_DIR);
+        if (!root.exists()) {
+            root = new File("Mage.Client/" + AI_HARNESS_DECKS_DIR);
+        }
+        if (!root.exists()) {
+            return Collections.emptyList();
+        }
+        List<File> decks = new ArrayList<>();
+        ArrayDeque<File> pending = new ArrayDeque<>();
+        pending.add(root);
+        while (!pending.isEmpty()) {
+            File dir = pending.removeFirst();
+            File[] children = dir.listFiles();
+            if (children == null) {
+                continue;
+            }
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    pending.add(child);
+                } else if (child.isFile()) {
+                    String name = child.getName().toLowerCase(Locale.ROOT);
+                    if (name.endsWith(".dck")) {
+                        decks.add(child);
+                    }
+                }
+            }
+        }
+        return decks;
     }
 
     private void btnNewTableActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnNewTableActionPerformed
@@ -1769,7 +1911,11 @@ public class TablesPanel extends javax.swing.JPanel {
     }//GEN-LAST:event_btnQuickStartDuelActionPerformed
 
     private void btnQuickStart4PlayerActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuickStartCommanderActionPerformed
-        createTestGame("Test 4 player", "Commander Free For All", false);
+        if (SessionHandler.isAiHarnessMode()) {
+            createAiHarnessGame();
+        } else {
+            createTestGame("Test 4 player", "Commander Free For All", false);
+        }
     }//GEN-LAST:event_btnQuickStartCommanderActionPerformed
 
     private void btnQuickStartMCTSActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuickStartMCTSActionPerformed

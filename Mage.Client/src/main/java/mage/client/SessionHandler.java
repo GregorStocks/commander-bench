@@ -245,6 +245,10 @@ public final class SessionHandler {
         return session.isTestMode();
     }
 
+    public static boolean isAiHarnessMode() {
+        return session.isAiHarnessMode();
+    }
+
     public static void cheatShow(UUID gameId, UUID playerId) {
         session.cheatShow(gameId, playerId);
     }

@@ -99,6 +99,18 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
     private static final String GUI_MODAL_MODE_PROP = "xmage.guiModalMode"; // -Dxmage.guiModalMode=false
     private static final String SKIP_DONE_SYMBOLS = "-skipDoneSymbols";
     private static final String DEBUG_ARG = "-debug"; // enable debug button in main menu
+    private static final String AI_HARNESS_AUTO_CONNECT_PROP = "xmage.aiHarness.autoConnect";
+    private static final String AI_HARNESS_SERVER_PROP = "xmage.aiHarness.server";
+    private static final String AI_HARNESS_PORT_PROP = "xmage.aiHarness.port";
+    private static final String AI_HARNESS_USER_PROP = "xmage.aiHarness.user";
+    private static final String AI_HARNESS_PASSWORD_PROP = "xmage.aiHarness.password";
+    private static final String AI_HARNESS_DISABLE_WHATS_NEW_PROP = "xmage.aiHarness.disableWhatsNew";
+    private static final String AI_HARNESS_ENV = "XMAGE_AI_HARNESS";
+    private static final String AI_HARNESS_SERVER_ENV = "XMAGE_AI_HARNESS_SERVER";
+    private static final String AI_HARNESS_PORT_ENV = "XMAGE_AI_HARNESS_PORT";
+    private static final String AI_HARNESS_USER_ENV = "XMAGE_AI_HARNESS_USER";
+    private static final String AI_HARNESS_PASSWORD_ENV = "XMAGE_AI_HARNESS_PASSWORD";
+    private static final String AI_HARNESS_DISABLE_WHATS_NEW_ENV = "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW";
 
     private static final String NOT_CONNECTED_TEXT = "<not connected>";
     private static final String NOT_CONNECTED_BUTTON = "CONNECT TO SERVER";
@@ -372,12 +384,13 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
         }
 
         setGUISize();
+        applyAiHarnessAutoConnectDefaults();
         setConnectButtonText(NOT_CONNECTED_BUTTON);
         SwingUtilities.invokeLater(() -> {
             updateMemUsageTask.execute();
             LOGGER.info("Client start up time: " + ((System.currentTimeMillis() - startTime) / 1000 + " seconds"));
 
-            if (Boolean.parseBoolean(MageFrame.getPreferences().get("autoConnect", "false"))) {
+            if (isAiHarnessAutoConnectEnabled() || Boolean.parseBoolean(MageFrame.getPreferences().get("autoConnect", "false"))) {
                 startAutoConnect();
             } else {
                 connectDialog.showDialog(this::setWindowTitle);
@@ -388,7 +401,9 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
 
         // run what's new checks (loading in background)
         SwingUtilities.invokeLater(() -> {
-            showWhatsNewDialog(false);
+            if (!isAiHarnessWhatsNewDisabled()) {
+                showWhatsNewDialog(false);
+            }
         });
     }
 
@@ -925,6 +940,59 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
                 }
             }
         });
+    }
+
+    private void applyAiHarnessAutoConnectDefaults() {
+        if (!isAiHarnessAutoConnectEnabled()) {
+            return;
+        }
+        String server = getAiHarnessValue(AI_HARNESS_SERVER_PROP, AI_HARNESS_SERVER_ENV, ClientDefaultSettings.serverName);
+        String portRaw = getAiHarnessValue(AI_HARNESS_PORT_PROP, AI_HARNESS_PORT_ENV, null);
+        int port = ClientDefaultSettings.port;
+        if (portRaw != null && !portRaw.isEmpty()) {
+            try {
+                port = Integer.parseInt(portRaw);
+            } catch (NumberFormatException ex) {
+                LOGGER.warn("AI harness: invalid port '" + portRaw + "', using default " + ClientDefaultSettings.port);
+            }
+        }
+        String user = getAiHarnessValue(AI_HARNESS_USER_PROP, AI_HARNESS_USER_ENV, "ai-harness");
+        String password = getAiHarnessValue(AI_HARNESS_PASSWORD_PROP, AI_HARNESS_PASSWORD_ENV, "");
+
+        MagePreferences.setServerAddress(server);
+        MagePreferences.setServerPort(port);
+        MagePreferences.setUserName(server, user);
+        MagePreferences.setPassword(server, password);
+        MagePreferences.setAutoConnect(true);
+        LOGGER.info("AI harness auto-connect enabled for " + server + ':' + port + " as " + user);
+    }
+
+    private static boolean isAiHarnessAutoConnectEnabled() {
+        if (Boolean.parseBoolean(System.getProperty(AI_HARNESS_AUTO_CONNECT_PROP, "false"))) {
+            return true;
+        }
+        String envValue = System.getenv(AI_HARNESS_ENV);
+        return envValue != null && !envValue.isEmpty() && !"0".equals(envValue) && !"false".equalsIgnoreCase(envValue);
+    }
+
+    private static boolean isAiHarnessWhatsNewDisabled() {
+        if (Boolean.parseBoolean(System.getProperty(AI_HARNESS_DISABLE_WHATS_NEW_PROP, "false"))) {
+            return true;
+        }
+        String envValue = System.getenv(AI_HARNESS_DISABLE_WHATS_NEW_ENV);
+        return envValue != null && !envValue.isEmpty() && !"0".equals(envValue) && !"false".equalsIgnoreCase(envValue);
+    }
+
+    private static String getAiHarnessValue(String propKey, String envKey, String defaultValue) {
+        String propValue = System.getProperty(propKey);
+        if (propValue != null && !propValue.isEmpty()) {
+            return propValue;
+        }
+        String envValue = System.getenv(envKey);
+        if (envValue != null && !envValue.isEmpty()) {
+            return envValue;
+        }
+        return defaultValue;
     }
 
     private boolean performConnect(boolean reconnect) {
@@ -1973,9 +2041,6 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
         if (whatsNewDialog != null) {
             // build-in browser
             whatsNewDialog.checkUpdatesAndShow(forceToShowPage);
-        } else {
-            // system browser
-            AppUtil.openUrlInSystemBrowser(WhatsNewDialog.WHATS_NEW_PAGE);
         }
     }
 
