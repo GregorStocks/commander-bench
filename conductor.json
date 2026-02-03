@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "setup": "./scripts/conductor-setup.sh",
+    "run": "make ai-harness"
+  },
+  "runScriptMode": "nonconcurrent"
+}
