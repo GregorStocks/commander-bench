@@ -20,6 +20,8 @@
         <argLine>-Dfile.encoding=UTF-8</argLine>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
+        <!-- Reproducible builds: fixed timestamp for build cache and reproducibility -->
+        <project.build.outputTimestamp>2024-01-01T00:00:00Z</project.build.outputTimestamp>
 
         <!-- build: logs settings for maven tests and travis ci builds -->
         <xmage.build.tests.treeViewRunnerShowAllLogs>false</xmage.build.tests.treeViewRunnerShowAllLogs>
@@ -73,7 +75,7 @@
                     <archive>
                         <manifestEntries>
                             <Built-By>MageTeam</Built-By>
-                            <Build-Time>${maven.build.timestamp}</Build-Time>
+                            <Build-Time>${project.build.outputTimestamp}</Build-Time>
                         </manifestEntries>
                     </archive>
                 </configuration>

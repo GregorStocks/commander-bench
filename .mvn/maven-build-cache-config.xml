@@ -6,6 +6,10 @@
         <enabled>true</enabled>
         <hashAlgorithm>SHA-256</hashAlgorithm>
         <validateXml>false</validateXml>
+        <debugs>
+            <debug>FileHash</debug>
+            <debug>EffectivePom</debug>
+        </debugs>
     </configuration>
     <input>
         <global>
