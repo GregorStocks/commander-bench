@@ -10,8 +10,8 @@ mkdir -p ~/.m2/build-cache
 SHARED_IMAGES=~/.xmage/images
 mkdir -p "$SHARED_IMAGES"
 
-# Symlink plugins/images to shared location
-PLUGINS_DIR="$(dirname "$0")/../plugins"
+# Symlink Mage.Client/plugins/images to shared location
+PLUGINS_DIR="$(dirname "$0")/../Mage.Client/plugins"
 mkdir -p "$PLUGINS_DIR"
 IMAGES_LINK="$PLUGINS_DIR/images"
 
@@ -31,4 +31,4 @@ fi
 
 echo "XMage workspace ready."
 echo "  Build cache: ~/.m2/build-cache"
-echo "  Images: $SHARED_IMAGES"
+echo "  Images: ~/.xmage/images (symlinked from Mage.Client/plugins/images)"
