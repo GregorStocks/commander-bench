@@ -6,9 +6,6 @@
         <enabled>true</enabled>
         <hashAlgorithm>SHA-256</hashAlgorithm>
         <validateXml>false</validateXml>
-        <local>
-            <location>~/.m2/build-cache</location>
-        </local>
     </configuration>
     <input>
         <global>
