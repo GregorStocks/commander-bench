@@ -66,3 +66,4 @@ mage-bundle.zip
 # build targets
 /deploy
 /temp
+/plugins
