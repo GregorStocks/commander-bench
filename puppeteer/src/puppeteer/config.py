@@ -17,7 +17,7 @@ class Config:
     # Hardcoded defaults
     server: str = "localhost"
     start_port: int = 17171
-    user: str = "ai-harness"
+    user: str = "observer"
     password: str = ""
     server_wait: int = 90
     skeleton_delay: int = 5
