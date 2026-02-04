@@ -119,6 +119,25 @@ public class StreamingGamePanel extends GamePanel {
         } catch (NoSuchFieldException | IllegalAccessException e) {
             logger.warn("Failed to hide hand container via reflection", e);
         }
+
+        hideBigCardPanel();
+    }
+
+    /**
+     * Hide the card preview panel on the right side.
+     * Observers don't need the enlarged card preview.
+     */
+    private void hideBigCardPanel() {
+        try {
+            Field bigCardPanelField = GamePanel.class.getDeclaredField("bigCardPanel");
+            bigCardPanelField.setAccessible(true);
+            JPanel bigCardPanel = (JPanel) bigCardPanelField.get(this);
+            if (bigCardPanel != null) {
+                bigCardPanel.setVisible(false);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to hide big card panel via reflection", e);
+        }
     }
 
     @Override
