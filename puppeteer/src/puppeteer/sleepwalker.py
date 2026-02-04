@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -11,7 +12,26 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-CHAT_MESSAGE = "zzz"
+SLEEPY_NOISES = [
+    "zzz",
+    "zzzz",
+    "zzzzz",
+    "zzzzzz",
+    "*snore*",
+    "*mumble*",
+    "...huh?",
+    "*yawn*",
+    "five more minutes...",
+    "mmmph",
+    "*drool*",
+]
+
+
+def get_sleepy_noise():
+    """Return a random sleepy noise for chat messages."""
+    return random.choice(SLEEPY_NOISES)
+
+
 ACTION_DELAY_SECS = 0.5
 CHAT_INTERVAL_SECS = 5
 
@@ -104,10 +124,11 @@ async def run_sleepwalker(
                     # Send periodic chat message
                     current_time = time.time()
                     if current_time - last_chat_time > CHAT_INTERVAL_SECS:
-                        result = await session.call_tool("send_chat_message", {"message": CHAT_MESSAGE})
+                        chat_message = get_sleepy_noise()
+                        result = await session.call_tool("send_chat_message", {"message": chat_message})
                         chat_result = json.loads(result.content[0].text)
                         if chat_result.get("success"):
-                            print(f"[sleepwalker] Chat sent: {CHAT_MESSAGE}")
+                            print(f"[sleepwalker] Chat sent: {chat_message}")
                         else:
                             print(f"[sleepwalker] Chat failed (no game active yet?)")
                         last_chat_time = current_time
