@@ -51,7 +51,7 @@ async def run_sleepwalker(
         async with ClientSession(read, write) as session:
             # Initialize MCP connection
             result = await session.initialize()
-            print(f"[sleepwalker] MCP initialized: {result.server_info}")
+            print(f"[sleepwalker] MCP initialized: {result.serverInfo}")
 
             # List available tools
             tools = await session.list_tools()

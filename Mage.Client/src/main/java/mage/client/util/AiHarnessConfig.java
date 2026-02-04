@@ -125,6 +125,10 @@ public class AiHarnessConfig {
                 Gson gson = new Gson();
                 AiHarnessConfig config = gson.fromJson(configJson, AiHarnessConfig.class);
                 if (config != null && config.players != null && !config.players.isEmpty()) {
+                    // Debug: log each player's type
+                    for (PlayerConfig p : config.players) {
+                        LOGGER.info("  Player: " + p.name + ", type=" + p.type + ", isBot=" + p.isBot() + ", isHeadless=" + p.isHeadless());
+                    }
                     LOGGER.info("Loaded AI harness config from environment variable with " +
                             config.getBotCount() + " CPU players and " + config.getSkeletonCount() + " headless players");
                     return config;
