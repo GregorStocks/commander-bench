@@ -41,6 +41,7 @@ async def run_sleepwalker(
     port: int,
     username: str,
     project_root: Path,
+    deck_path: Path | None = None,
 ) -> None:
     """Run the sleepwalker client."""
     print(f"[sleepwalker] Starting for {username}@{server}:{port}")
@@ -53,6 +54,8 @@ async def run_sleepwalker(
         f"-Dxmage.headless.username={username}",
         "-Dxmage.headless.personality=sleepwalker",
     ]
+    if deck_path:
+        jvm_args_list.append(f"-Dxmage.headless.deck={deck_path}")
     if sys.platform == "darwin":
         jvm_args_list.append("-Dapple.awt.UIElement=true")
     jvm_args = " ".join(jvm_args_list)
@@ -153,6 +156,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=17171, help="XMage server port")
     parser.add_argument("--username", default="Sleepy", help="Player username")
     parser.add_argument("--project-root", type=Path, help="Project root directory")
+    parser.add_argument("--deck", type=Path, help="Path to deck file (.dck)")
     args = parser.parse_args()
 
     # Determine project root
@@ -175,6 +179,7 @@ def main() -> int:
             port=args.port,
             username=args.username,
             project_root=project_root,
+            deck_path=args.deck,
         ))
     except KeyboardInterrupt:
         pass

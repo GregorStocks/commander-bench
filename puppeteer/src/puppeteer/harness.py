@@ -169,10 +169,11 @@ def start_skeleton_client(
     project_root: Path,
     config: Config,
     name: str,
+    deck_path: str | None,
     log_path: Path,
 ) -> subprocess.Popen:
     """Start a headless skeleton client (legacy, same as potato)."""
-    return start_potato_client(pm, project_root, config, name, log_path)
+    return start_potato_client(pm, project_root, config, name, deck_path, log_path)
 
 
 def start_potato_client(
@@ -180,17 +181,26 @@ def start_potato_client(
     project_root: Path,
     config: Config,
     name: str,
+    deck_path: str | None,
     log_path: Path,
 ) -> subprocess.Popen:
     """Start a potato client (pure Java, auto-responds)."""
-    jvm_args = " ".join([
+    import shlex
+
+    jvm_args_list = [
         config.jvm_headless_opts,
         f"-Dxmage.headless.server={config.server}",
         f"-Dxmage.headless.port={config.port}",
         f"-Dxmage.headless.username={name}",
         "-Dxmage.headless.personality=potato",
-    ])
+    ]
 
+    if deck_path:
+        resolved_path = project_root / deck_path
+        # Quote the path to handle spaces in filenames
+        jvm_args_list.append(f"-Dxmage.headless.deck={shlex.quote(str(resolved_path))}")
+
+    jvm_args = " ".join(jvm_args_list)
     env = {"MAVEN_OPTS": jvm_args}
 
     return pm.start_process(
@@ -206,6 +216,7 @@ def start_sleepwalker_client(
     project_root: Path,
     config: Config,
     name: str,
+    deck_path: str | None,
     log_path: Path,
 ) -> subprocess.Popen:
     """Start a sleepwalker client (Python MCP client + skeleton in MCP mode).
@@ -218,15 +229,20 @@ def start_sleepwalker_client(
         "PYTHONUNBUFFERED": "1",
     }
 
+    args = [
+        sys.executable,
+        "-m", "puppeteer.sleepwalker",
+        "--server", config.server,
+        "--port", str(config.port),
+        "--username", name,
+        "--project-root", str(project_root),
+    ]
+
+    if deck_path:
+        args.extend(["--deck", str(project_root / deck_path)])
+
     return pm.start_process(
-        args=[
-            sys.executable,
-            "-m", "puppeteer.sleepwalker",
-            "--server", config.server,
-            "--port", str(config.port),
-            "--username", name,
-            "--project-root", str(project_root),
-        ],
+        args=args,
         cwd=project_root,
         env=env,
         log_file=log_path,
@@ -380,7 +396,7 @@ def main() -> int:
                 with open(last_txt, "a") as f:
                     f.write(f"sleepwalker_{client_idx}_log={client_log_path}\n")
                 print(f"Sleepwalker {client_idx} ({player.name}) log: {client_log_path}")
-                start_sleepwalker_client(pm, project_root, config, player.name, client_log_path)
+                start_sleepwalker_client(pm, project_root, config, player.name, player.deck, client_log_path)
                 client_idx += 1
 
             # Start potato clients (pure Java, auto-responds)
@@ -389,7 +405,7 @@ def main() -> int:
                 with open(last_txt, "a") as f:
                     f.write(f"potato_{client_idx}_log={client_log_path}\n")
                 print(f"Potato {client_idx} ({player.name}) log: {client_log_path}")
-                start_potato_client(pm, project_root, config, player.name, client_log_path)
+                start_potato_client(pm, project_root, config, player.name, player.deck, client_log_path)
                 client_idx += 1
 
             # Start legacy skeleton clients (treated as potato)
@@ -398,7 +414,7 @@ def main() -> int:
                 with open(last_txt, "a") as f:
                     f.write(f"skeleton_{client_idx}_log={client_log_path}\n")
                 print(f"Skeleton {client_idx} ({player.name}) log: {client_log_path}")
-                start_skeleton_client(pm, project_root, config, player.name, client_log_path)
+                start_skeleton_client(pm, project_root, config, player.name, player.deck, client_log_path)
                 client_idx += 1
 
             # Note: CPU players are handled by the GUI client/server

@@ -1,8 +1,8 @@
 {
   "players": [
-    {"type": "sleepwalker", "name": "Sleepy"},
-    {"type": "potato", "name": "Spud"},
-    {"type": "cpu", "name": "Mad AI 1"},
-    {"type": "cpu", "name": "Mad AI 2"}
+    {"type": "sleepwalker", "name": "Sleepy", "deck": "Mage.Client/release/sample-decks/Commander/zurgo.dck"},
+    {"type": "potato", "name": "Spud", "deck": "Mage.Client/release/sample-decks/Commander/tasigur.dck"},
+    {"type": "cpu", "name": "Mad AI 1", "deck": "Mage.Client/release/sample-decks/Commander/lorehold.dck"},
+    {"type": "cpu", "name": "Mad AI 2", "deck": "Mage.Client/release/sample-decks/Commander/prismari.dck"}
   ]
 }

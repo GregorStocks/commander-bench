@@ -80,6 +80,7 @@ public class AiHarnessConfig {
         public String type; // "cpu"/"bot", "sleepwalker", "potato", "skeleton"
         public String ai;   // for bots: "COMPUTER_MAD", "COMPUTER_MONTE_CARLO"
         public String name;
+        public String deck; // optional path to .dck file (relative to project root)
 
         /**
          * Returns true if this is a CPU/bot player (server-controlled AI).
