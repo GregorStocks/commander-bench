@@ -16,9 +16,13 @@ import mage.view.PlayerView;
 import mage.view.SimpleCardsView;
 import org.apache.log4j.Logger;
 
+import mage.client.streaming.recording.FrameCaptureService;
+import mage.client.streaming.recording.FFmpegEncoder;
+
 import javax.swing.*;
 import java.awt.*;
 import java.lang.reflect.Field;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +41,11 @@ public class StreamingGamePanel extends GamePanel {
     private UUID streamingGameId;
     private GameView lastGame;
     private boolean handContainerHidden = false;
+
+    // Recording support
+    private FrameCaptureService frameCaptureService;
+    private Path recordingPath;
+    private Thread shutdownHook;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -237,5 +246,59 @@ public class StreamingGamePanel extends GamePanel {
 
         // No hand available for this player
         return null;
+    }
+
+    /**
+     * Start recording the game panel to a video file.
+     *
+     * @param outputPath Path to the output video file (.mov)
+     */
+    public void startRecording(Path outputPath) {
+        if (frameCaptureService != null && frameCaptureService.isRunning()) {
+            logger.warn("Recording already in progress");
+            return;
+        }
+
+        this.recordingPath = outputPath;
+        FFmpegEncoder encoder = new FFmpegEncoder(outputPath);
+        frameCaptureService = new FrameCaptureService(this, 30, encoder);
+        frameCaptureService.start();
+
+        // Add shutdown hook to ensure recording is finalized on Ctrl+C
+        shutdownHook = new Thread(() -> {
+            logger.info("Shutdown hook: stopping recording");
+            if (frameCaptureService != null) {
+                frameCaptureService.stop();
+            }
+        }, "RecordingShutdownHook");
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+    }
+
+    /**
+     * Stop recording if in progress.
+     */
+    public void stopRecording() {
+        // Remove shutdown hook first to avoid double-stop
+        if (shutdownHook != null) {
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdownHook);
+            } catch (IllegalStateException e) {
+                // JVM is already shutting down, hook will run anyway
+            }
+            shutdownHook = null;
+        }
+
+        if (frameCaptureService != null) {
+            frameCaptureService.stop();
+            frameCaptureService = null;
+            logger.info("Recording stopped: " + recordingPath);
+        }
+    }
+
+    /**
+     * Check if recording is currently active.
+     */
+    public boolean isRecording() {
+        return frameCaptureService != null && frameCaptureService.isRunning();
     }
 }

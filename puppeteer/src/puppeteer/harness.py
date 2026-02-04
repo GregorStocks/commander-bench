@@ -47,12 +47,27 @@ def parse_args() -> Config:
         action="store_true",
         help="Launch the streaming observer client (auto-requests hand permissions)",
     )
+    parser.add_argument(
+        "--record",
+        nargs="?",
+        const=True,
+        default=False,
+        metavar="PATH",
+        help="Record game to video file (optionally specify output path)",
+    )
     args = parser.parse_args()
+
+    # Determine record output path
+    record_output = None
+    if args.record and args.record is not True:
+        record_output = Path(args.record)
 
     config = Config(
         skip_compile=args.skip_compile,
         config_file=args.config,
         streaming=args.streaming,
+        record=bool(args.record),
+        record_output=record_output,
     )
     return config
 
@@ -268,7 +283,7 @@ def start_streaming_client(
             config_data = json.load(f)
             config_json = json.dumps(config_data, separators=(',', ':'))
 
-    jvm_args = " ".join([
+    jvm_args_list = [
         config.jvm_opens,
         "-Dxmage.aiHarness.autoConnect=true",
         "-Dxmage.aiHarness.autoStart=true",
@@ -277,7 +292,14 @@ def start_streaming_client(
         f"-Dxmage.aiHarness.port={config.port}",
         f"-Dxmage.aiHarness.user={config.user}",
         f"-Dxmage.aiHarness.password={config.password}",
-    ])
+    ]
+
+    # Add recording path if configured
+    if config.record:
+        record_path = config.record_output or (project_root / config.log_dir / f"recording_{config.timestamp}.mov")
+        jvm_args_list.append(f"-Dxmage.streaming.record={record_path}")
+
+    jvm_args = " ".join(jvm_args_list)
 
     env = {
         "XMAGE_AI_HARNESS": "1",
@@ -307,6 +329,11 @@ def main() -> int:
     try:
         # Set timestamp
         config.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Recording requires streaming mode
+        if config.record and not config.streaming:
+            print("Recording requires streaming mode, enabling --streaming")
+            config.streaming = True
 
         # Create log directory (use absolute paths since subprocesses run from different dirs)
         log_dir = (project_root / config.log_dir).resolve()
@@ -344,9 +371,15 @@ def main() -> int:
             f.write(f"client_log={client_log}\n")
             f.write(f"server={config.server}\n")
             f.write(f"port={config.port}\n")
+            if config.record:
+                record_path = config.record_output or (log_dir / f"recording_{config.timestamp}.mov")
+                f.write(f"recording={record_path}\n")
 
         print(f"Server log: {server_log}")
         print(f"Client log: {client_log}")
+        if config.record:
+            record_path = config.record_output or (log_dir / f"recording_{config.timestamp}.mov")
+            print(f"Recording to: {record_path}")
 
         # Start server
         print("Starting XMage server...")

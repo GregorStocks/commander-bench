@@ -11,6 +11,8 @@ import java.awt.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.UUID;
 
 /**
@@ -108,6 +110,16 @@ public class StreamingMageFrame extends MageFrame {
         gamePane.setVisible(true);
         gamePane.watchGame(currentTableId, parentTableId, gameId);
         setActive(gamePane);
+
+        // Start recording if configured via system property
+        String recordPath = System.getProperty("xmage.streaming.record");
+        if (recordPath != null && !recordPath.isEmpty()) {
+            // Delay recording start to allow the panel to fully render
+            SwingUtilities.invokeLater(() -> {
+                LOGGER.info("Starting recording to: " + recordPath);
+                gamePane.startRecording(Paths.get(recordPath));
+            });
+        }
     }
 
     /**

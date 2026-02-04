@@ -12,7 +12,7 @@ clean:
 
 .PHONY: log-clean
 log-clean:
-	rm -rf .context/ai-harness-logs/*.log .context/ai-harness-logs/config .context/ai-harness-logs/last.txt
+	rm -rf .context/ai-harness-logs/*
 	@echo "Cleaned ai-harness logs"
 
 .PHONY: build
@@ -39,3 +39,20 @@ install: clean build package
 .PHONY: ai-harness
 ai-harness:
 	uv run --project puppeteer python -m puppeteer --streaming
+
+.PHONY: ai-harness-record
+ai-harness-record:
+	uv run --project puppeteer python -m puppeteer --streaming --record
+
+.PHONY: ai-harness-record-to
+ai-harness-record-to:
+	@test -n "$(OUTPUT)" || (echo "Usage: make ai-harness-record-to OUTPUT=/path/to/video.mov" && exit 1)
+	uv run --project puppeteer python -m puppeteer --streaming --record=$(OUTPUT)
+
+.PHONY: ai-harness-skip-compile
+ai-harness-skip-compile:
+	uv run --project puppeteer python -m puppeteer --streaming --skip-compile
+
+.PHONY: ai-harness-record-skip-compile
+ai-harness-record-skip-compile:
+	uv run --project puppeteer python -m puppeteer --streaming --record --skip-compile
