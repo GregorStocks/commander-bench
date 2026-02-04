@@ -9,9 +9,11 @@ import mage.remote.Session;
 import mage.remote.SessionImpl;
 import mage.view.SeatView;
 import mage.view.TableView;
+import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Logger;
 
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.UUID;
 
 /**
@@ -20,14 +22,20 @@ import java.util.UUID;
  * This client connects to an XMage server, joins the first available table
  * with an open human slot, and responds to all game callbacks automatically.
  *
+ * Supports two personalities:
+ * - potato (default): Auto-responds to all callbacks (passes priority, picks first option)
+ * - sleepwalker: Exposes MCP server on stdio for external client control
+ *
  * Usage:
  *   java -jar mage-client-headless.jar --server localhost --port 17171 --username bot1
+ *   java -jar mage-client-headless.jar --personality sleepwalker --server localhost --port 17171
  *
  * Or via system properties:
  *   -Dxmage.headless.server=localhost
  *   -Dxmage.headless.port=17171
  *   -Dxmage.headless.username=bot1
  *   -Dxmage.headless.password=
+ *   -Dxmage.headless.personality=potato
  */
 public class HeadlessClient {
 
@@ -35,17 +43,35 @@ public class HeadlessClient {
     private static final int TABLE_POLL_INTERVAL_MS = 1000;
     private static final int TABLE_POLL_TIMEOUT_MS = 60000;
 
+    private static final String PERSONALITY_POTATO = "potato";
+    private static final String PERSONALITY_SLEEPWALKER = "sleepwalker";
+
     public static void main(String[] args) {
         String server = getArg(args, "--server", System.getProperty("xmage.headless.server", "localhost"));
         int port = getIntArg(args, "--port", Integer.getInteger("xmage.headless.port", 17171));
         String username = getArg(args, "--username", System.getProperty("xmage.headless.username", "skeleton-" + System.currentTimeMillis()));
         String password = getArg(args, "--password", System.getProperty("xmage.headless.password", ""));
+        String personality = getArg(args, "--personality", System.getProperty("xmage.headless.personality", PERSONALITY_POTATO));
 
-        logger.info("Starting headless client: " + username + "@" + server + ":" + port);
+        boolean isSleepwalker = PERSONALITY_SLEEPWALKER.equalsIgnoreCase(personality);
+
+        // In sleepwalker mode, redirect all log4j output to stderr since stdout is used for MCP
+        if (isSleepwalker) {
+            redirectLogsToStderr();
+            logger.info("Starting in SLEEPWALKER mode (MCP server on stdio)");
+        }
+
+        logger.info("Starting headless client: " + username + "@" + server + ":" + port + " [" + personality + "]");
 
         SkeletonMageClient client = new SkeletonMageClient(username);
         Session session = new SessionImpl(client);
         client.setSession(session);
+
+        // Get callback handler and configure MCP mode
+        SkeletonCallbackHandler callbackHandler = client.getCallbackHandler();
+        if (isSleepwalker) {
+            callbackHandler.setMcpMode(true);
+        }
 
         Connection connection = new Connection();
         connection.setHost(server);
@@ -79,14 +105,38 @@ public class HeadlessClient {
 
         logger.info("Joined table, waiting for game to start (table creator will start match)...");
 
-        // Keep alive while client is running
-        while (client.isRunning()) {
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                logger.info("Interrupted, stopping...");
-                client.stop();
-                break;
+        if (isSleepwalker) {
+            // Start MCP server on stdio - this blocks until client stops
+            logger.info("Starting MCP server...");
+            McpServer mcpServer = new McpServer(callbackHandler);
+
+            // Run MCP server in separate thread so we can monitor client state
+            Thread mcpThread = new Thread(() -> mcpServer.start(), "MCP-Server");
+            mcpThread.setDaemon(true);
+            mcpThread.start();
+
+            // Keep alive while client is running
+            while (client.isRunning()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    logger.info("Interrupted, stopping...");
+                    client.stop();
+                    mcpServer.stop();
+                    break;
+                }
+            }
+            mcpServer.stop();
+        } else {
+            // Potato mode: just keep alive while client is running
+            while (client.isRunning()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    logger.info("Interrupted, stopping...");
+                    client.stop();
+                    break;
+                }
             }
         }
 
@@ -210,5 +260,18 @@ public class HeadlessClient {
             }
         }
         return defaultValue;
+    }
+
+    private static void redirectLogsToStderr() {
+        // Redirect all ConsoleAppender instances to use stderr instead of stdout
+        Logger rootLogger = Logger.getRootLogger();
+        Enumeration<?> appenders = rootLogger.getAllAppenders();
+        while (appenders.hasMoreElements()) {
+            Object appender = appenders.nextElement();
+            if (appender instanceof ConsoleAppender) {
+                ((ConsoleAppender) appender).setTarget("System.err");
+                ((ConsoleAppender) appender).activateOptions();
+            }
+        }
     }
 }

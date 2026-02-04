@@ -1,8 +1,8 @@
 {
   "players": [
-    {"type": "cpu", "name": "CPU 1"},
-    {"type": "cpu", "name": "CPU 2"},
-    {"type": "cpu", "name": "CPU 3"},
-    {"type": "skeleton", "name": "Skeleton"}
+    {"type": "sleepwalker", "name": "Sleepy"},
+    {"type": "potato", "name": "Spud"},
+    {"type": "cpu", "name": "Mad AI 1"},
+    {"type": "cpu", "name": "Mad AI 2"}
   ]
 }

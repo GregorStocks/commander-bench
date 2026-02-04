@@ -3,11 +3,35 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 import json
+from typing import Union
 
 
 @dataclass
 class SkeletonPlayer:
+    """Legacy skeleton player (kept for backwards compatibility)."""
     name: str
+
+
+@dataclass
+class PotatoPlayer:
+    """Potato personality: pure Java, auto-responds to everything (dumbest)."""
+    name: str
+
+
+@dataclass
+class SleepwalkerPlayer:
+    """Sleepwalker personality: MCP-based, Python client controls via stdio."""
+    name: str
+
+
+@dataclass
+class CpuPlayer:
+    """XMage built-in COMPUTER_MAD AI."""
+    name: str
+
+
+# Union type for all player types
+Player = Union[PotatoPlayer, SleepwalkerPlayer, CpuPlayer, SkeletonPlayer]
 
 
 @dataclass
@@ -32,10 +56,17 @@ class Config:
     # Runtime state (set during execution)
     port: int = 0
     timestamp: str = ""
+
+    # Player lists by type
+    potato_players: list[PotatoPlayer] = field(default_factory=list)
+    sleepwalker_players: list[SleepwalkerPlayer] = field(default_factory=list)
+    cpu_players: list[CpuPlayer] = field(default_factory=list)
+
+    # Legacy: kept for backwards compatibility
     skeleton_players: list[SkeletonPlayer] = field(default_factory=list)
 
     def load_skeleton_config(self) -> None:
-        """Load skeleton player configuration from JSON file."""
+        """Load player configuration from JSON file."""
         if self.config_file is None:
             # Try default locations in order
             candidates = [
@@ -55,6 +86,15 @@ class Config:
         with open(self.config_file) as f:
             data = json.load(f)
             for i, player in enumerate(data.get("players", [])):
-                if player.get("type") == "skeleton":
-                    name = player.get("name", f"skeleton-{i}")
-                    self.skeleton_players.append(SkeletonPlayer(name=name))
+                player_type = player.get("type", "")
+                name = player.get("name", f"player-{i}")
+
+                if player_type == "sleepwalker":
+                    self.sleepwalker_players.append(SleepwalkerPlayer(name=name))
+                elif player_type == "potato":
+                    self.potato_players.append(PotatoPlayer(name=name))
+                elif player_type == "cpu":
+                    self.cpu_players.append(CpuPlayer(name=name))
+                elif player_type == "skeleton":
+                    # Legacy: treat as potato for backwards compatibility
+                    self.potato_players.append(PotatoPlayer(name=name))

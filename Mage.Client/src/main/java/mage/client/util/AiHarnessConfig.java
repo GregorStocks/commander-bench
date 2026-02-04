@@ -13,13 +13,19 @@ import java.util.List;
 /**
  * Configuration for AI harness games, allowing specification of player types.
  *
+ * Player types:
+ * - "cpu" or "bot": Computer player (uses AI field, defaults to COMPUTER_MAD)
+ * - "sleepwalker": Headless client with MCP control (creates HUMAN slot)
+ * - "potato": Headless client with auto-response (creates HUMAN slot)
+ * - "skeleton": Legacy headless client (creates HUMAN slot)
+ *
  * Example config file (.context/ai-harness-config.json):
  * {
  *   "players": [
- *     {"type": "bot", "ai": "COMPUTER_MAD", "name": "Bot 1"},
- *     {"type": "bot", "ai": "COMPUTER_MAD", "name": "Bot 2"},
- *     {"type": "bot", "ai": "COMPUTER_MAD", "name": "Bot 3"},
- *     {"type": "skeleton", "name": "skeleton-1"}
+ *     {"type": "sleepwalker", "name": "Sleepy"},
+ *     {"type": "potato", "name": "Spud"},
+ *     {"type": "cpu", "name": "Mad AI 1"},
+ *     {"type": "cpu", "name": "Mad AI 2"}
  *   ]
  * }
  */
@@ -43,17 +49,17 @@ public class AiHarnessConfig {
     }
 
     public int getBotCount() {
-        return (int) players.stream().filter(p -> "bot".equals(p.type)).count();
+        return (int) players.stream().filter(p -> p.isBot()).count();
     }
 
     public int getSkeletonCount() {
-        return (int) players.stream().filter(p -> "skeleton".equals(p.type)).count();
+        return (int) players.stream().filter(p -> p.isHeadless()).count();
     }
 
     public List<PlayerConfig> getBots() {
         List<PlayerConfig> bots = new ArrayList<>();
         for (PlayerConfig p : players) {
-            if ("bot".equals(p.type)) {
+            if (p.isBot()) {
                 bots.add(p);
             }
         }
@@ -63,7 +69,7 @@ public class AiHarnessConfig {
     public List<PlayerConfig> getSkeletons() {
         List<PlayerConfig> skeletons = new ArrayList<>();
         for (PlayerConfig p : players) {
-            if ("skeleton".equals(p.type)) {
+            if (p.isHeadless()) {
                 skeletons.add(p);
             }
         }
@@ -71,14 +77,29 @@ public class AiHarnessConfig {
     }
 
     public static class PlayerConfig {
-        public String type; // "bot" or "skeleton"
+        public String type; // "cpu"/"bot", "sleepwalker", "potato", "skeleton"
         public String ai;   // for bots: "COMPUTER_MAD", "COMPUTER_MONTE_CARLO"
         public String name;
 
+        /**
+         * Returns true if this is a CPU/bot player (server-controlled AI).
+         */
+        public boolean isBot() {
+            return "bot".equals(type) || "cpu".equals(type);
+        }
+
+        /**
+         * Returns true if this is a headless client player (needs HUMAN slot).
+         */
+        public boolean isHeadless() {
+            return "skeleton".equals(type) || "sleepwalker".equals(type) || "potato".equals(type);
+        }
+
         public PlayerType getPlayerType() {
-            if ("skeleton".equals(type)) {
+            if (isHeadless()) {
                 return PlayerType.HUMAN;
             }
+            // Bot/CPU player
             if (ai == null || ai.isEmpty()) {
                 return PlayerType.COMPUTER_MAD;
             }
@@ -105,7 +126,7 @@ public class AiHarnessConfig {
                 AiHarnessConfig config = gson.fromJson(configJson, AiHarnessConfig.class);
                 if (config != null && config.players != null && !config.players.isEmpty()) {
                     LOGGER.info("Loaded AI harness config from environment variable with " +
-                            config.getBotCount() + " bots and " + config.getSkeletonCount() + " skeletons");
+                            config.getBotCount() + " CPU players and " + config.getSkeletonCount() + " headless players");
                     return config;
                 }
             } catch (Exception e) {
@@ -122,7 +143,7 @@ public class AiHarnessConfig {
                     AiHarnessConfig config = gson.fromJson(reader, AiHarnessConfig.class);
                     if (config != null && config.players != null && !config.players.isEmpty()) {
                         LOGGER.info("Loaded AI harness config from " + configFile.getAbsolutePath() +
-                                " with " + config.getBotCount() + " bots and " + config.getSkeletonCount() + " skeletons");
+                                " with " + config.getBotCount() + " CPU players and " + config.getSkeletonCount() + " headless players");
                         return config;
                     }
                 } catch (Exception e) {

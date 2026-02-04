@@ -153,12 +153,24 @@ def start_skeleton_client(
     name: str,
     log_path: Path,
 ) -> subprocess.Popen:
-    """Start a headless skeleton client."""
+    """Start a headless skeleton client (legacy, same as potato)."""
+    return start_potato_client(pm, project_root, config, name, log_path)
+
+
+def start_potato_client(
+    pm: ProcessManager,
+    project_root: Path,
+    config: Config,
+    name: str,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Start a potato client (pure Java, auto-responds)."""
     jvm_args = " ".join([
         config.jvm_opens,
         f"-Dxmage.headless.server={config.server}",
         f"-Dxmage.headless.port={config.port}",
         f"-Dxmage.headless.username={name}",
+        "-Dxmage.headless.personality=potato",
     ])
 
     env = {"MAVEN_OPTS": jvm_args}
@@ -166,6 +178,38 @@ def start_skeleton_client(
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
         cwd=project_root / "Mage.Client.Headless",
+        env=env,
+        log_file=log_path,
+    )
+
+
+def start_sleepwalker_client(
+    pm: ProcessManager,
+    project_root: Path,
+    config: Config,
+    name: str,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Start a sleepwalker client (Python MCP client + skeleton in MCP mode).
+
+    This spawns the sleepwalker.py script which in turn spawns the skeleton.
+    """
+    import sys
+
+    env = {
+        "PYTHONUNBUFFERED": "1",
+    }
+
+    return pm.start_process(
+        args=[
+            sys.executable,
+            "-m", "puppeteer.sleepwalker",
+            "--server", config.server,
+            "--port", str(config.port),
+            "--username", name,
+            "--project-root", str(project_root),
+        ],
+        cwd=project_root,
         env=env,
         log_file=log_path,
     )
@@ -288,34 +332,58 @@ def main() -> int:
 
         import time
 
-        # Choose which client to start
+        # Choose which observer client to start (streaming or regular GUI)
         if config.streaming:
             print("Starting streaming observer client...")
-            start_client = start_streaming_client
+            start_observer_client = start_streaming_client
         else:
-            start_client = start_gui_client
+            start_observer_client = start_gui_client
 
-        if config.skeleton_players:
-            print(f"Starting {len(config.skeleton_players)} skeleton client(s)...")
+        # Count headless clients (sleepwalker, potato, legacy skeleton)
+        headless_count = (
+            len(config.sleepwalker_players) +
+            len(config.potato_players) +
+            len(config.skeleton_players)  # Legacy
+        )
 
-            # Start observer/GUI client first
-            client_proc = start_client(pm, project_root, config, client_log)
+        # Start observer client first
+        observer_proc = start_observer_client(pm, project_root, config, client_log)
+
+        if headless_count > 0:
             time.sleep(config.skeleton_delay)
+            client_idx = 0
 
-            # Start skeleton clients
-            for idx, player in enumerate(config.skeleton_players):
-                skeleton_log = log_dir / f"skeleton_{idx}_{config.timestamp}.log"
+            # Start sleepwalker clients (MCP-based, Python controls skeleton)
+            for player in config.sleepwalker_players:
+                client_log_path = log_dir / f"sleepwalker_{client_idx}_{config.timestamp}.log"
                 with open(last_txt, "a") as f:
-                    f.write(f"skeleton_{idx}_log={skeleton_log}\n")
-                print(f"Skeleton {idx} log: {skeleton_log}")
-                start_skeleton_client(pm, project_root, config, player.name, skeleton_log)
+                    f.write(f"sleepwalker_{client_idx}_log={client_log_path}\n")
+                print(f"Sleepwalker {client_idx} ({player.name}) log: {client_log_path}")
+                start_sleepwalker_client(pm, project_root, config, player.name, client_log_path)
+                client_idx += 1
 
-            # Wait for client to exit
-            client_proc.wait()
-        else:
-            # No skeleton players, just start client
-            client_proc = start_client(pm, project_root, config, client_log)
-            client_proc.wait()
+            # Start potato clients (pure Java, auto-responds)
+            for player in config.potato_players:
+                client_log_path = log_dir / f"potato_{client_idx}_{config.timestamp}.log"
+                with open(last_txt, "a") as f:
+                    f.write(f"potato_{client_idx}_log={client_log_path}\n")
+                print(f"Potato {client_idx} ({player.name}) log: {client_log_path}")
+                start_potato_client(pm, project_root, config, player.name, client_log_path)
+                client_idx += 1
+
+            # Start legacy skeleton clients (treated as potato)
+            for player in config.skeleton_players:
+                client_log_path = log_dir / f"skeleton_{client_idx}_{config.timestamp}.log"
+                with open(last_txt, "a") as f:
+                    f.write(f"skeleton_{client_idx}_log={client_log_path}\n")
+                print(f"Skeleton {client_idx} ({player.name}) log: {client_log_path}")
+                start_skeleton_client(pm, project_root, config, player.name, client_log_path)
+                client_idx += 1
+
+            # Note: CPU players are handled by the GUI client/server
+
+        # Wait for observer client to exit
+        observer_proc.wait()
 
         return 0
     finally:

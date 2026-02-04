@@ -1740,17 +1740,17 @@ public class TablesPanel extends javax.swing.JPanel {
             for (AiHarnessConfig.PlayerConfig player : config.getPlayers()) {
                 String name = player.name != null ? player.name : ("Player " + (deckIndex + 1));
                 PlayerType playerType = player.getPlayerType();
-                DeckCardLists deckToUse = "bot".equals(player.type) && deckIndex < aiDecks.size()
+                DeckCardLists deckToUse = player.isBot() && deckIndex < aiDecks.size()
                         ? aiDecks.get(deckIndex) : testDeck;
 
-                if ("skeleton".equals(player.type)) {
-                    // Skeleton players join via the headless client, don't join here
-                    LOGGER.info("AI Harness: slot reserved for skeleton client: " + name);
+                if (player.isHeadless()) {
+                    // Headless players (sleepwalker, potato, skeleton) join via the headless client
+                    LOGGER.info("AI Harness: slot reserved for headless client: " + name);
                 } else {
                     boolean joined = SessionHandler.joinTable(roomId, table.getTableId(), name, playerType, 1, deckToUse, "");
                     LOGGER.info("AI Harness: joined " + name + " (" + playerType + ") -> " + joined);
                 }
-                if ("bot".equals(player.type)) {
+                if (player.isBot()) {
                     deckIndex++;
                 }
             }

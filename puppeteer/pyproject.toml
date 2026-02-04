@@ -5,6 +5,7 @@ description = "XMage AI Harness orchestration tool"
 requires-python = ">=3.10"
 dependencies = [
     "psutil>=5.9.0",
+    "mcp>=1.0.0",
 ]
 
 [build-system]

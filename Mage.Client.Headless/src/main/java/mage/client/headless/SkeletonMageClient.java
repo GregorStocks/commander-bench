@@ -38,6 +38,10 @@ public class SkeletonMageClient implements MageClient {
         return username;
     }
 
+    public SkeletonCallbackHandler getCallbackHandler() {
+        return callbackHandler;
+    }
+
     public boolean isRunning() {
         return running;
     }
