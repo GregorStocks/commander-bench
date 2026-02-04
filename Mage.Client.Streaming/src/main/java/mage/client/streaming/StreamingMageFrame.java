@@ -4,6 +4,7 @@ import mage.MageException;
 import mage.client.MageFrame;
 import mage.client.MagePane;
 import mage.client.game.GamePane;
+import org.apache.log4j.Logger;
 
 import javax.swing.*;
 import java.awt.*;
@@ -14,9 +15,11 @@ import java.util.UUID;
 
 /**
  * Streaming-optimized MageFrame that uses StreamingGamePane for watching games.
+ * Skips the lobby UI and supports auto-watching a table via command-line args.
  */
 public class StreamingMageFrame extends MageFrame {
 
+    private static final Logger LOGGER = Logger.getLogger(StreamingMageFrame.class);
     private static final String GIT_BRANCH = getGitBranch();
     private static final String STREAMING_TITLE_PREFIX = "[STREAMING] " +
             (GIT_BRANCH != null ? "[" + GIT_BRANCH + "] " : "");
@@ -105,6 +108,20 @@ public class StreamingMageFrame extends MageFrame {
         gamePane.setVisible(true);
         gamePane.watchGame(currentTableId, parentTableId, gameId);
         setActive(gamePane);
+    }
+
+    /**
+     * Override to initialize lobby (for AI harness game creation) but keep it hidden.
+     * The parent method initializes TablesPane which handles auto-start in AI harness mode.
+     */
+    @Override
+    public void prepareAndShowServerLobby() {
+        // Call parent to initialize TablesPane (needed for AI harness game creation)
+        super.prepareAndShowServerLobby();
+
+        // Then immediately hide the lobby
+        LOGGER.info("Streaming mode: hiding lobby UI");
+        hideServerLobby();
     }
 
     /**
