@@ -1,0 +1,12 @@
+[project]
+name = "puppeteer"
+version = "0.1.0"
+description = "XMage AI Harness orchestration tool"
+requires-python = ">=3.10"
+dependencies = [
+    "psutil>=5.9.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -67,3 +67,8 @@ mage-bundle.zip
 /deploy
 /temp
 /plugins
+
+# Python / uv
+__pycache__
+*.pyc
+.venv

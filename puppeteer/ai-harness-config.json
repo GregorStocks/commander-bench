@@ -1,0 +1,8 @@
+{
+  "players": [
+    {"type": "cpu", "name": "CPU 1"},
+    {"type": "cpu", "name": "CPU 2"},
+    {"type": "cpu", "name": "CPU 3"},
+    {"type": "skeleton", "name": "Skeleton"}
+  ]
+}
