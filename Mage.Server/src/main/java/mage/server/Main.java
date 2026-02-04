@@ -72,8 +72,6 @@ public final class Main {
     private static final String testModeProp = "xmage.testMode";
     private static final String detailsModeArg = "-detailsMode=";
     private static final String detailsModeProp = "xmage.detailsMode";
-    private static final String aiHarnessModeArg = "-aiHarnessMode=";
-    private static final String aiHarnessModeProp = "xmage.aiHarnessMode";
     private static final String adminPasswordArg = "-adminPassword=";
     private static final String adminPasswordProp = "xmage.adminPassword";
     private static final String configPathProp = "xmage.config.path";
@@ -96,7 +94,6 @@ public final class Main {
     // - debug main menu for GUI and rendering testing (must use -debug arg for client app);
     private static boolean testMode;
     private static boolean detailsMode;
-    private static boolean aiHarnessMode;
 
     public static void main(String[] args) {
         System.setProperty("java.util.Arrays.useLegacyMergeSort", "true");
@@ -109,7 +106,6 @@ public final class Main {
         // enable test mode by default for developer build (if you run it from source code)
         testMode |= version.isDeveloperBuild();
         detailsMode = false;
-        aiHarnessMode = false;
 
         // settings by properties (-Dxxx=yyy from a launcher)
         if (System.getProperty(testModeProp) != null) {
@@ -120,9 +116,6 @@ public final class Main {
         }
         if (System.getProperty(detailsModeProp) != null) {
             detailsMode = Boolean.parseBoolean(System.getProperty(detailsModeProp));
-        }
-        if (System.getProperty(aiHarnessModeProp) != null) {
-            aiHarnessMode = Boolean.parseBoolean(System.getProperty(aiHarnessModeProp));
         }
         final String configPath;
         if (System.getProperty(configPathProp) != null) {
@@ -141,9 +134,6 @@ public final class Main {
             }
             if (arg.startsWith(detailsModeArg)) {
                 detailsMode = Boolean.parseBoolean(arg.replace(detailsModeArg, ""));
-            }
-            if (arg.startsWith(aiHarnessModeArg)) {
-                aiHarnessMode = Boolean.parseBoolean(arg.replace(aiHarnessModeArg, ""));
             }
         }
 
@@ -208,9 +198,9 @@ public final class Main {
             logger.info("Done.");
         }
 
-        boolean skipUserStats = aiHarnessMode || testMode || Boolean.parseBoolean(System.getProperty("xmage.skipUserStats", "false"));
-        if (skipUserStats) {
-            logger.info("Skipping user stats DB update (disabled by mode or property).");
+        // User stats DB - skip in testMode or if explicitly disabled (helps with Apple Silicon SQLite issues)
+        if (testMode || Boolean.parseBoolean(System.getProperty("xmage.skipUserStats", "false"))) {
+            logger.info("Skipping user stats DB update (testMode or skipUserStats property).");
         } else {
             logger.info("Updating user stats DB...");
             try {
@@ -313,7 +303,7 @@ public final class Main {
                 server = new MageTransporterServer(
                         managerFactory,
                         serverLocator,
-                        new MageServerImpl(managerFactory, adminPassword, testMode, detailsMode, aiHarnessMode),
+                        new MageServerImpl(managerFactory, adminPassword, testMode, detailsMode),
                         MageServer.class.getName(),
                         new MageServerInvocationHandler(managerFactory)
                 );
@@ -322,9 +312,6 @@ public final class Main {
 
                 if (testMode) {
                     logger.info("MAGE server running in test mode");
-                }
-                if (aiHarnessMode) {
-                    logger.info("MAGE server running in AI harness mode");
                 }
                 initStatistics();
             } else {
@@ -599,9 +586,5 @@ public final class Main {
 
     public static boolean isTestMode() {
         return testMode;
-    }
-
-    public static boolean isAiHarnessMode() {
-        return aiHarnessMode;
     }
 }

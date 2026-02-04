@@ -22,13 +22,12 @@ public class ServerState implements Serializable {
     private final String[] deckTypes;
     private final String[] draftCubes;
     private final boolean testMode;
-    private final boolean aiHarnessMode;
     private final MageVersion version;
     private final long cardsContentVersion;
     private final long expansionsContentVersion;
 
     public ServerState(List<GameTypeView> gameTypes, List<TournamentTypeView> tournamentTypes,
-                       PlayerType[] playerTypes, String[] deckTypes, String[] draftCubes, boolean testMode, boolean aiHarnessMode,
+                       PlayerType[] playerTypes, String[] deckTypes, String[] draftCubes, boolean testMode,
                        MageVersion version, long cardsContentVersion, long expansionsContentVersion) {
         this.gameTypes = gameTypes;
         this.tournamentTypes = tournamentTypes;
@@ -36,7 +35,6 @@ public class ServerState implements Serializable {
         this.deckTypes = deckTypes;
         this.draftCubes = draftCubes;
         this.testMode = testMode;
-        this.aiHarnessMode = aiHarnessMode;
         this.version = version;
         this.cardsContentVersion = cardsContentVersion;
         this.expansionsContentVersion = expansionsContentVersion;
@@ -71,10 +69,6 @@ public class ServerState implements Serializable {
 
     public boolean isTestMode() {
         return testMode;
-    }
-
-    public boolean isAiHarnessMode() {
-        return aiHarnessMode;
     }
 
     public MageVersion getVersion() {

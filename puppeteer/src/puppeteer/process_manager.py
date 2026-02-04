@@ -1,5 +1,6 @@
 """Process lifecycle management with signal handling."""
 
+import atexit
 import os
 import signal
 import subprocess
@@ -11,12 +12,21 @@ import psutil
 
 
 class ProcessManager:
-    """Manages subprocess lifecycle with proper cleanup on signals."""
+    """Manages subprocess lifecycle with proper cleanup on signals.
+
+    Ensures all child processes are terminated when:
+    - The parent receives SIGINT or SIGTERM
+    - The parent exits normally
+    - The parent exits due to an unhandled exception
+    """
 
     def __init__(self):
         self._processes: list[subprocess.Popen] = []
         self._lock = threading.Lock()
+        self._cleaned_up = False
         self._setup_signal_handlers()
+        # Register atexit handler for cleanup on normal exit or unhandled exceptions
+        atexit.register(self.cleanup)
 
     def _setup_signal_handlers(self):
         """Register signal handlers for SIGINT and SIGTERM."""
@@ -77,6 +87,9 @@ class ProcessManager:
     def cleanup(self):
         """Terminate all tracked processes and their children."""
         with self._lock:
+            if self._cleaned_up:
+                return
+            self._cleaned_up = True
             for proc in self._processes:
                 if proc.poll() is None:  # Still running
                     print(f"Killing process tree rooted at PID {proc.pid}")

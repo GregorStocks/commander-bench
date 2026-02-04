@@ -692,10 +692,18 @@ public class User {
     }
 
     public void resetUserStats() {
-        if (Main.isTestMode() || Main.isAiHarnessMode() || Boolean.parseBoolean(System.getProperty("xmage.skipUserStats", "false"))) {
+        if (userData == null) {
             return;
         }
-        if (userData == null) {
+        // Skip user stats in testMode (avoids SQLite issues on Apple Silicon)
+        if (Main.isTestMode()) {
+            userData.setMatchHistory("0");
+            userData.setMatchQuitRatio(0);
+            userData.setTourneyHistory("0");
+            userData.setTourneyQuitRatio(0);
+            userData.setGeneralRating(GlickoRatingSystem.getDefaultDisplayedRating());
+            userData.setConstructedRating(GlickoRatingSystem.getDefaultDisplayedRating());
+            userData.setLimitedRating(GlickoRatingSystem.getDefaultDisplayedRating());
             return;
         }
         userStats = UserStatsRepository.instance.getUser(this.userName);

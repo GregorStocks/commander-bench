@@ -91,10 +91,29 @@ public class AiHarnessConfig {
         }
     }
 
+    private static final String PLAYERS_CONFIG_ENV = "XMAGE_AI_HARNESS_PLAYERS_CONFIG";
+
     /**
-     * Load config from the default location, or return a default config with 4 bots.
+     * Load config from environment variable, file, or return a default config with 4 bots.
      */
     public static AiHarnessConfig load() {
+        // First, try to load from environment variable (passed by puppeteer)
+        String configJson = System.getenv(PLAYERS_CONFIG_ENV);
+        if (configJson != null && !configJson.isEmpty()) {
+            try {
+                Gson gson = new Gson();
+                AiHarnessConfig config = gson.fromJson(configJson, AiHarnessConfig.class);
+                if (config != null && config.players != null && !config.players.isEmpty()) {
+                    LOGGER.info("Loaded AI harness config from environment variable with " +
+                            config.getBotCount() + " bots and " + config.getSkeletonCount() + " skeletons");
+                    return config;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse AI harness config from environment variable", e);
+            }
+        }
+
+        // Fall back to file-based loading
         for (String path : CONFIG_PATHS) {
             File configFile = new File(path);
             if (configFile.exists()) {

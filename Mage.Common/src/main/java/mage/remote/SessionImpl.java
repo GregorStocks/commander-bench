@@ -708,14 +708,6 @@ public class SessionImpl implements Session {
     }
 
     @Override
-    public boolean isAiHarnessMode() {
-        if (serverState != null) {
-            return serverState.isAiHarnessMode();
-        }
-        return false;
-    }
-
-    @Override
     public UUID getMainRoomId() {
         try {
             if (isConnected()) {

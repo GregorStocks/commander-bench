@@ -1,7 +1,6 @@
 """Main harness orchestration."""
 
 import argparse
-import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -60,12 +59,17 @@ def start_server(
     config_path: Path,
     log_path: Path,
 ) -> subprocess.Popen:
-    """Start the XMage server."""
+    """Start the XMage server.
+
+    Uses stock XMage server with testMode enabled, which provides:
+    - Skipped password verification
+    - Skipped deck validation
+    - Extended idle timeouts
+    - Skipped user stats operations
+    """
     jvm_args = " ".join([
         config.jvm_opens,
-        "-Dxmage.aiHarnessMode=true",
         "-Dxmage.testMode=true",
-        "-Dxmage.skipUserStats=true",
         f"-Dxmage.config.path={config_path}",
     ])
 
@@ -94,6 +98,15 @@ def start_gui_client(
     log_path: Path,
 ) -> subprocess.Popen:
     """Start the GUI client."""
+    # Read config file content to pass via environment variable
+    # (env vars handle special characters better than MAVEN_OPTS)
+    config_json = ""
+    if config.config_file and config.config_file.exists():
+        import json
+        with open(config.config_file) as f:
+            config_data = json.load(f)
+            config_json = json.dumps(config_data, separators=(',', ':'))
+
     jvm_args = " ".join([
         config.jvm_opens,
         "-Dxmage.aiHarness.autoConnect=true",
@@ -112,6 +125,7 @@ def start_gui_client(
         "XMAGE_AI_HARNESS_SERVER": config.server,
         "XMAGE_AI_HARNESS_PORT": str(config.port),
         "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW": "1",
+        "XMAGE_AI_HARNESS_PLAYERS_CONFIG": config_json,
         "MAVEN_OPTS": jvm_args,
     }
 
@@ -154,93 +168,91 @@ def main() -> int:
     project_root = Path.cwd().resolve()
     pm = ProcessManager()
 
-    # Set timestamp
-    config.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    try:
+        # Set timestamp
+        config.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Create log directory (use absolute paths since subprocesses run from different dirs)
-    log_dir = (project_root / config.log_dir).resolve()
-    log_dir.mkdir(parents=True, exist_ok=True)
-    config_dir = log_dir / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
+        # Create log directory (use absolute paths since subprocesses run from different dirs)
+        log_dir = (project_root / config.log_dir).resolve()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        config_dir = log_dir / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
 
-    # Compile if needed
-    if not config.skip_compile:
-        if not compile_project(project_root):
-            print("ERROR: Compilation failed")
+        # Compile if needed
+        if not config.skip_compile:
+            if not compile_project(project_root):
+                print("ERROR: Compilation failed")
+                return 1
+
+        # Find available port
+        print(f"Finding available port starting from {config.start_port}...")
+        config.port = find_available_port(config.server, config.start_port)
+        print(f"Using port {config.port}")
+
+        # Generate server config
+        server_config_path = config_dir / f"server_{config.timestamp}.xml"
+        modify_server_config(
+            source=project_root / "Mage.Server" / "config" / "config.xml",
+            destination=server_config_path,
+            port=config.port,
+        )
+
+        # Set up log paths
+        server_log = log_dir / f"server_{config.timestamp}.log"
+        client_log = log_dir / f"client_{config.timestamp}.log"
+
+        # Write last.txt for easy reference
+        last_txt = log_dir / "last.txt"
+        with open(last_txt, "w") as f:
+            f.write(f"server_log={server_log}\n")
+            f.write(f"client_log={client_log}\n")
+            f.write(f"server={config.server}\n")
+            f.write(f"port={config.port}\n")
+
+        print(f"Server log: {server_log}")
+        print(f"Client log: {client_log}")
+
+        # Start server
+        print("Starting XMage server...")
+        start_server(pm, project_root, config, server_config_path, server_log)
+
+        if not wait_for_port(config.server, config.port, config.server_wait):
+            print(f"ERROR: Server failed to start within {config.server_wait}s")
+            print(f"Check {server_log} for details")
             return 1
 
-    # Find available port
-    print(f"Finding available port starting from {config.start_port}...")
-    config.port = find_available_port(config.server, config.start_port)
-    print(f"Using port {config.port}")
+        print("Server is ready!")
 
-    # Generate server config
-    server_config_path = config_dir / f"server_{config.timestamp}.xml"
-    modify_server_config(
-        source=project_root / "Mage.Server" / "config" / "config.xml",
-        destination=server_config_path,
-        port=config.port,
-    )
+        # Load skeleton player config (passed to GUI client via environment variable)
+        config.load_skeleton_config()
+        if config.config_file:
+            print(f"Using config: {config.config_file}")
 
-    # Set up log paths
-    server_log = log_dir / f"server_{config.timestamp}.log"
-    client_log = log_dir / f"client_{config.timestamp}.log"
+        import time
 
-    # Write last.txt for easy reference
-    last_txt = log_dir / "last.txt"
-    with open(last_txt, "w") as f:
-        f.write(f"server_log={server_log}\n")
-        f.write(f"client_log={client_log}\n")
-        f.write(f"server={config.server}\n")
-        f.write(f"port={config.port}\n")
+        if config.skeleton_players:
+            print(f"Starting {len(config.skeleton_players)} skeleton client(s)...")
 
-    print(f"Server log: {server_log}")
-    print(f"Client log: {client_log}")
+            # Start GUI client first
+            gui_proc = start_gui_client(pm, project_root, config, client_log)
+            time.sleep(config.skeleton_delay)
 
-    # Start server
-    print("Starting XMage server...")
-    start_server(pm, project_root, config, server_config_path, server_log)
+            # Start skeleton clients
+            for idx, player in enumerate(config.skeleton_players):
+                skeleton_log = log_dir / f"skeleton_{idx}_{config.timestamp}.log"
+                with open(last_txt, "a") as f:
+                    f.write(f"skeleton_{idx}_log={skeleton_log}\n")
+                print(f"Skeleton {idx} log: {skeleton_log}")
+                start_skeleton_client(pm, project_root, config, player.name, skeleton_log)
 
-    if not wait_for_port(config.server, config.port, config.server_wait):
-        print(f"ERROR: Server failed to start within {config.server_wait}s")
-        print(f"Check {server_log} for details")
+            # Wait for GUI client to exit
+            gui_proc.wait()
+        else:
+            # No skeleton players, just start GUI client
+            gui_proc = start_gui_client(pm, project_root, config, client_log)
+            gui_proc.wait()
+
+        return 0
+    finally:
+        # Always cleanup child processes, even on exceptions
         pm.cleanup()
-        return 1
-
-    print("Server is ready!")
-
-    # Load skeleton player config and copy to .context/ for the Java client
-    config.load_skeleton_config()
-    if config.config_file:
-        client_config_path = project_root / ".context" / "ai-harness-config.json"
-        client_config_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(config.config_file, client_config_path)
-        print(f"Using config: {config.config_file}")
-
-    import time
-
-    if config.skeleton_players:
-        print(f"Starting {len(config.skeleton_players)} skeleton client(s)...")
-
-        # Start GUI client first
-        gui_proc = start_gui_client(pm, project_root, config, client_log)
-        time.sleep(config.skeleton_delay)
-
-        # Start skeleton clients
-        for idx, player in enumerate(config.skeleton_players):
-            skeleton_log = log_dir / f"skeleton_{idx}_{config.timestamp}.log"
-            with open(last_txt, "a") as f:
-                f.write(f"skeleton_{idx}_log={skeleton_log}\n")
-            print(f"Skeleton {idx} log: {skeleton_log}")
-            start_skeleton_client(pm, project_root, config, player.name, skeleton_log)
-
-        # Wait for GUI client to exit
-        gui_proc.wait()
-    else:
-        # No skeleton players, just start GUI client
-        gui_proc = start_gui_client(pm, project_root, config, client_log)
-        gui_proc.wait()
-
-    # Cleanup on exit
-    pm.cleanup()
-    return 0

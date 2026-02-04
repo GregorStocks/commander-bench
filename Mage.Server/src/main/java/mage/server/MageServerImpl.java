@@ -55,7 +55,6 @@ public class MageServerImpl implements MageServer {
     private final String adminPassword;
     private final boolean testMode;
     private final boolean detailsMode;
-    private final boolean aiHarnessMode;
     private final LinkedHashMap<String, String> activeAuthTokens = new LinkedHashMap<String, String>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
@@ -64,12 +63,11 @@ public class MageServerImpl implements MageServer {
         }
     };
 
-    public MageServerImpl(ManagerFactory managerFactory, String adminPassword, boolean testMode, boolean detailsMode, boolean aiHarnessMode) {
+    public MageServerImpl(ManagerFactory managerFactory, String adminPassword, boolean testMode, boolean detailsMode) {
         this.managerFactory = managerFactory;
         this.adminPassword = adminPassword;
         this.testMode = testMode;
         this.detailsMode = detailsMode;
-        this.aiHarnessMode = aiHarnessMode;
         this.callExecutor = managerFactory.threadExecutor().getCallExecutor();
         ServerMessagesUtil.instance.getMessages();
 
@@ -985,7 +983,6 @@ public class MageServerImpl implements MageServer {
                     DeckValidatorFactory.instance.getDeckTypes().toArray(new String[DeckValidatorFactory.instance.getDeckTypes().size()]),
                     CubeFactory.instance.getDraftCubes().toArray(new String[CubeFactory.instance.getDraftCubes().size()]),
                     testMode,
-                    aiHarnessMode,
                     Main.getVersion(),
                     CardRepository.instance.getContentVersionConstant(),
                     ExpansionRepository.instance.getContentVersionConstant()

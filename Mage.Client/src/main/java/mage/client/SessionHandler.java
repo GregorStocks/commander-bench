@@ -245,8 +245,13 @@ public final class SessionHandler {
         return session.isTestMode();
     }
 
+    /**
+     * Check if client is running in AI harness mode.
+     * This is determined by client-side system property, not server state.
+     */
     public static boolean isAiHarnessMode() {
-        return session.isAiHarnessMode();
+        return Boolean.parseBoolean(System.getProperty("xmage.aiHarness.autoConnect", "false"))
+            || Boolean.parseBoolean(System.getProperty("xmage.aiHarness.autoStart", "false"));
     }
 
     public static void cheatShow(UUID gameId, UUID playerId) {
