@@ -7,6 +7,7 @@ import mage.cards.MageCard;
 import mage.cards.action.ActionCallback;
 import mage.choices.Choice;
 import mage.client.MageFrame;
+import mage.client.MagePane;
 import mage.client.SessionHandler;
 import mage.client.cards.BigCard;
 import mage.client.chat.ChatPanelBasic;
@@ -65,7 +66,7 @@ import static mage.constants.PlayerAction.*;
  *
  * @author BetaSteward_at_googlemail.com, nantuko8, JayDi85
  */
-public final class GamePanel extends javax.swing.JPanel {
+public class GamePanel extends javax.swing.JPanel {
 
     private static final Logger logger = Logger.getLogger(GamePanel.class);
     private static final String YOUR_HAND = "Your hand";
@@ -110,7 +111,7 @@ public final class GamePanel extends javax.swing.JPanel {
     private UUID parentTableId;
     private UUID gameId;
     private UUID playerId; // playerId of the player
-    GamePane gamePane;
+    MagePane gamePane;
     private ReplayTask replayTask;
     private final PickNumberDialog pickNumber;
     private final PickMultiNumberDialog pickMultiNumber;
@@ -826,7 +827,7 @@ public final class GamePanel extends javax.swing.JPanel {
         DialogManager.getManager(gameId).setBounds(0, 0, rect.width, rect.height);
     }
 
-    public synchronized void showGame(UUID currentTableId, UUID parentTableId, UUID gameId, UUID playerId, GamePane gamePane) {
+    public synchronized void showGame(UUID currentTableId, UUID parentTableId, UUID gameId, UUID playerId, MagePane gamePane) {
         this.currentTableId = currentTableId;
         this.parentTableId = parentTableId;
         this.gameId = gameId;
@@ -870,7 +871,7 @@ public final class GamePanel extends javax.swing.JPanel {
         }
     }
 
-    public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, GamePane gamePane) {
+    public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
         this.currentTableId = currentTableId;
         this.parentTableId = parentTableId;
         this.gameId = gameId;
