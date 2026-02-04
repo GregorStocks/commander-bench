@@ -1,5 +1,11 @@
 Use 'bd' for task tracking
 
+## Code Modification Guidelines
+
+Avoid modifying server code (`Mage.Server*`) whenever possible.
+
+Avoid modifying the normal client (`Mage.Client`) that real players use. All observer mode changes should live in `Mage.Client.Streaming` or `Mage.Client.Headless`.
+
 ## Python
 
 Always use `uv` for Python. Never use system Python directly.
