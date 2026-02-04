@@ -45,6 +45,25 @@ public class StreamingMageFrame extends MageFrame {
 
     public StreamingMageFrame() throws MageException {
         super();
+        // Hide toolbar after initialization
+        SwingUtilities.invokeLater(this::hideToolbar);
+    }
+
+    /**
+     * Hide the main application toolbar since streaming observers don't need it.
+     */
+    private void hideToolbar() {
+        try {
+            Field toolbarField = MageFrame.class.getDeclaredField("mageToolbar");
+            toolbarField.setAccessible(true);
+            JToolBar toolbar = (JToolBar) toolbarField.get(this);
+            if (toolbar != null) {
+                toolbar.setVisible(false);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Log but don't fail - toolbar visibility is not critical
+            System.err.println("Failed to hide toolbar: " + e.getMessage());
+        }
     }
 
     /**
