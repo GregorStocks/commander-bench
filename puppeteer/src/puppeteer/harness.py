@@ -24,25 +24,34 @@ def parse_args() -> Config:
         type=Path,
         help="Path to skeleton player config JSON",
     )
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Launch the streaming observer client (auto-requests hand permissions)",
+    )
     args = parser.parse_args()
 
     config = Config(
         skip_compile=args.skip_compile,
         config_file=args.config,
+        streaming=args.streaming,
     )
     return config
 
 
-def compile_project(project_root: Path) -> bool:
+def compile_project(project_root: Path, streaming: bool = False) -> bool:
     """Compile the project using Maven."""
     print("Compiling project...")
+    modules = "Mage.Server,Mage.Client,Mage.Client.Headless"
+    if streaming:
+        modules += ",Mage.Client.Streaming"
     result = subprocess.run(
         [
             "mvn",
             "-q",
             "-DskipTests",
             "-pl",
-            "Mage.Server,Mage.Client,Mage.Client.Headless",
+            modules,
             "-am",
             "compile",
             "install",
@@ -162,6 +171,55 @@ def start_skeleton_client(
     )
 
 
+def start_streaming_client(
+    pm: ProcessManager,
+    project_root: Path,
+    config: Config,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Start the streaming observer client.
+
+    This client automatically requests hand permission from all players,
+    making it suitable for Twitch streaming where viewers should see all hands.
+    """
+    # Read config file content to pass via environment variable
+    config_json = ""
+    if config.config_file and config.config_file.exists():
+        import json
+        with open(config.config_file) as f:
+            config_data = json.load(f)
+            config_json = json.dumps(config_data, separators=(',', ':'))
+
+    jvm_args = " ".join([
+        config.jvm_opens,
+        "-Dxmage.aiHarness.autoConnect=true",
+        "-Dxmage.aiHarness.autoStart=true",
+        "-Dxmage.aiHarness.disableWhatsNew=true",
+        f"-Dxmage.aiHarness.server={config.server}",
+        f"-Dxmage.aiHarness.port={config.port}",
+        f"-Dxmage.aiHarness.user={config.user}",
+        f"-Dxmage.aiHarness.password={config.password}",
+    ])
+
+    env = {
+        "XMAGE_AI_HARNESS": "1",
+        "XMAGE_AI_HARNESS_USER": config.user,
+        "XMAGE_AI_HARNESS_PASSWORD": config.password,
+        "XMAGE_AI_HARNESS_SERVER": config.server,
+        "XMAGE_AI_HARNESS_PORT": str(config.port),
+        "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW": "1",
+        "XMAGE_AI_HARNESS_PLAYERS_CONFIG": config_json,
+        "MAVEN_OPTS": jvm_args,
+    }
+
+    return pm.start_process(
+        args=["mvn", "-q", "exec:java"],
+        cwd=project_root / "Mage.Client.Streaming",
+        env=env,
+        log_file=log_path,
+    )
+
+
 def main() -> int:
     """Main harness orchestration."""
     config = parse_args()
@@ -180,7 +238,7 @@ def main() -> int:
 
         # Compile if needed
         if not config.skip_compile:
-            if not compile_project(project_root):
+            if not compile_project(project_root, streaming=config.streaming):
                 print("ERROR: Compilation failed")
                 return 1
 
@@ -230,11 +288,18 @@ def main() -> int:
 
         import time
 
+        # Choose which client to start
+        if config.streaming:
+            print("Starting streaming observer client...")
+            start_client = start_streaming_client
+        else:
+            start_client = start_gui_client
+
         if config.skeleton_players:
             print(f"Starting {len(config.skeleton_players)} skeleton client(s)...")
 
-            # Start GUI client first
-            gui_proc = start_gui_client(pm, project_root, config, client_log)
+            # Start observer/GUI client first
+            client_proc = start_client(pm, project_root, config, client_log)
             time.sleep(config.skeleton_delay)
 
             # Start skeleton clients
@@ -245,12 +310,12 @@ def main() -> int:
                 print(f"Skeleton {idx} log: {skeleton_log}")
                 start_skeleton_client(pm, project_root, config, player.name, skeleton_log)
 
-            # Wait for GUI client to exit
-            gui_proc.wait()
+            # Wait for client to exit
+            client_proc.wait()
         else:
-            # No skeleton players, just start GUI client
-            gui_proc = start_gui_client(pm, project_root, config, client_log)
-            gui_proc.wait()
+            # No skeleton players, just start client
+            client_proc = start_client(pm, project_root, config, client_log)
+            client_proc.wait()
 
         return 0
     finally:

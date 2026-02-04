@@ -1,12 +1,14 @@
 package mage.client.headless;
 
 import mage.choices.Choice;
+import mage.constants.PlayerAction;
 import mage.interfaces.callback.ClientCallback;
 import mage.remote.Session;
 import mage.view.AbilityPickerView;
 import mage.view.GameClientMessage;
 import mage.view.GameView;
 import mage.view.TableClientMessage;
+import mage.view.UserRequestMessage;
 import org.apache.log4j.Logger;
 
 import java.util.Map;
@@ -109,6 +111,10 @@ public class SkeletonCallbackHandler {
                 case GAME_INFORM_PERSONAL:
                 case JOINED_TABLE:
                     logEvent(callback);
+                    break;
+
+                case USER_REQUEST_DIALOG:
+                    handleUserRequestDialog(callback);
                     break;
 
                 default:
@@ -264,6 +270,19 @@ public class SkeletonCallbackHandler {
         if (activeGames.isEmpty()) {
             logger.info("[" + client.getUsername() + "] No more active games, stopping client");
             client.stop();
+        }
+    }
+
+    private void handleUserRequestDialog(ClientCallback callback) {
+        UserRequestMessage request = (UserRequestMessage) callback.getData();
+        // Auto-accept hand permission requests from observers
+        if (request.getButton1Action() == PlayerAction.ADD_PERMISSION_TO_SEE_HAND_CARDS) {
+            UUID gameId = request.getGameId();
+            UUID relatedUserId = request.getRelatedUserId();
+            logger.info("[" + client.getUsername() + "] Auto-granting hand permission to " + request.getRelatedUserName());
+            session.sendPlayerAction(PlayerAction.ADD_PERMISSION_TO_SEE_HAND_CARDS, gameId, relatedUserId);
+        } else {
+            logger.debug("[" + client.getUsername() + "] Ignoring user request dialog: " + request.getTitle());
         }
     }
 

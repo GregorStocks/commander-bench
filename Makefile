@@ -38,8 +38,4 @@ install: clean build package
 
 .PHONY: ai-harness
 ai-harness:
-	uv run --project puppeteer python -m puppeteer
-
-.PHONY: ai-harness-quick
-ai-harness-quick:
-	uv run --project puppeteer python -m puppeteer --skip-compile
+	uv run --project puppeteer python -m puppeteer --streaming

@@ -27,6 +27,7 @@ class Config:
     # CLI options
     skip_compile: bool = False
     config_file: Path | None = None
+    streaming: bool = False
 
     # Runtime state (set during execution)
     port: int = 0
