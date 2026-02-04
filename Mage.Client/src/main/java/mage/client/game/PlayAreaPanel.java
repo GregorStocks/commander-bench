@@ -616,4 +616,11 @@ public class PlayAreaPanel extends javax.swing.JPanel {
             handPanel.setVisible(false);
         }
     }
+
+    /**
+     * Get the hand panel for this play area (may be null if showHandInPlayArea option is disabled).
+     */
+    public HandPanel getHandPanel() {
+        return handPanel;
+    }
 }

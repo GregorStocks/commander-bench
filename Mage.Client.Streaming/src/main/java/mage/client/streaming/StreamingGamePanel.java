@@ -5,6 +5,7 @@ import mage.client.MagePane;
 import mage.client.SessionHandler;
 import mage.client.dialog.PreferencesDialog;
 import mage.client.game.GamePanel;
+import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
 import mage.client.util.CardsViewUtil;
@@ -213,6 +214,12 @@ public class StreamingGamePanel extends GamePanel {
             // Get hand cards for this player from watched hands
             CardsView handToShow = getHandCardsForPlayer(player, game, loadedCards);
             playArea.loadHandCards(handToShow, getBigCard(), getGameId());
+
+            // Enable scale-to-fit for streaming mode (cards scale down to fit without scrolling)
+            HandPanel handPanel = playArea.getHandPanel();
+            if (handPanel != null) {
+                handPanel.setScaleToFit(true);
+            }
         }
     }
 
