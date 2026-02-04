@@ -2,6 +2,7 @@
 
 import argparse
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +10,23 @@ from puppeteer.config import Config
 from puppeteer.port import find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
+
+
+def bring_to_foreground_macos() -> None:
+    """Bring the Java app to foreground on macOS using AppleScript."""
+    if sys.platform != "darwin":
+        return
+
+    import time
+    time.sleep(2)  # Wait for window to appear
+
+    subprocess.run(
+        [
+            "osascript", "-e",
+            'tell application "System Events" to set frontmost of first process whose name contains "java" to true'
+        ],
+        capture_output=True,
+    )
 
 
 def parse_args() -> Config:
@@ -348,6 +366,9 @@ def main() -> int:
 
         # Start observer client first
         observer_proc = start_observer_client(pm, project_root, config, client_log)
+
+        # Bring the GUI window to the foreground on macOS
+        bring_to_foreground_macos()
 
         if headless_count > 0:
             time.sleep(config.skeleton_delay)
