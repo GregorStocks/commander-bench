@@ -65,6 +65,8 @@ class Config:
     skip_compile: bool = False
     config_file: Path | None = None
     streaming: bool = False
+    record: bool = False
+    record_output: Path | None = None
 
     # Runtime state (set during execution)
     port: int = 0

@@ -4,6 +4,7 @@ import mage.client.MagePane;
 
 import javax.swing.*;
 import java.awt.AWTEvent;
+import java.nio.file.Path;
 import java.util.UUID;
 
 /**
@@ -81,7 +82,30 @@ public class StreamingGamePane extends MagePane {
     }
 
     public void cleanUp() {
+        // Stop recording before cleanup
+        gamePanel.stopRecording();
         gamePanel.cleanUp();
+    }
+
+    /**
+     * Start recording the game to a video file.
+     */
+    public void startRecording(Path outputPath) {
+        gamePanel.startRecording(outputPath);
+    }
+
+    /**
+     * Stop recording if in progress.
+     */
+    public void stopRecording() {
+        gamePanel.stopRecording();
+    }
+
+    /**
+     * Check if recording is active.
+     */
+    public boolean isRecording() {
+        return gamePanel.isRecording();
     }
 
     @Override

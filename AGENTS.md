@@ -48,3 +48,26 @@ uv run python script.py
 # Run a module
 uv run --project puppeteer python -m puppeteer
 ```
+
+## Running the AI Harness
+
+Use Makefile targets instead of running uv commands directly:
+
+```bash
+# Start streaming observer (compiles first)
+make ai-harness
+
+# Start with video recording
+make ai-harness-record
+
+# Record to specific file
+make ai-harness-record-to OUTPUT=/path/to/video.mov
+
+# Skip compilation (faster iteration)
+make ai-harness-skip-compile
+
+# Record with skip compilation
+make ai-harness-record-skip-compile
+```
+
+Recordings are saved to `.context/ai-harness-logs/recording_<timestamp>.mov` by default.
