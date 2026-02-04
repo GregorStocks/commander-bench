@@ -11,24 +11,28 @@ from typing import Union
 class SkeletonPlayer:
     """Legacy skeleton player (kept for backwards compatibility)."""
     name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
 
 
 @dataclass
 class PotatoPlayer:
     """Potato personality: pure Java, auto-responds to everything (dumbest)."""
     name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
 
 
 @dataclass
 class SleepwalkerPlayer:
     """Sleepwalker personality: MCP-based, Python client controls via stdio."""
     name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
 
 
 @dataclass
 class CpuPlayer:
     """XMage built-in COMPUTER_MAD AI."""
     name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
 
 
 # Union type for all player types
@@ -97,13 +101,14 @@ class Config:
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
                 name = player.get("name", f"player-{i}")
+                deck = player.get("deck")  # Optional deck path
 
                 if player_type == "sleepwalker":
-                    self.sleepwalker_players.append(SleepwalkerPlayer(name=name))
+                    self.sleepwalker_players.append(SleepwalkerPlayer(name=name, deck=deck))
                 elif player_type == "potato":
-                    self.potato_players.append(PotatoPlayer(name=name))
+                    self.potato_players.append(PotatoPlayer(name=name, deck=deck))
                 elif player_type == "cpu":
-                    self.cpu_players.append(CpuPlayer(name=name))
+                    self.cpu_players.append(CpuPlayer(name=name, deck=deck))
                 elif player_type == "skeleton":
                     # Legacy: treat as potato for backwards compatibility
-                    self.potato_players.append(PotatoPlayer(name=name))
+                    self.potato_players.append(PotatoPlayer(name=name, deck=deck))

@@ -187,7 +187,8 @@ public class HeadlessClient {
     }
 
     private static UUID tryJoinTable(Session session, UUID roomId, String username) {
-        DeckCardLists deck = createTestDeck();
+        String deckPath = System.getProperty("xmage.headless.deck");
+        DeckCardLists deck = loadDeck(deckPath);
         long startTime = System.currentTimeMillis();
 
         while (System.currentTimeMillis() - startTime < TABLE_POLL_TIMEOUT_MS) {
@@ -266,6 +267,70 @@ public class HeadlessClient {
         }
 
         return false;
+    }
+
+    private static DeckCardLists loadDeck(String deckPath) {
+        if (deckPath == null || deckPath.isEmpty()) {
+            logger.info("No deck path specified, using test deck");
+            return createTestDeck();
+        }
+
+        java.io.File deckFile = new java.io.File(deckPath);
+        if (!deckFile.exists()) {
+            logger.warn("Deck file not found: " + deckPath + ", using test deck");
+            return createTestDeck();
+        }
+
+        try {
+            // Parse deck file directly without needing CardRepository
+            // Format: "count [SET:number] Card Name" or "SB: count [SET:number] Card Name"
+            DeckCardLists deck = new DeckCardLists();
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                "^(SB:\\s*)?(\\d+)\\s+\\[([^:]+):(\\d+)\\]\\s+(.+)$"
+            );
+
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(deckFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) {
+                        continue;
+                    }
+
+                    java.util.regex.Matcher matcher = pattern.matcher(line);
+                    if (matcher.matches()) {
+                        boolean isSideboard = matcher.group(1) != null;
+                        int count = Integer.parseInt(matcher.group(2));
+                        String setCode = matcher.group(3);
+                        String cardNumber = matcher.group(4);
+                        String cardName = matcher.group(5).trim();
+
+                        mage.cards.decks.DeckCardInfo cardInfo = new mage.cards.decks.DeckCardInfo(
+                            cardName, cardNumber, setCode, count
+                        );
+
+                        if (isSideboard) {
+                            deck.getSideboard().add(cardInfo);
+                        } else {
+                            deck.getCards().add(cardInfo);
+                        }
+                    }
+                }
+            }
+
+            if (deck.getCards().isEmpty() && deck.getSideboard().isEmpty()) {
+                logger.warn("Deck is empty after parsing: " + deckPath + ", using test deck");
+                return createTestDeck();
+            }
+
+            logger.info("Loaded deck from " + deckPath + " with " +
+                    deck.getCards().size() + " main deck cards and " +
+                    deck.getSideboard().size() + " sideboard cards");
+            return deck;
+        } catch (Exception e) {
+            logger.warn("Failed to load deck from " + deckPath + ", using test deck", e);
+            return createTestDeck();
+        }
     }
 
     private static DeckCardLists createTestDeck() {

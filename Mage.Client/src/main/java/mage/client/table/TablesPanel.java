@@ -1740,8 +1740,29 @@ public class TablesPanel extends javax.swing.JPanel {
             for (AiHarnessConfig.PlayerConfig player : config.getPlayers()) {
                 String name = player.name != null ? player.name : ("Player " + (deckIndex + 1));
                 PlayerType playerType = player.getPlayerType();
-                DeckCardLists deckToUse = player.isBot() && deckIndex < aiDecks.size()
-                        ? aiDecks.get(deckIndex) : testDeck;
+
+                // Determine deck to use: explicit deck path > random AI deck > test deck
+                DeckCardLists deckToUse;
+                if (player.deck != null && !player.deck.isEmpty()) {
+                    // Load specific deck from file - try multiple path resolutions
+                    String deckPath = player.deck;
+                    File deckFile = new File(deckPath);
+                    if (!deckFile.exists()) {
+                        // Try from parent directory (when running from Mage.Client/)
+                        deckFile = new File("../" + deckPath);
+                    }
+                    try {
+                        deckToUse = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
+                        LOGGER.info("AI Harness: loaded deck from " + deckFile.getPath() + " for " + name);
+                    } catch (Exception ex) {
+                        LOGGER.warn("AI Harness: failed to load deck " + deckPath + " for " + name + ", using fallback", ex);
+                        deckToUse = player.isBot() && deckIndex < aiDecks.size() ? aiDecks.get(deckIndex) : testDeck;
+                    }
+                } else if (player.isBot() && deckIndex < aiDecks.size()) {
+                    deckToUse = aiDecks.get(deckIndex);
+                } else {
+                    deckToUse = testDeck;
+                }
 
                 if (player.isHeadless()) {
                     // Headless players (sleepwalker, potato, skeleton) join via the headless client
