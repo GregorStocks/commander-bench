@@ -7,6 +7,8 @@ import mage.client.game.GamePane;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.util.UUID;
 
@@ -15,7 +17,31 @@ import java.util.UUID;
  */
 public class StreamingMageFrame extends MageFrame {
 
-    private static final String STREAMING_TITLE_PREFIX = "[STREAMING] ";
+    private static final String GIT_BRANCH = getGitBranch();
+    private static final String STREAMING_TITLE_PREFIX = "[STREAMING] " +
+            (GIT_BRANCH != null ? "[" + GIT_BRANCH + "] " : "");
+
+    /**
+     * Get the current git branch name, or null if not in a git repo.
+     */
+    private static String getGitBranch() {
+        try {
+            Process process = new ProcessBuilder("git", "rev-parse", "--abbrev-ref", "HEAD")
+                    .redirectErrorStream(true)
+                    .start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String branch = reader.readLine();
+                int exitCode = process.waitFor();
+                if (exitCode == 0 && branch != null && !branch.isEmpty()) {
+                    return branch.trim();
+                }
+            }
+        } catch (Exception e) {
+            // Not in a git repo or git not available - that's fine
+        }
+        return null;
+    }
 
     public StreamingMageFrame() throws MageException {
         super();
