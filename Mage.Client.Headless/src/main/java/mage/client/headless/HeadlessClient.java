@@ -3,6 +3,9 @@ package mage.client.headless;
 import mage.cards.decks.DeckCardLists;
 import mage.constants.TableState;
 import mage.players.PlayerType;
+import mage.players.net.UserData;
+import mage.players.net.UserGroup;
+import mage.players.net.UserSkipPrioritySteps;
 import mage.remote.Connection;
 import mage.remote.MageRemoteException;
 import mage.remote.Session;
@@ -42,6 +45,7 @@ public class HeadlessClient {
     private static final Logger logger = Logger.getLogger(HeadlessClient.class);
     private static final int TABLE_POLL_INTERVAL_MS = 1000;
     private static final int TABLE_POLL_TIMEOUT_MS = 60000;
+    private static final int PING_INTERVAL_MS = 20000; // 20 seconds, same as normal client
 
     private static final String PERSONALITY_POTATO = "potato";
     private static final String PERSONALITY_SLEEPWALKER = "sleepwalker";
@@ -80,6 +84,27 @@ public class HeadlessClient {
         connection.setPassword(password);
         connection.setProxyType(Connection.ProxyType.NONE);
 
+        // Set user data with allowRequestShowHandCards=true so observers can see hands
+        UserData userData = new UserData(
+                UserGroup.PLAYER,
+                0, // avatarId
+                true, // allowRequestShowHandCards - important for streaming observers
+                true, // confirmEmptyManaPool
+                new UserSkipPrioritySteps(),
+                "world", // flagName
+                false, // askMoveToGraveOrder
+                true, // manaPoolAutomatic
+                true, // manaPoolAutomaticRestricted
+                false, // passPriorityCast
+                false, // passPriorityActivation
+                true, // autoOrderTrigger
+                1, // autoTargetLevel
+                true, // useSameSettingsForReplacementEffects
+                false, // useFirstManaAbility
+                "" // userIdStr
+        );
+        connection.setUserData(userData);
+
         logger.info("Connecting to server...");
         if (!session.connectStart(connection)) {
             logger.error("Failed to connect: " + session.getLastError());
@@ -116,9 +141,17 @@ public class HeadlessClient {
             mcpThread.start();
 
             // Keep alive while client is running
+            long lastPingTime = System.currentTimeMillis();
             while (client.isRunning()) {
                 try {
                     Thread.sleep(1000);
+
+                    // Ping server periodically to maintain session
+                    long now = System.currentTimeMillis();
+                    if (now - lastPingTime >= PING_INTERVAL_MS) {
+                        session.ping();
+                        lastPingTime = now;
+                    }
                 } catch (InterruptedException e) {
                     logger.info("Interrupted, stopping...");
                     client.stop();
@@ -129,9 +162,17 @@ public class HeadlessClient {
             mcpServer.stop();
         } else {
             // Potato mode: just keep alive while client is running
+            long lastPingTime = System.currentTimeMillis();
             while (client.isRunning()) {
                 try {
                     Thread.sleep(1000);
+
+                    // Ping server periodically to maintain session
+                    long now = System.currentTimeMillis();
+                    if (now - lastPingTime >= PING_INTERVAL_MS) {
+                        session.ping();
+                        lastPingTime = now;
+                    }
                 } catch (InterruptedException e) {
                     logger.info("Interrupted, stopping...");
                     client.stop();

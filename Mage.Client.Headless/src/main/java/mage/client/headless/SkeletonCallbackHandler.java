@@ -426,6 +426,11 @@ public class SkeletonCallbackHandler {
         activeGames.put(gameId, playerId);
         currentGameId = gameId;
 
+        // Join the game session (creates GameSessionPlayer on server)
+        if (!session.joinGame(gameId)) {
+            logger.error("[" + client.getUsername() + "] Failed to join game: " + gameId);
+        }
+
         // Get chat ID for this game
         session.getGameChatId(gameId).ifPresent(chatId -> {
             gameChatIds.put(gameId, chatId);
