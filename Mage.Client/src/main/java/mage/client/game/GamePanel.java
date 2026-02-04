@@ -979,8 +979,7 @@ public class GamePanel extends javax.swing.JPanel {
         }
         PlayerView player = game.getPlayers().get(playerSeat);
         PlayAreaPanel playAreaPanel = new PlayAreaPanel(player, bigCard, gameId, game.getPriorityTime(), this,
-                new PlayAreaPanelOptions(game.isPlayer(), player.isHuman(), game.isPlayer(),
-                        game.isRollbackTurnsAllowed(), row == 0));
+                createPlayAreaPanelOptions(game, player, game.isPlayer(), row == 0));
         players.put(player.getPlayerId(), playAreaPanel);
         playersWhoLeft.put(player.getPlayerId(), false);
         GridBagConstraints c = new GridBagConstraints();
@@ -1024,8 +1023,7 @@ public class GamePanel extends javax.swing.JPanel {
             }
             player = game.getPlayers().get(playerNum);
             PlayAreaPanel playerPanel = new PlayAreaPanel(player, bigCard, gameId, game.getPriorityTime(), this,
-                    new PlayAreaPanelOptions(game.isPlayer(), player.isHuman(), false, game.isRollbackTurnsAllowed(),
-                            row == 0));
+                    createPlayAreaPanelOptions(game, player, false, row == 0));
             players.put(player.getPlayerId(), playerPanel);
             playersWhoLeft.put(player.getPlayerId(), false);
             c = new GridBagConstraints();
@@ -3202,6 +3200,27 @@ public class GamePanel extends javax.swing.JPanel {
                 SessionHandler.sendPlayerAction(PlayerAction.UNHOLD_PRIORITY, gameId, null);
             }
         }
+    }
+
+    // Protected accessors for subclasses (e.g., StreamingGamePanel)
+
+    protected BigCard getBigCard() {
+        return bigCard;
+    }
+
+    protected UUID getGameId() {
+        return gameId;
+    }
+
+    protected Map<String, Card> getLoadedCards() {
+        return loadedCards;
+    }
+
+    /**
+     * Factory method to create PlayAreaPanelOptions. Subclasses can override to customize options.
+     */
+    protected PlayAreaPanelOptions createPlayAreaPanelOptions(GameView game, PlayerView player, boolean playerItself, boolean topRow) {
+        return new PlayAreaPanelOptions(game.isPlayer(), player.isHuman(), playerItself, game.isRollbackTurnsAllowed(), topRow);
     }
 
     private boolean holdingPriority;

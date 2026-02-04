@@ -6,6 +6,7 @@ import mage.client.cards.BigCard;
 import mage.client.dialog.PreferencesDialog;
 import mage.client.util.GUISizeHelper;
 import mage.constants.PlayerAction;
+import mage.view.CardsView;
 import mage.view.GameView;
 import mage.view.PlayerView;
 import mage.view.UserRequestMessage;
@@ -74,6 +75,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
     public void CleanUp() {
         battlefieldPanel.cleanUp();
         playerPanel.cleanUp();
+        if (handPanel != null) {
+            handPanel.cleanUp();
+        }
 
         // Taken form : https://community.oracle.com/thread/2183145
         // removed the internal focus of a popupMenu data to allow GC before another popup menu is selected
@@ -101,6 +105,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         setGUISize();
         battlefieldPanel.changeGUISize();
         playerPanel.changeGUISize();
+        if (handPanel != null) {
+            handPanel.changeGUISize();
+        }
     }
 
     private void setGUISize() {
@@ -535,8 +542,29 @@ public class PlayAreaPanel extends javax.swing.JPanel {
 
         this.setLayout(new BorderLayout());
         this.add(playerPanel, BorderLayout.WEST);
-        this.add(battlefieldPanel, BorderLayout.CENTER);
-        this.add(Box.createRigidArea(new Dimension(0, 10)), BorderLayout.SOUTH); // bottom free space
+
+        if (options.showHandInPlayArea) {
+            // Create hand panel for displaying cards in hand (streaming/observer mode)
+            handPanel = new HandPanel();
+            handPanel.setVisible(false); // Hidden by default until cards loaded
+
+            // Create center panel with battlefield and hand
+            JPanel centerPanel = new JPanel(new BorderLayout());
+            centerPanel.setOpaque(false);
+            centerPanel.add(battlefieldPanel, BorderLayout.CENTER);
+
+            // Position hand based on topRow: above battlefield for top row, below for bottom row
+            if (options.topRow) {
+                centerPanel.add(handPanel, BorderLayout.NORTH);
+            } else {
+                centerPanel.add(handPanel, BorderLayout.SOUTH);
+            }
+
+            this.add(centerPanel, BorderLayout.CENTER);
+        } else {
+            this.add(battlefieldPanel, BorderLayout.CENTER);
+            this.add(Box.createRigidArea(new Dimension(0, 10)), BorderLayout.SOUTH); // bottom free space
+        }
     }
 
     private void btnCheatActionPerformed(java.awt.event.ActionEvent evt) {
@@ -569,4 +597,23 @@ public class PlayAreaPanel extends javax.swing.JPanel {
     private mage.client.game.BattlefieldPanel battlefieldPanel;
     //private javax.swing.JScrollPane jScrollPane1;
     private PlayerPanelExt playerPanel;
+    private HandPanel handPanel;
+
+    /**
+     * Load hand cards into this player's hand panel (only works if showHandInPlayArea option is enabled).
+     * @param cards The cards to display, or null to hide the hand panel
+     * @param bigCard The big card display for hover previews
+     * @param gameId The current game ID
+     */
+    public void loadHandCards(CardsView cards, BigCard bigCard, UUID gameId) {
+        if (handPanel == null) {
+            return; // Hand panel not enabled for this play area
+        }
+        if (cards != null && !cards.isEmpty()) {
+            handPanel.loadCards(cards, bigCard, gameId);
+            handPanel.setVisible(true);
+        } else {
+            handPanel.setVisible(false);
+        }
+    }
 }

@@ -9,11 +9,16 @@ package mage.client.game;
 public class PlayAreaPanelOptions {
 
     public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow) {
+        this(isPlayer, isHuman, playerItself, rollbackTurnsAllowed, topRow, false);
+    }
+
+    public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow, boolean showHandInPlayArea) {
         this.isPlayer = isPlayer;
         this.isHuman = isHuman;
         this.playerItself = playerItself;
         this.rollbackTurnsAllowed = rollbackTurnsAllowed;
         this.topRow = topRow;
+        this.showHandInPlayArea = showHandInPlayArea;
     }
 
     /**
@@ -41,5 +46,10 @@ public class PlayAreaPanelOptions {
      * true if the battlefield is on the top row of player areas
      */
     public boolean topRow;
+
+    /**
+     * true to show the player's hand in their play area (for streaming/observer mode)
+     */
+    public boolean showHandInPlayArea;
 
 }
