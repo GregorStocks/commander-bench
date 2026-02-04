@@ -15,6 +15,74 @@ import psutil
 PID_FILE_PATH = Path(".context/ai-harness-logs/harness.pids")
 
 
+def kill_tree(pid: int):
+    """Kill a process and all its children."""
+    try:
+        parent = psutil.Process(pid)
+
+        # If the target process is in a different process group, try
+        # terminating the entire group (avoid killing our own group).
+        if hasattr(os, "getpgrp") and hasattr(os, "getpgid") and hasattr(os, "killpg"):
+            try:
+                parent_pgid = os.getpgrp()
+                child_pgid = os.getpgid(pid)
+                if child_pgid != parent_pgid:
+                    os.killpg(child_pgid, signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                pass
+
+        children = parent.children(recursive=True)
+
+        # Terminate children first, then parent
+        for child in children:
+            try:
+                child.terminate()
+            except psutil.NoSuchProcess:
+                pass
+
+        try:
+            parent.terminate()
+        except psutil.NoSuchProcess:
+            pass
+
+        # Wait briefly then force kill if needed
+        gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+        for p in alive:
+            try:
+                p.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except psutil.NoSuchProcess:
+        pass
+
+
+def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
+    """Kill any processes left over from a previous harness run."""
+    if not pid_file.exists():
+        return
+
+    try:
+        with open(pid_file) as f:
+            for line in f:
+                try:
+                    pid = int(line.strip())
+                    proc = psutil.Process(pid)
+                    # Verify this is actually one of our processes
+                    env = proc.environ()
+                    if env.get("XMAGE_AI_HARNESS") == "1":
+                        print(f"Killing orphaned process {pid}")
+                        kill_tree(pid)
+                except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
+                    pass
+    except OSError:
+        pass
+    finally:
+        try:
+            pid_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 class ProcessManager:
     """Manages subprocess lifecycle with proper cleanup on signals.
 
@@ -54,29 +122,7 @@ class ProcessManager:
 
     def _cleanup_orphans(self):
         """Kill any processes left over from a previous harness run."""
-        if not self._pid_file.exists():
-            return
-
-        try:
-            with open(self._pid_file) as f:
-                for line in f:
-                    try:
-                        pid = int(line.strip())
-                        proc = psutil.Process(pid)
-                        # Verify this is actually one of our processes
-                        env = proc.environ()
-                        if env.get("XMAGE_AI_HARNESS") == "1":
-                            print(f"Killing orphaned process {pid}")
-                            self._kill_tree(pid)
-                    except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
-                        pass
-        except OSError:
-            pass
-        finally:
-            try:
-                self._pid_file.unlink(missing_ok=True)
-            except OSError:
-                pass
+        cleanup_orphans(self._pid_file)
 
     def _write_pid_file(self):
         """Write current tracked PIDs to file for orphan cleanup."""
@@ -125,43 +171,7 @@ class ProcessManager:
 
     def _kill_tree(self, pid: int):
         """Kill a process and all its children."""
-        try:
-            parent = psutil.Process(pid)
-
-            # If the target process is in a different process group, try
-            # terminating the entire group (avoid killing our own group).
-            if hasattr(os, "getpgrp") and hasattr(os, "getpgid") and hasattr(os, "killpg"):
-                try:
-                    parent_pgid = os.getpgrp()
-                    child_pgid = os.getpgid(pid)
-                    if child_pgid != parent_pgid:
-                        os.killpg(child_pgid, signal.SIGTERM)
-                except (OSError, ProcessLookupError):
-                    pass
-
-            children = parent.children(recursive=True)
-
-            # Terminate children first, then parent
-            for child in children:
-                try:
-                    child.terminate()
-                except psutil.NoSuchProcess:
-                    pass
-
-            try:
-                parent.terminate()
-            except psutil.NoSuchProcess:
-                pass
-
-            # Wait briefly then force kill if needed
-            gone, alive = psutil.wait_procs(children + [parent], timeout=3)
-            for p in alive:
-                try:
-                    p.kill()
-                except psutil.NoSuchProcess:
-                    pass
-        except psutil.NoSuchProcess:
-            pass
+        kill_tree(pid)
 
     def cleanup(self):
         """Terminate all tracked processes and their children."""
