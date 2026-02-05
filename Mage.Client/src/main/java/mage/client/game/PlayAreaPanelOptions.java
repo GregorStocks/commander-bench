@@ -13,12 +13,17 @@ public class PlayAreaPanelOptions {
     }
 
     public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow, boolean showHandInPlayArea) {
+        this(isPlayer, isHuman, playerItself, rollbackTurnsAllowed, topRow, showHandInPlayArea, false);
+    }
+
+    public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow, boolean showHandInPlayArea, boolean showGraveyardInPlayArea) {
         this.isPlayer = isPlayer;
         this.isHuman = isHuman;
         this.playerItself = playerItself;
         this.rollbackTurnsAllowed = rollbackTurnsAllowed;
         this.topRow = topRow;
         this.showHandInPlayArea = showHandInPlayArea;
+        this.showGraveyardInPlayArea = showGraveyardInPlayArea;
     }
 
     /**
@@ -51,5 +56,10 @@ public class PlayAreaPanelOptions {
      * true to show the player's hand in their play area (for streaming/observer mode)
      */
     public boolean showHandInPlayArea;
+
+    /**
+     * true to show the player's graveyard in their play area (for streaming/observer mode)
+     */
+    public boolean showGraveyardInPlayArea;
 
 }
