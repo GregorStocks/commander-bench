@@ -1,58 +1,43 @@
 # Architecture
 
-## Philosophy: Stock Server, Smart Clients
+## Philosophy: Stock Server, Minimal Client Changes
 
-This fork should maintain **zero modifications to the XMage server**. All AI harness functionality should be implemented in:
+This fork should maintain **zero modifications to the XMage server** and **minimal modifications to Mage.Client**. All AI harness functionality should be implemented in:
 
-1. **puppeteer** - Python orchestration layer
-2. **Mage.Client** - GUI client modifications
-3. **Mage.Client.Headless** - Skeleton/headless client
+- `Mage.Client.Streaming` - streaming/observer client (subclasses Mage.Client)
+- `Mage.Client.Headless` - headless client for AI harness
+- `puppeteer/` - Python orchestration layer
 
 ### Why?
 
-- **Easier to stay in sync with upstream** - We can pull from xmage/master without merge conflicts in server code
-- **Cleaner separation** - The server is "dumb" infrastructure; intelligence lives in clients
+- **Easier to stay in sync with upstream** - We can pull from xmage/master without merge conflicts
+- **Cleaner separation** - The server is "dumb" infrastructure; intelligence lives in our client modules
 - **Simpler deployment** - Can use stock XMage server releases
 
-### What the stock server already provides
+### Acceptable Baseline Modifications
 
-The stock XMage server's `testMode` (`-Dxmage.testMode=true`) already provides:
+When absolutely necessary, these types of changes to baseline code are acceptable:
 
-- Skipped password verification during login
-- Skipped deck validation
-- Extended idle timeouts (1 hour instead of seconds)
+- **Removing code/coupling** - simplifies rebasing
+- **Extension points** - making classes non-final, adding protected accessors, factory methods to enable subclassing
+- **Dependency version bumps** - for compatibility (e.g., Apple Silicon)
 
-This is sufficient for AI harness use cases.
+### Discouraged Baseline Modifications
 
-### Client-side harness features
+- Adding new fields/methods to UI components
+- Adding new features to baseline modules
+- Changing baseline behavior
 
-All AI harness automation should be client-triggered:
+### Current Baseline Modifications (Audit)
 
-| Feature | Implementation |
-|---------|---------------|
-| Auto-connect | Client system property `-Dxmage.aiHarness.autoConnect=true` |
-| Auto-start game | Client system property `-Dxmage.aiHarness.autoStart=true` |
-| Player config | Client system property `-Dxmage.aiHarness.playersConfig={json}` |
-| Auto-watch | Client detects when table is ready and starts watching |
-
-### Server API usage
-
-Where possible, puppeteer should use the server's existing RMI API rather than adding new server code. The MageServer interface provides:
-
-- `roomCreateTable(sessionId, roomId, MatchOptions)` - Create tables
-- `roomJoinTable(sessionId, roomId, tableId, ...)` - Join tables
-- `matchStart(sessionId, roomId, tableId)` - Start matches
-- `getServerState()` - Query server capabilities
-
-### Current state
-
-As of this writing, the fork maintains **minimal changes** to server code:
-
-- `Mage.Server/pom.xml` - updated sqlite-jdbc from 3.32.3.2 to 3.46.1.0 (adds Apple Silicon support, upstream is outdated)
+**Server:**
+- `Mage.Server/pom.xml` - updated sqlite-jdbc for Apple Silicon support
 - `Mage.Common/` - completely stock XMage
 
-All AI harness functionality is implemented in:
-
-- `Mage.Client/` - client-side automation (auto-connect, auto-start, player config)
-- `Mage.Client.Headless/` - skeleton/headless client for AI players
-- `puppeteer/` - Python orchestration layer
+**Client (Mage.Client):**
+- `GamePanel.java` - Made non-final, added protected accessors, factory method (extension points)
+- `PlayAreaPanel.java` - Added hand panel support for streaming (FUTURE: refactor to streaming module)
+- `PlayAreaPanelOptions.java` - Added showHandInPlayArea parameter (FUTURE: same as above)
+- `SessionHandler.java` - Changed to client-side AI harness detection
+- `TablesPanel.java` - Minor refactoring for headless client types
+- `AiHarnessConfig.java` - Configuration for multiple headless types
