@@ -3,6 +3,7 @@ package mage.client.streaming;
 import mage.cards.Card;
 import mage.client.MagePane;
 import mage.client.SessionHandler;
+import mage.client.chat.ChatPanelBasic;
 import mage.client.dialog.PreferencesDialog;
 import mage.client.game.GamePanel;
 import mage.client.game.HandPanel;
@@ -47,10 +48,53 @@ public class StreamingGamePanel extends GamePanel {
     private Path recordingPath;
     private Thread shutdownHook;
 
+    // Combined chat panel support
+    private CombinedChatPanel combinedChatPanel;
+    private boolean chatPanelReplaced = false;
+
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
         this.streamingGameId = gameId;
+        replaceChatWithCombinedPanel();  // Replace before super connects chat
         super.watchGame(currentTableId, parentTableId, gameId, gamePane);
+    }
+
+    /**
+     * Replace the separate game chat and user chat panels with a single combined panel.
+     * This must be called BEFORE super.watchGame() which connects the chat to the server.
+     */
+    private void replaceChatWithCombinedPanel() {
+        if (chatPanelReplaced) {
+            return;
+        }
+
+        try {
+            combinedChatPanel = new CombinedChatPanel();
+
+            // Access fields via reflection (matching existing pattern in this class)
+            Field gameChatField = GamePanel.class.getDeclaredField("gameChatPanel");
+            gameChatField.setAccessible(true);
+            Field userChatField = GamePanel.class.getDeclaredField("userChatPanel");
+            userChatField.setAccessible(true);
+
+            // Replace both chat panel references with our combined panel
+            // (no connectedChat = all messages go to this single panel)
+            gameChatField.set(this, combinedChatPanel);
+            userChatField.set(this, combinedChatPanel);
+
+            // Replace the entire splitChatAndLogs with just our combined panel
+            // in the parent splitBattlefieldAndChats
+            Field splitBattlefieldField = GamePanel.class.getDeclaredField("splitBattlefieldAndChats");
+            splitBattlefieldField.setAccessible(true);
+            JSplitPane splitBattlefield = (JSplitPane) splitBattlefieldField.get(this);
+            if (splitBattlefield != null) {
+                splitBattlefield.setRightComponent(combinedChatPanel);
+            }
+
+            chatPanelReplaced = true;
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to setup combined chat panel", e);
+        }
     }
 
     @Override
@@ -176,6 +220,7 @@ public class StreamingGamePanel extends GamePanel {
             Map<String, ?> splitters = (Map<String, ?>) splittersField.get(this);
             splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_HAND_STACK);
             splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_GAME_AND_BIG_CARD);
+            splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_CHAT_AND_LOGS);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             logger.warn("Failed to remove splitters from restore", e);
         }
