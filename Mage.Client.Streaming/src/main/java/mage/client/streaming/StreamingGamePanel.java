@@ -117,6 +117,8 @@ public class StreamingGamePanel extends GamePanel {
         requestHandPermissions(game);
         // Distribute hands to each player's PlayAreaPanel
         distributeHands(game);
+        // Distribute graveyards to each player's PlayAreaPanel
+        distributeGraveyards(game);
     }
 
     /**
@@ -138,7 +140,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Override to enable showHandInPlayArea for all players in streaming mode.
+     * Override to enable showHandInPlayArea and showGraveyardInPlayArea for all players in streaming mode.
      */
     @Override
     protected PlayAreaPanelOptions createPlayAreaPanelOptions(GameView game, PlayerView player, boolean playerItself, boolean topRow) {
@@ -148,7 +150,8 @@ public class StreamingGamePanel extends GamePanel {
                 playerItself,
                 game.isRollbackTurnsAllowed(),
                 topRow,
-                true  // showHandInPlayArea enabled for streaming
+                true,  // showHandInPlayArea enabled for streaming
+                true   // showGraveyardInPlayArea enabled for streaming
         );
     }
 
@@ -310,6 +313,28 @@ public class StreamingGamePanel extends GamePanel {
 
         // No hand available for this player
         return null;
+    }
+
+    /**
+     * Distribute graveyard cards to each player's PlayAreaPanel.
+     */
+    private void distributeGraveyards(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            if (playArea == null) {
+                continue;
+            }
+
+            // Get graveyard cards for this player (always available, no permissions needed)
+            CardsView graveyardCards = player.getGraveyard();
+            playArea.loadGraveyardCards(graveyardCards, getBigCard(), getGameId());
+        }
     }
 
     /**

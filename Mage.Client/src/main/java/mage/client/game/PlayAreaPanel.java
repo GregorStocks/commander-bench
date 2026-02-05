@@ -78,6 +78,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         if (handPanel != null) {
             handPanel.cleanUp();
         }
+        if (graveyardPanel != null) {
+            graveyardPanel.cleanUp();
+        }
 
         // Taken form : https://community.oracle.com/thread/2183145
         // removed the internal focus of a popupMenu data to allow GC before another popup menu is selected
@@ -107,6 +110,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         playerPanel.changeGUISize();
         if (handPanel != null) {
             handPanel.changeGUISize();
+        }
+        if (graveyardPanel != null) {
+            graveyardPanel.changeGUISize();
         }
     }
 
@@ -541,7 +547,23 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         battlefieldPanel.setPreferredSize(new Dimension(Short.MAX_VALUE, Short.MAX_VALUE));
 
         this.setLayout(new BorderLayout());
-        this.add(playerPanel, BorderLayout.WEST);
+
+        // Create west panel (player info + optional graveyard)
+        if (options.showGraveyardInPlayArea) {
+            // Create graveyard panel for displaying graveyard cards (streaming/observer mode)
+            graveyardPanel = new GraveyardPanel();
+
+            // Create wrapper panel with player panel on top, graveyard below
+            JPanel westPanel = new JPanel();
+            westPanel.setLayout(new BoxLayout(westPanel, BoxLayout.Y_AXIS));
+            westPanel.setOpaque(false);
+            westPanel.add(playerPanel);
+            westPanel.add(graveyardPanel);
+
+            this.add(westPanel, BorderLayout.WEST);
+        } else {
+            this.add(playerPanel, BorderLayout.WEST);
+        }
 
         if (options.showHandInPlayArea) {
             // Create hand panel for displaying cards in hand (streaming/observer mode)
@@ -598,6 +620,7 @@ public class PlayAreaPanel extends javax.swing.JPanel {
     //private javax.swing.JScrollPane jScrollPane1;
     private PlayerPanelExt playerPanel;
     private HandPanel handPanel;
+    private GraveyardPanel graveyardPanel;
 
     /**
      * Load hand cards into this player's hand panel (only works if showHandInPlayArea option is enabled).
@@ -622,5 +645,32 @@ public class PlayAreaPanel extends javax.swing.JPanel {
      */
     public HandPanel getHandPanel() {
         return handPanel;
+    }
+
+    /**
+     * Load graveyard cards into this player's graveyard panel (only works if showGraveyardInPlayArea option is enabled).
+     * @param cards The cards to display, or null to hide the graveyard panel
+     * @param bigCard The big card display for hover previews
+     * @param gameId The current game ID
+     */
+    public void loadGraveyardCards(CardsView cards, BigCard bigCard, UUID gameId) {
+        if (graveyardPanel == null) {
+            return; // Graveyard panel not enabled for this play area
+        }
+        if (cards != null && !cards.isEmpty()) {
+            graveyardPanel.loadCards(cards, bigCard, gameId);
+        }
+        // Revalidate parent to update layout with new graveyard size
+        if (graveyardPanel.getParent() != null) {
+            graveyardPanel.getParent().revalidate();
+            graveyardPanel.getParent().repaint();
+        }
+    }
+
+    /**
+     * Get the graveyard panel for this play area (may be null if showGraveyardInPlayArea option is disabled).
+     */
+    public GraveyardPanel getGraveyardPanel() {
+        return graveyardPanel;
     }
 }
