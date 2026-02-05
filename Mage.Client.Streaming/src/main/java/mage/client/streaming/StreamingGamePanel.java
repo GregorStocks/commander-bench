@@ -21,6 +21,7 @@ import mage.client.streaming.recording.FFmpegEncoder;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -72,6 +73,24 @@ public class StreamingGamePanel extends GamePanel {
         requestHandPermissions(game);
         // Distribute hands to each player's PlayAreaPanel
         distributeHands(game);
+    }
+
+    /**
+     * Override to auto-close the streaming observer after the game ends.
+     * Waits 10 seconds then exits, which triggers recording finalization via shutdown hook.
+     */
+    @Override
+    public void endMessage(int messageId, GameView gameView, Map<String, Serializable> options, String message) {
+        super.endMessage(messageId, gameView, options, message);
+
+        logger.info("Game ended, will auto-close in 10 seconds");
+
+        Timer exitTimer = new Timer(10000, e -> {
+            logger.info("Auto-closing streaming observer");
+            System.exit(0);
+        });
+        exitTimer.setRepeats(false);
+        exitTimer.start();
     }
 
     /**
