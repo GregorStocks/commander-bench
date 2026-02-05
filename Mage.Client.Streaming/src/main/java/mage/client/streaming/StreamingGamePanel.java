@@ -10,6 +10,7 @@ import mage.client.game.GamePanel;
 import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
+import mage.client.game.PlayerPanelExt;
 import mage.client.util.CardsViewUtil;
 import mage.constants.PlayerAction;
 import mage.view.CardsView;
@@ -122,6 +123,8 @@ public class StreamingGamePanel extends GamePanel {
         distributeGraveyards(game);
         // Distribute exile to each player's PlayAreaPanel
         distributeExile(game);
+        // Clean up player panels (hide redundant elements)
+        updatePlayerPanelVisibility(game);
     }
 
     /**
@@ -381,6 +384,174 @@ public class StreamingGamePanel extends GamePanel {
             }
 
             playArea.loadExileCards(exileCards, getBigCard(), getGameId());
+        }
+    }
+
+    /**
+     * Update player panel visibility for streaming mode.
+     * Hides redundant elements and shows counters conditionally.
+     */
+    private void updatePlayerPanelVisibility(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            if (playArea == null) {
+                continue;
+            }
+
+            PlayerPanelExt playerPanel = playArea.getPlayerPanel();
+            cleanupPlayerPanel(playerPanel, player);
+        }
+    }
+
+    /**
+     * Clean up a player panel for streaming mode.
+     * Hides redundant elements, keeps only: avatar + library count
+     * Shows poison/energy/experience/rad only when > 0
+     */
+    private void cleanupPlayerPanel(PlayerPanelExt playerPanel, PlayerView player) {
+        try {
+            // Hide mana pool (all 6 colors)
+            setFieldsVisible(playerPanel, false, "manaLabels", "manaButtons");
+
+            // Hide life counter (redundant - shown on avatar)
+            setComponentVisible(playerPanel, "life", false);
+            setComponentVisible(playerPanel, "lifeLabel", false);
+
+            // Hide hand/graveyard/exile counts (redundant - shown inline)
+            setComponentVisible(playerPanel, "hand", false);
+            setComponentVisible(playerPanel, "handLabel", false);
+            setComponentVisible(playerPanel, "grave", false);
+            setComponentVisible(playerPanel, "graveLabel", false);
+            setComponentVisible(playerPanel, "exileZone", false);
+            setComponentVisible(playerPanel, "exileLabel", false);
+
+            // Hide zones panel (command zone, cheat, hints - observers can't use)
+            setComponentVisible(playerPanel, "zonesPanel", false);
+
+            // Conditional counters - show only when label value > 0
+            // (label text is already set by parent's update before we're called)
+            setCounterVisibleIfNonZero(playerPanel, "poison", "poisonLabel");
+            setCounterVisibleIfNonZero(playerPanel, "energy", "energyLabel");
+            setCounterVisibleIfNonZero(playerPanel, "experience", "experienceLabel");
+            setCounterVisibleIfNonZero(playerPanel, "rad", "radLabel");
+
+            // Resize the panel to be shorter since we've hidden many elements
+            resizePlayerPanel(playerPanel);
+
+        } catch (Exception e) {
+            logger.warn("Failed to cleanup player panel via reflection", e);
+        }
+    }
+
+    /**
+     * Resize the player panel to be shorter after hiding elements.
+     */
+    private void resizePlayerPanel(PlayerPanelExt playerPanel) {
+        try {
+            // Get the panelBackground which contains the actual content
+            Field bgField = PlayerPanelExt.class.getDeclaredField("panelBackground");
+            bgField.setAccessible(true);
+            JComponent panelBackground = (JComponent) bgField.get(playerPanel);
+
+            if (panelBackground != null) {
+                // Reduce height - keep only avatar + name + library count
+                // Original is ~270px, target ~120px (avatar 80 + name 30 + padding)
+                int width = panelBackground.getPreferredSize().width;
+                Dimension newSize = new Dimension(width, 120);
+                panelBackground.setPreferredSize(newSize);
+                panelBackground.setMaximumSize(newSize);
+                panelBackground.revalidate();
+            }
+
+            // Also resize the player panel itself
+            int width = playerPanel.getPreferredSize().width;
+            Dimension newSize = new Dimension(width, 125);
+            playerPanel.setPreferredSize(newSize);
+            playerPanel.setMaximumSize(newSize);
+            playerPanel.revalidate();
+
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to resize player panel", e);
+        }
+    }
+
+    /**
+     * Show counter icon and label only if the label value is > 0.
+     */
+    private void setCounterVisibleIfNonZero(PlayerPanelExt playerPanel, String iconField, String labelField) {
+        try {
+            Field labelF = PlayerPanelExt.class.getDeclaredField(labelField);
+            labelF.setAccessible(true);
+            JLabel label = (JLabel) labelF.get(playerPanel);
+
+            boolean visible = false;
+            if (label != null) {
+                String text = label.getText();
+                if (text != null && !text.isEmpty()) {
+                    try {
+                        visible = Integer.parseInt(text) > 0;
+                    } catch (NumberFormatException e) {
+                        // Keep hidden if not a number
+                    }
+                }
+            }
+
+            setComponentVisible(playerPanel, iconField, visible);
+            if (label != null) {
+                label.setVisible(visible);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Field may not exist, ignore
+        }
+    }
+
+    /**
+     * Set visibility on a single component field.
+     */
+    private void setComponentVisible(PlayerPanelExt playerPanel, String fieldName, boolean visible) {
+        try {
+            Field field = PlayerPanelExt.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            Component component = (Component) field.get(playerPanel);
+            if (component != null) {
+                component.setVisible(visible);
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Field may not exist in all versions, ignore
+        }
+    }
+
+    /**
+     * Set visibility on map-based fields (manaLabels, manaButtons).
+     */
+    private void setFieldsVisible(PlayerPanelExt playerPanel, boolean visible, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            try {
+                Field field = PlayerPanelExt.class.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object value = field.get(playerPanel);
+                if (value instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) value;
+                    for (Object key : map.keySet()) {
+                        if (key instanceof Component) {
+                            ((Component) key).setVisible(visible);
+                        }
+                    }
+                    for (Object val : map.values()) {
+                        if (val instanceof Component) {
+                            ((Component) val).setVisible(visible);
+                        }
+                    }
+                }
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                // Field may not exist, ignore
+            }
         }
     }
 
