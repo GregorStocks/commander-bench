@@ -1,5 +1,7 @@
 package mage.client.headless;
 
+import mage.cards.repository.CardInfo;
+import mage.cards.repository.CardRepository;
 import mage.choices.Choice;
 import mage.constants.PlayerAction;
 import mage.interfaces.callback.ClientCallback;
@@ -7,9 +9,13 @@ import mage.interfaces.callback.ClientCallbackMethod;
 import mage.remote.Session;
 import mage.view.AbilityPickerView;
 import mage.view.CardsView;
+import mage.view.CardView;
 import mage.view.ChatMessage;
+import mage.view.ExileView;
 import mage.view.GameClientMessage;
 import mage.view.GameView;
+import mage.view.PermanentView;
+import mage.view.PlayerView;
 import mage.view.TableClientMessage;
 import mage.view.UserRequestMessage;
 
@@ -43,6 +49,7 @@ public class SkeletonCallbackHandler {
     private volatile PendingAction pendingAction = null;
     private final StringBuilder gameLog = new StringBuilder();
     private volatile UUID currentGameId = null;
+    private volatile GameView lastGameView = null;
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
         this.client = client;
@@ -66,6 +73,7 @@ public class SkeletonCallbackHandler {
         gameChatIds.clear();
         pendingAction = null;
         currentGameId = null;
+        lastGameView = null;
         synchronized (gameLog) {
             gameLog.setLength(0);
         }
@@ -254,6 +262,116 @@ public class SkeletonCallbackHandler {
         return session.sendChatMessage(chatId, message);
     }
 
+    public Map<String, Object> getOracleText(String cardName, String objectId) {
+        Map<String, Object> result = new HashMap<>();
+
+        boolean hasCardName = cardName != null && !cardName.isEmpty();
+        boolean hasObjectId = objectId != null && !objectId.isEmpty();
+
+        // Validate mutually exclusive parameters
+        if (hasCardName && hasObjectId) {
+            result.put("success", false);
+            result.put("error", "Provide either card_name or object_id, not both");
+            return result;
+        }
+        if (!hasCardName && !hasObjectId) {
+            result.put("success", false);
+            result.put("error", "Either card_name or object_id must be provided");
+            return result;
+        }
+
+        // Object ID lookup (in-game)
+        if (hasObjectId) {
+            try {
+                UUID uuid = UUID.fromString(objectId);
+                CardView cardView = findCardViewById(uuid);
+                if (cardView != null) {
+                    result.put("success", true);
+                    result.put("source", "game");
+                    result.put("name", cardView.getDisplayName());
+                    result.put("rules", cardView.getRules());
+                    result.put("object_id", objectId);
+                    return result;
+                } else {
+                    result.put("success", false);
+                    result.put("error", "Object not found in current game state: " + objectId);
+                    return result;
+                }
+            } catch (IllegalArgumentException e) {
+                result.put("success", false);
+                result.put("error", "Invalid UUID format: " + objectId);
+                return result;
+            }
+        }
+
+        // Card name lookup (database)
+        CardInfo cardInfo = CardRepository.instance.findCard(cardName);
+        if (cardInfo != null) {
+            result.put("success", true);
+            result.put("source", "database");
+            result.put("name", cardInfo.getName());
+            result.put("rules", cardInfo.getRules());
+            result.put("set_code", cardInfo.getSetCode());
+            result.put("card_number", cardInfo.getCardNumber());
+            return result;
+        } else {
+            result.put("success", false);
+            result.put("error", "Card not found in database: " + cardName);
+            return result;
+        }
+    }
+
+    private CardView findCardViewById(UUID objectId) {
+        GameView gameView = lastGameView;
+        if (gameView == null) {
+            return null;
+        }
+
+        // Check player's hand
+        CardView found = gameView.getMyHand().get(objectId);
+        if (found != null) {
+            return found;
+        }
+
+        // Check stack
+        found = gameView.getStack().get(objectId);
+        if (found != null) {
+            return found;
+        }
+
+        // Check all players' zones
+        for (PlayerView player : gameView.getPlayers()) {
+            // Check battlefield
+            PermanentView permanent = player.getBattlefield().get(objectId);
+            if (permanent != null) {
+                return permanent;
+            }
+
+            // Check graveyard
+            found = player.getGraveyard().get(objectId);
+            if (found != null) {
+                return found;
+            }
+
+            // Check exile
+            found = player.getExile().get(objectId);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        // Check exile zones
+        for (ExileView exileZone : gameView.getExile()) {
+            for (CardView card : exileZone.values()) {
+                if (card.getId().equals(objectId)) {
+                    return card;
+                }
+            }
+        }
+
+        return null;
+    }
+
     public void handleCallback(ClientCallback callback) {
         try {
             callback.decompressData();
@@ -382,6 +500,13 @@ public class SkeletonCallbackHandler {
     private void storePendingAction(UUID gameId, ClientCallbackMethod method, ClientCallback callback) {
         Object data = callback.getData();
         String message = extractMessage(data);
+        // Capture GameView if available
+        if (data instanceof GameClientMessage) {
+            GameView gameView = ((GameClientMessage) data).getGameView();
+            if (gameView != null) {
+                lastGameView = gameView;
+            }
+        }
         pendingAction = new PendingAction(gameId, method, data, message);
         logger.info("[" + client.getUsername() + "] Stored pending action: " + method + " - " + message);
     }
@@ -446,6 +571,7 @@ public class SkeletonCallbackHandler {
 
     private void handleGameInit(UUID gameId, ClientCallback callback) {
         GameView gameView = (GameView) callback.getData();
+        lastGameView = gameView;
         logger.info("[" + client.getUsername() + "] Game initialized: " + gameView.getPlayers().size() + " players");
     }
 
@@ -453,12 +579,14 @@ public class SkeletonCallbackHandler {
         Object data = callback.getData();
         if (data instanceof GameView) {
             GameView gameView = (GameView) data;
+            lastGameView = gameView;
             logger.debug("[" + client.getUsername() + "] Game update: turn " + gameView.getTurn() +
                     ", phase " + gameView.getPhase() + ", active player " + gameView.getActivePlayerName());
         } else if (data instanceof GameClientMessage) {
             GameClientMessage message = (GameClientMessage) data;
             GameView gameView = message.getGameView();
             if (gameView != null) {
+                lastGameView = gameView;
                 logger.debug("[" + client.getUsername() + "] Game inform: " + message.getMessage());
             }
         }

@@ -199,6 +199,28 @@ public class McpServer {
         sendChatTool.put("inputSchema", sendChatSchema);
         tools.add(sendChatTool);
 
+        // get_oracle_text
+        Map<String, Object> getOracleTextTool = new HashMap<>();
+        getOracleTextTool.put("name", "get_oracle_text");
+        getOracleTextTool.put("description",
+                "Get oracle text (rules) for a card by name or in-game object ID. " +
+                "Provide exactly one of card_name or object_id (not both).");
+        Map<String, Object> getOracleTextSchema = new HashMap<>();
+        getOracleTextSchema.put("type", "object");
+        Map<String, Object> getOracleTextProps = new HashMap<>();
+        Map<String, Object> cardNameProp = new HashMap<>();
+        cardNameProp.put("type", "string");
+        cardNameProp.put("description", "Card name for database lookup (e.g., 'Lightning Bolt')");
+        getOracleTextProps.put("card_name", cardNameProp);
+        Map<String, Object> objectIdProp = new HashMap<>();
+        objectIdProp.put("type", "string");
+        objectIdProp.put("description", "UUID of an in-game object for dynamic rules");
+        getOracleTextProps.put("object_id", objectIdProp);
+        getOracleTextSchema.put("properties", getOracleTextProps);
+        getOracleTextSchema.put("additionalProperties", false);
+        getOracleTextTool.put("inputSchema", getOracleTextSchema);
+        tools.add(getOracleTextTool);
+
         Map<String, Object> result = new HashMap<>();
         result.put("tools", tools);
         return result;
@@ -235,6 +257,12 @@ public class McpServer {
                 boolean success = callbackHandler.sendChatMessage(message);
                 toolResult = new HashMap<>();
                 toolResult.put("success", success);
+                break;
+
+            case "get_oracle_text":
+                String cardName = arguments.has("card_name") ? arguments.get("card_name").getAsString() : null;
+                String objectId = arguments.has("object_id") ? arguments.get("object_id").getAsString() : null;
+                toolResult = callbackHandler.getOracleText(cardName, objectId);
                 break;
 
             default:
