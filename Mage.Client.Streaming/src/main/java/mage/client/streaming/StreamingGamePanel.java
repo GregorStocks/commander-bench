@@ -1,8 +1,11 @@
 package mage.client.streaming;
 
+import mage.abilities.icon.CardIconRenderSettings;
 import mage.cards.Card;
+import mage.cards.MageCard;
 import mage.client.MagePane;
 import mage.client.SessionHandler;
+import mage.client.cards.Cards;
 import mage.client.chat.ChatPanelBasic;
 import mage.client.dialog.PreferencesDialog;
 import mage.client.game.ExilePanel;
@@ -11,8 +14,13 @@ import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
 import mage.client.game.PlayerPanelExt;
+import mage.client.plugins.adapters.MageActionCallback;
+import mage.client.plugins.impl.Plugins;
 import mage.client.util.CardsViewUtil;
+import mage.client.util.GUISizeHelper;
 import mage.constants.PlayerAction;
+import mage.constants.Zone;
+import mage.view.CardView;
 import mage.view.CardsView;
 import mage.view.GameView;
 import mage.view.PlayerView;
@@ -27,7 +35,11 @@ import java.awt.*;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -54,6 +66,10 @@ public class StreamingGamePanel extends GamePanel {
     // Combined chat panel support
     private CombinedChatPanel combinedChatPanel;
     private boolean chatPanelReplaced = false;
+
+    // Hand card caching for incremental updates (eliminates flashing)
+    private final Map<UUID, Set<UUID>> lastHandCardIds = new HashMap<>();
+    private boolean handPanelsInitialized = false;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -288,7 +304,8 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Distribute hand cards to each player's PlayAreaPanel.
+     * Distribute hand cards to each player's PlayAreaPanel using incremental updates.
+     * This avoids full repaints by only adding/removing cards that actually changed.
      */
     private void distributeHands(GameView game) {
         if (game == null || game.getPlayers() == null) {
@@ -299,20 +316,241 @@ public class StreamingGamePanel extends GamePanel {
         Map<String, Card> loadedCards = getLoadedCards();
 
         for (PlayerView player : game.getPlayers()) {
-            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            UUID playerId = player.getPlayerId();
+            PlayAreaPanel playArea = players.get(playerId);
             if (playArea == null) {
                 continue;
             }
 
-            // Get hand cards for this player from watched hands
-            CardsView handToShow = getHandCardsForPlayer(player, game, loadedCards);
-            playArea.loadHandCards(handToShow, getBigCard(), getGameId());
-
-            // Enable scale-to-fit for streaming mode (cards scale down to fit without scrolling)
             HandPanel handPanel = playArea.getHandPanel();
-            if (handPanel != null) {
+            if (handPanel == null) {
+                continue;
+            }
+
+            // Enable scale-to-fit for streaming mode on first load
+            if (!handPanelsInitialized) {
                 handPanel.setScaleToFit(true);
             }
+
+            // Get current hand cards for this player
+            CardsView currentHand = getHandCardsForPlayer(player, game, loadedCards);
+            Set<UUID> currentIds = currentHand != null ? currentHand.keySet() : Set.of();
+            Set<UUID> previousIds = lastHandCardIds.getOrDefault(playerId, Set.of());
+
+            // Check if hand changed
+            if (currentIds.equals(previousIds)) {
+                // No change, skip update entirely (no flash)
+                continue;
+            }
+
+            // For initial load (no previous cards), use normal loadCards to ensure proper initialization
+            // For subsequent updates, use incremental updates to avoid flashing
+            if (previousIds.isEmpty()) {
+                // Initial load - use normal path
+                if (currentHand != null && !currentHand.isEmpty()) {
+                    handPanel.loadCards(currentHand, getBigCard(), getGameId());
+                    handPanel.setVisible(true);
+                } else {
+                    handPanel.setVisible(false);
+                }
+            } else {
+                // Incremental update - avoid full repaint
+                updateHandIncrementally(handPanel, currentHand, previousIds, currentIds);
+            }
+
+            // Update cache
+            lastHandCardIds.put(playerId, new HashSet<>(currentIds));
+        }
+
+        handPanelsInitialized = true;
+    }
+
+    /**
+     * Update hand panel incrementally by only adding/removing changed cards.
+     * This bypasses Cards.loadCards() which always triggers full repaints.
+     */
+    private void updateHandIncrementally(HandPanel handPanel, CardsView currentHand,
+                                         Set<UUID> previousIds, Set<UUID> currentIds) {
+        try {
+            // Access the Cards component inside HandPanel
+            Field handField = HandPanel.class.getDeclaredField("hand");
+            handField.setAccessible(true);
+            Cards hand = (Cards) handField.get(handPanel);
+
+            // Access Cards internals
+            Field cardAreaField = Cards.class.getDeclaredField("cardArea");
+            cardAreaField.setAccessible(true);
+            JPanel cardArea = (JPanel) cardAreaField.get(hand);
+
+            // Access the scroll pane for calculating available width
+            Field scrollPaneField = HandPanel.class.getDeclaredField("jScrollPane1");
+            scrollPaneField.setAccessible(true);
+            JScrollPane scrollPane = (JScrollPane) scrollPaneField.get(handPanel);
+
+            // Get the cards map (public method)
+            Map<UUID, MageCard> cardsMap = hand.getMageCardsForUpdate();
+
+            // Compute diff
+            Set<UUID> toRemove = new HashSet<>(previousIds);
+            toRemove.removeAll(currentIds);
+
+            Set<UUID> toAdd = new HashSet<>(currentIds);
+            toAdd.removeAll(previousIds);
+
+            boolean changed = !toRemove.isEmpty() || !toAdd.isEmpty();
+
+            // Get current card dimension from existing cards (keep same size, no resize flash)
+            Dimension currentDimension = GUISizeHelper.handCardDimension;
+            for (MageCard existing : cardsMap.values()) {
+                currentDimension = new Dimension(
+                        existing.getCardLocation().getCardWidth(),
+                        existing.getCardLocation().getCardHeight()
+                );
+                break;
+            }
+
+            // Remove cards that are no longer in hand
+            for (UUID cardId : toRemove) {
+                MageCard card = cardsMap.remove(cardId);
+                if (card != null) {
+                    cardArea.remove(card);
+                }
+            }
+
+            // Add new cards at the same size as existing cards (no resize = no flash)
+            if (currentHand != null) {
+                for (UUID cardId : toAdd) {
+                    CardView cardView = currentHand.get(cardId);
+                    if (cardView != null) {
+                        addCardToHandWithDimension(hand, cardArea, cardsMap, cardView, currentDimension);
+                    }
+                }
+            }
+
+            // Only do layout if something changed
+            if (changed) {
+                // Layout cards without resizing
+                layoutHandCards(cardArea, Zone.HAND);
+
+                // Update card area preferred size
+                hand.sizeCards(currentDimension);
+            }
+
+            // Ensure hand panel is visible if it has cards
+            if (!cardsMap.isEmpty()) {
+                handPanel.setVisible(true);
+            } else {
+                handPanel.setVisible(false);
+            }
+
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to update hand incrementally, falling back to full load", e);
+            // Fallback to full load if reflection fails
+            if (currentHand != null && !currentHand.isEmpty()) {
+                handPanel.loadCards(currentHand, getBigCard(), getGameId());
+                handPanel.setVisible(true);
+            } else {
+                handPanel.setVisible(false);
+            }
+        }
+    }
+
+    /**
+     * Calculate the scaled card dimension for a given card count.
+     * Replicates HandPanel.recalculateCardScale() logic.
+     */
+    private Dimension calculateScaledCardDimension(JScrollPane scrollPane, int cardCount) {
+        if (cardCount == 0) {
+            return GUISizeHelper.handCardDimension;
+        }
+
+        int availableWidth = scrollPane.getViewport().getWidth();
+        if (availableWidth <= 0) {
+            return GUISizeHelper.handCardDimension;
+        }
+
+        int gapX = MageActionCallback.HAND_CARDS_BETWEEN_GAP_X;
+        int totalMargins = MageActionCallback.HAND_CARDS_MARGINS.getLeft() +
+                           MageActionCallback.HAND_CARDS_MARGINS.getRight();
+        int totalGaps = (cardCount - 1) * gapX;
+        int widthForCards = availableWidth - totalMargins - totalGaps;
+
+        int cardWidth = widthForCards / cardCount;
+
+        // Clamp to reasonable bounds
+        int baseWidth = GUISizeHelper.handCardDimension.width;
+        int minWidth = baseWidth / 3;
+        cardWidth = Math.min(cardWidth, baseWidth);
+        cardWidth = Math.max(cardWidth, minWidth);
+
+        int cardHeight = (int) (cardWidth * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+
+        return new Dimension(cardWidth, cardHeight);
+    }
+
+    /**
+     * Add a single card to the hand panel with a specific dimension.
+     * Replicates Cards.addCard() logic without triggering full repaint.
+     */
+    private void addCardToHandWithDimension(Cards hand, JPanel cardArea, Map<UUID, MageCard> cardsMap,
+                                            CardView cardView, Dimension cardDimension) {
+        // Create the MageCard component
+        MageCard mageCard = Plugins.instance.getMageCard(
+                cardView,
+                getBigCard(),
+                new CardIconRenderSettings(),
+                cardDimension,
+                getGameId(),
+                true,
+                true,
+                PreferencesDialog.getRenderMode(),
+                true
+        );
+
+        mageCard.setCardContainerRef(cardArea);
+        mageCard.update(cardView);
+        mageCard.setZone(Zone.HAND);
+
+        // Set card bounds to match the dimension
+        mageCard.setCardBounds(0, 0, cardDimension.width, cardDimension.height);
+
+        // Add to map and panel
+        cardsMap.put(cardView.getId(), mageCard);
+        cardArea.add(mageCard);
+
+        // Position at end (will be relaid out by layoutHandCards)
+        int dx = MageActionCallback.getHandOrStackMargins(Zone.HAND).getLeft();
+        for (Component comp : cardArea.getComponents()) {
+            if (comp instanceof MageCard && comp != mageCard) {
+                MageCard existing = (MageCard) comp;
+                dx = Math.max(dx, existing.getCardLocation().getCardX() +
+                        existing.getCardLocation().getCardWidth() +
+                        MageActionCallback.getHandOrStackBetweenGapX(Zone.HAND));
+            }
+        }
+        mageCard.setCardLocation(dx, MageActionCallback.getHandOrStackMargins(Zone.HAND).getTop());
+    }
+
+    /**
+     * Layout cards in the hand area.
+     * Replicates Cards.layoutCards() logic.
+     */
+    private void layoutHandCards(JPanel cardArea, Zone zone) {
+        List<MageCard> cardsToLayout = new ArrayList<>();
+        for (Component component : cardArea.getComponents()) {
+            if (component instanceof MageCard) {
+                cardsToLayout.add((MageCard) component);
+            }
+        }
+
+        // Sort by X position
+        cardsToLayout.sort(Comparator.comparingInt(cp -> cp.getCardLocation().getCardX()));
+
+        // Relocate cards
+        int dx = MageActionCallback.getHandOrStackBetweenGapX(zone);
+        for (MageCard card : cardsToLayout) {
+            card.setCardLocation(dx, card.getCardLocation().getCardY());
+            dx += card.getCardLocation().getCardWidth() + MageActionCallback.getHandOrStackBetweenGapX(zone);
         }
     }
 
