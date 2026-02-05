@@ -6,11 +6,14 @@ import mage.interfaces.callback.ClientCallback;
 import mage.interfaces.callback.ClientCallbackMethod;
 import mage.remote.Session;
 import mage.view.AbilityPickerView;
+import mage.view.CardsView;
 import mage.view.ChatMessage;
 import mage.view.GameClientMessage;
 import mage.view.GameView;
 import mage.view.TableClientMessage;
 import mage.view.UserRequestMessage;
+
+import java.io.Serializable;
 import org.apache.log4j.Logger;
 
 import java.util.HashMap;
@@ -126,7 +129,8 @@ public class SkeletonCallbackHandler {
             case GAME_TARGET:
                 GameClientMessage targetMsg = (GameClientMessage) data;
                 boolean required = targetMsg.isFlag();
-                Set<UUID> targets = targetMsg.getTargets();
+                // Try to find valid targets from multiple sources
+                Set<UUID> targets = findValidTargets(targetMsg);
                 if (required && targets != null && !targets.isEmpty()) {
                     UUID firstTarget = targets.iterator().next();
                     session.sendPlayerUUID(gameId, firstTarget);
@@ -477,7 +481,9 @@ public class SkeletonCallbackHandler {
     private void handleGameTarget(UUID gameId, ClientCallback callback) {
         GameClientMessage message = (GameClientMessage) callback.getData();
         boolean required = message.isFlag();
-        Set<UUID> targets = message.getTargets();
+
+        // Try to find valid targets from multiple sources
+        Set<UUID> targets = findValidTargets(message);
 
         sleepBeforeAction();
         if (required && targets != null && !targets.isEmpty()) {
@@ -488,6 +494,40 @@ public class SkeletonCallbackHandler {
             logger.info("[" + client.getUsername() + "] Target (optional): \"" + message.getMessage() + "\" -> CANCEL");
             session.sendPlayerBoolean(gameId, false);
         }
+    }
+
+    /**
+     * Find valid targets from multiple sources in a GameClientMessage.
+     * This handles both standard targeting (message.getTargets()) and
+     * card-from-zone selection (options.possibleTargets or cardsView1).
+     */
+    @SuppressWarnings("unchecked")
+    private Set<UUID> findValidTargets(GameClientMessage message) {
+        // 1. Try message.getTargets() first (standard targeting)
+        Set<UUID> targets = message.getTargets();
+        if (targets != null && !targets.isEmpty()) {
+            return targets;
+        }
+
+        // 2. Try options.get("possibleTargets") (card-from-zone selection)
+        Map<String, Serializable> options = message.getOptions();
+        if (options != null) {
+            Object possibleTargets = options.get("possibleTargets");
+            if (possibleTargets instanceof Set) {
+                Set<UUID> possible = (Set<UUID>) possibleTargets;
+                if (!possible.isEmpty()) {
+                    return possible;
+                }
+            }
+        }
+
+        // 3. Fall back to cardsView1.keySet() (cards displayed for selection)
+        CardsView cardsView = message.getCardsView1();
+        if (cardsView != null && !cardsView.isEmpty()) {
+            return cardsView.keySet();
+        }
+
+        return null;
     }
 
     private void handleGameChooseAbility(UUID gameId, ClientCallback callback) {
