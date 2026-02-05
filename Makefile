@@ -36,23 +36,14 @@ package:
 .PHONY: install
 install: clean build package
 
+# Default: streaming with recording enabled
+# Pass ARGS for additional options: make ai-harness ARGS="--skip-compile"
+# Pass OUTPUT to specify recording path: make ai-harness OUTPUT=/path/to/video.mov
 .PHONY: ai-harness
 ai-harness:
-	uv run --project puppeteer python -m puppeteer --streaming
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
 
-.PHONY: ai-harness-record
-ai-harness-record:
-	uv run --project puppeteer python -m puppeteer --streaming --record
-
-.PHONY: ai-harness-record-to
-ai-harness-record-to:
-	@test -n "$(OUTPUT)" || (echo "Usage: make ai-harness-record-to OUTPUT=/path/to/video.mov" && exit 1)
-	uv run --project puppeteer python -m puppeteer --streaming --record=$(OUTPUT)
-
-.PHONY: ai-harness-skip-compile
-ai-harness-skip-compile:
-	uv run --project puppeteer python -m puppeteer --streaming --skip-compile
-
-.PHONY: ai-harness-record-skip-compile
-ai-harness-record-skip-compile:
-	uv run --project puppeteer python -m puppeteer --streaming --record --skip-compile
+# Convenience: skip compilation (common case)
+.PHONY: ai-harness-quick
+ai-harness-quick:
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --skip-compile $(ARGS)

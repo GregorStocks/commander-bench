@@ -54,20 +54,17 @@ uv run --project puppeteer python -m puppeteer
 Use Makefile targets instead of running uv commands directly:
 
 ```bash
-# Start streaming observer (compiles first)
+# Start streaming observer with recording (compiles first)
 make ai-harness
 
-# Start with video recording
-make ai-harness-record
+# Skip compilation (faster iteration)
+make ai-harness-quick
 
 # Record to specific file
-make ai-harness-record-to OUTPUT=/path/to/video.mov
+make ai-harness OUTPUT=/path/to/video.mov
 
-# Skip compilation (faster iteration)
-make ai-harness-skip-compile
-
-# Record with skip compilation
-make ai-harness-record-skip-compile
+# Pass additional args
+make ai-harness ARGS="--config myconfig.json"
 ```
 
 Recordings are saved to `.context/ai-harness-logs/recording_<timestamp>.mov` by default.
