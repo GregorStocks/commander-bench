@@ -5,6 +5,7 @@ import mage.client.MagePane;
 import mage.client.SessionHandler;
 import mage.client.chat.ChatPanelBasic;
 import mage.client.dialog.PreferencesDialog;
+import mage.client.game.ExilePanel;
 import mage.client.game.GamePanel;
 import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
@@ -119,6 +120,8 @@ public class StreamingGamePanel extends GamePanel {
         distributeHands(game);
         // Distribute graveyards to each player's PlayAreaPanel
         distributeGraveyards(game);
+        // Distribute exile to each player's PlayAreaPanel
+        distributeExile(game);
     }
 
     /**
@@ -140,10 +143,11 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Override to enable showHandInPlayArea and showGraveyardInPlayArea for all players in streaming mode.
+     * Override to enable showHandInPlayArea, showGraveyardInPlayArea, and showExileInPlayArea for all players in streaming mode.
      */
     @Override
     protected PlayAreaPanelOptions createPlayAreaPanelOptions(GameView game, PlayerView player, boolean playerItself, boolean topRow) {
+        logger.info("Creating PlayAreaPanelOptions for " + player.getName() + " with showExileInPlayArea=true");
         return new PlayAreaPanelOptions(
                 game.isPlayer(),
                 player.isHuman(),
@@ -151,8 +155,18 @@ public class StreamingGamePanel extends GamePanel {
                 game.isRollbackTurnsAllowed(),
                 topRow,
                 true,  // showHandInPlayArea enabled for streaming
-                true   // showGraveyardInPlayArea enabled for streaming
+                true,  // showGraveyardInPlayArea enabled for streaming
+                true   // showExileInPlayArea enabled for streaming
         );
+    }
+
+    /**
+     * Override to suppress exile popup windows in streaming mode.
+     * Exile is displayed inline in each player's play area instead.
+     */
+    @Override
+    protected void updateExileWindows(GameView game) {
+        // No-op: exile is displayed inline per-player in streaming mode
     }
 
     /**
@@ -334,6 +348,39 @@ public class StreamingGamePanel extends GamePanel {
             // Get graveyard cards for this player (always available, no permissions needed)
             CardsView graveyardCards = player.getGraveyard();
             playArea.loadGraveyardCards(graveyardCards, getBigCard(), getGameId());
+        }
+    }
+
+    /**
+     * Distribute exile cards to each player's PlayAreaPanel.
+     * PlayerView.getExile() already filters cards by ownership.
+     */
+    private void distributeExile(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            if (playArea == null) {
+                logger.debug("No play area for player: " + player.getName());
+                continue;
+            }
+
+            // Get exile cards for this player (filtered by ownership in PlayerView)
+            CardsView exileCards = player.getExile();
+            if (exileCards != null && !exileCards.isEmpty()) {
+                logger.info("Player " + player.getName() + " has " + exileCards.size() + " exiled cards");
+            }
+
+            ExilePanel exilePanel = playArea.getExilePanel();
+            if (exilePanel == null) {
+                logger.warn("No exile panel for player: " + player.getName());
+            }
+
+            playArea.loadExileCards(exileCards, getBigCard(), getGameId());
         }
     }
 

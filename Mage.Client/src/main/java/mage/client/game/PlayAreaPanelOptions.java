@@ -17,6 +17,10 @@ public class PlayAreaPanelOptions {
     }
 
     public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow, boolean showHandInPlayArea, boolean showGraveyardInPlayArea) {
+        this(isPlayer, isHuman, playerItself, rollbackTurnsAllowed, topRow, showHandInPlayArea, showGraveyardInPlayArea, false);
+    }
+
+    public PlayAreaPanelOptions(boolean isPlayer, boolean isHuman, boolean playerItself, boolean rollbackTurnsAllowed, boolean topRow, boolean showHandInPlayArea, boolean showGraveyardInPlayArea, boolean showExileInPlayArea) {
         this.isPlayer = isPlayer;
         this.isHuman = isHuman;
         this.playerItself = playerItself;
@@ -24,6 +28,7 @@ public class PlayAreaPanelOptions {
         this.topRow = topRow;
         this.showHandInPlayArea = showHandInPlayArea;
         this.showGraveyardInPlayArea = showGraveyardInPlayArea;
+        this.showExileInPlayArea = showExileInPlayArea;
     }
 
     /**
@@ -61,5 +66,10 @@ public class PlayAreaPanelOptions {
      * true to show the player's graveyard in their play area (for streaming/observer mode)
      */
     public boolean showGraveyardInPlayArea;
+
+    /**
+     * true to show the player's exile in their play area (for streaming/observer mode)
+     */
+    public boolean showExileInPlayArea;
 
 }

@@ -1245,17 +1245,8 @@ public class GamePanel extends javax.swing.JPanel {
 
         displayStack(lastGameData.game, bigCard, feedbackPanel, gameId);
 
-        // auto-show exile views
-        for (ExileView exile : lastGameData.game.getExile()) {
-            CardInfoWindowDialog exileWindow = exiles.getOrDefault(exile.getId(), null);
-            if (exileWindow == null) {
-                exileWindow = new CardInfoWindowDialog(ShowType.EXILE, exile.getName());
-                exiles.put(exile.getId(), exileWindow);
-                MageFrame.getDesktop().add(exileWindow, exileWindow.isModal() ? JLayeredPane.MODAL_LAYER : JLayeredPane.PALETTE_LAYER);
-                exileWindow.show();
-            }
-            exileWindow.loadCardsAndShow(exile, bigCard, gameId);
-        }
+        // auto-show exile views (can be overridden by subclasses)
+        updateExileWindows(lastGameData.game);
 
         // update open or remove closed card hints windows
         clearClosedCardHintsWindows();
@@ -1501,6 +1492,23 @@ public class GamePanel extends javax.swing.JPanel {
 
     private void displayStack(GameView game, BigCard bigCard, FeedbackPanel feedbackPanel, UUID gameId) {
         this.stackObjects.loadCards(game.getStack(), bigCard, gameId, true);
+    }
+
+    /**
+     * Update exile windows to show current exile zones.
+     * Subclasses can override to display exile differently (e.g., inline in streaming mode).
+     */
+    protected void updateExileWindows(GameView game) {
+        for (ExileView exile : game.getExile()) {
+            CardInfoWindowDialog exileWindow = exiles.getOrDefault(exile.getId(), null);
+            if (exileWindow == null) {
+                exileWindow = new CardInfoWindowDialog(ShowType.EXILE, exile.getName());
+                exiles.put(exile.getId(), exileWindow);
+                MageFrame.getDesktop().add(exileWindow, exileWindow.isModal() ? JLayeredPane.MODAL_LAYER : JLayeredPane.PALETTE_LAYER);
+                exileWindow.show();
+            }
+            exileWindow.loadCardsAndShow(exile, bigCard, gameId);
+        }
     }
 
     private void updateActivePhase(PhaseStep currentStep) {

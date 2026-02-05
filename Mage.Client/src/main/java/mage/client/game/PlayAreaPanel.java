@@ -81,6 +81,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         if (graveyardPanel != null) {
             graveyardPanel.cleanUp();
         }
+        if (exilePanel != null) {
+            exilePanel.cleanUp();
+        }
 
         // Taken form : https://community.oracle.com/thread/2183145
         // removed the internal focus of a popupMenu data to allow GC before another popup menu is selected
@@ -113,6 +116,9 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         }
         if (graveyardPanel != null) {
             graveyardPanel.changeGUISize();
+        }
+        if (exilePanel != null) {
+            exilePanel.changeGUISize();
         }
     }
 
@@ -548,17 +554,25 @@ public class PlayAreaPanel extends javax.swing.JPanel {
 
         this.setLayout(new BorderLayout());
 
-        // Create west panel (player info + optional graveyard)
-        if (options.showGraveyardInPlayArea) {
-            // Create graveyard panel for displaying graveyard cards (streaming/observer mode)
-            graveyardPanel = new GraveyardPanel();
-
-            // Create wrapper panel with player panel on top, graveyard below
+        // Create west panel (player info + optional graveyard + optional exile)
+        if (options.showGraveyardInPlayArea || options.showExileInPlayArea) {
+            // Create wrapper panel with player panel on top, then graveyard, then exile
             JPanel westPanel = new JPanel();
             westPanel.setLayout(new BoxLayout(westPanel, BoxLayout.Y_AXIS));
             westPanel.setOpaque(false);
             westPanel.add(playerPanel);
-            westPanel.add(graveyardPanel);
+
+            if (options.showGraveyardInPlayArea) {
+                // Create graveyard panel for displaying graveyard cards (streaming/observer mode)
+                graveyardPanel = new GraveyardPanel();
+                westPanel.add(graveyardPanel);
+            }
+
+            if (options.showExileInPlayArea) {
+                // Create exile panel for displaying exiled cards (streaming/observer mode)
+                exilePanel = new ExilePanel();
+                westPanel.add(exilePanel);
+            }
 
             this.add(westPanel, BorderLayout.WEST);
         } else {
@@ -621,6 +635,7 @@ public class PlayAreaPanel extends javax.swing.JPanel {
     private PlayerPanelExt playerPanel;
     private HandPanel handPanel;
     private GraveyardPanel graveyardPanel;
+    private ExilePanel exilePanel;
 
     /**
      * Load hand cards into this player's hand panel (only works if showHandInPlayArea option is enabled).
@@ -672,5 +687,32 @@ public class PlayAreaPanel extends javax.swing.JPanel {
      */
     public GraveyardPanel getGraveyardPanel() {
         return graveyardPanel;
+    }
+
+    /**
+     * Load exile cards into this player's exile panel (only works if showExileInPlayArea option is enabled).
+     * @param cards The cards to display, or null to hide the exile panel
+     * @param bigCard The big card display for hover previews
+     * @param gameId The current game ID
+     */
+    public void loadExileCards(CardsView cards, BigCard bigCard, UUID gameId) {
+        if (exilePanel == null) {
+            return; // Exile panel not enabled for this play area
+        }
+        if (cards != null && !cards.isEmpty()) {
+            exilePanel.loadCards(cards, bigCard, gameId);
+        }
+        // Revalidate parent to update layout with new exile size
+        if (exilePanel.getParent() != null) {
+            exilePanel.getParent().revalidate();
+            exilePanel.getParent().repaint();
+        }
+    }
+
+    /**
+     * Get the exile panel for this play area (may be null if showExileInPlayArea option is disabled).
+     */
+    public ExilePanel getExilePanel() {
+        return exilePanel;
     }
 }
