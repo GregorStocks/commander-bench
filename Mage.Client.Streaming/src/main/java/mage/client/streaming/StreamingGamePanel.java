@@ -22,6 +22,8 @@ import mage.constants.PlayerAction;
 import mage.constants.Zone;
 import mage.view.CardView;
 import mage.view.CardsView;
+import mage.view.CommanderView;
+import mage.view.CommandObjectView;
 import mage.view.GameView;
 import mage.view.PlayerView;
 import mage.view.SimpleCardsView;
@@ -70,6 +72,10 @@ public class StreamingGamePanel extends GamePanel {
     // Hand card caching for incremental updates (eliminates flashing)
     private final Map<UUID, Set<UUID>> lastHandCardIds = new HashMap<>();
     private boolean handPanelsInitialized = false;
+
+    // Commander panels injected into each player's play area
+    private final Map<UUID, CommanderPanel> commanderPanels = new HashMap<>();
+    private boolean commanderPanelsInjected = false;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -139,6 +145,9 @@ public class StreamingGamePanel extends GamePanel {
         distributeGraveyards(game);
         // Distribute exile to each player's PlayAreaPanel
         distributeExile(game);
+        // Inject and distribute commanders to each player's PlayAreaPanel
+        injectCommanderPanels(game);
+        distributeCommanders(game);
         // Clean up player panels (hide redundant elements)
         updatePlayerPanelVisibility(game);
     }
@@ -628,6 +637,89 @@ public class StreamingGamePanel extends GamePanel {
             }
 
             playArea.loadExileCards(exileCards, getBigCard(), getGameId());
+        }
+    }
+
+    /**
+     * Inject CommanderPanel into each player's west panel via reflection.
+     * This is called once after play areas are created.
+     */
+    private void injectCommanderPanels(GameView game) {
+        if (commanderPanelsInjected || game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            if (playArea == null) {
+                continue;
+            }
+
+            try {
+                // Get the playerPanel to find its parent (the west panel)
+                PlayerPanelExt playerPanel = playArea.getPlayerPanel();
+                if (playerPanel == null || playerPanel.getParent() == null) {
+                    continue;
+                }
+
+                Container westPanel = playerPanel.getParent();
+                if (!(westPanel instanceof JPanel)) {
+                    continue;
+                }
+
+                // Create commander panel
+                CommanderPanel commanderPanel = new CommanderPanel();
+                commanderPanels.put(player.getPlayerId(), commanderPanel);
+
+                // Add commander panel after player panel (index 1)
+                // Layout: playerPanel (0), commanderPanel (1), graveyardPanel (2), exilePanel (3)
+                westPanel.add(commanderPanel, 1);
+                westPanel.revalidate();
+                westPanel.repaint();
+
+                logger.info("Injected commander panel for player: " + player.getName());
+            } catch (Exception e) {
+                logger.warn("Failed to inject commander panel for player: " + player.getName(), e);
+            }
+        }
+
+        commanderPanelsInjected = true;
+    }
+
+    /**
+     * Distribute commander cards to each player's CommanderPanel.
+     * Filters command objects to only include actual commander cards.
+     */
+    private void distributeCommanders(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        for (PlayerView player : game.getPlayers()) {
+            CommanderPanel panel = commanderPanels.get(player.getPlayerId());
+            if (panel == null) {
+                continue;
+            }
+
+            // Debug: log command object list contents
+            java.util.List<CommandObjectView> cmdList = player.getCommandObjectList();
+            logger.info("Player " + player.getName() + " command list size: " + cmdList.size());
+            for (CommandObjectView obj : cmdList) {
+                logger.info("  - " + obj.getClass().getSimpleName() + ": " + obj.getName() + " (id: " + obj.getId() + ")");
+            }
+
+            // Filter commandList to only CommanderView instances
+            CardsView commanders = new CardsView();
+            for (CommandObjectView obj : player.getCommandObjectList()) {
+                if (obj instanceof CommanderView) {
+                    commanders.put(obj.getId(), (CommanderView) obj);
+                }
+            }
+
+            logger.info("Player " + player.getName() + " commanders found: " + commanders.size());
+            panel.loadCards(commanders, getBigCard(), getGameId());
         }
     }
 
