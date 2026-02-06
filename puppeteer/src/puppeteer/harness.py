@@ -1,12 +1,13 @@
 """Main harness orchestration."""
 
 import argparse
+import shutil
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from puppeteer.config import Config
+from puppeteer.config import ChatterboxPlayer, Config
 from puppeteer.port import find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
@@ -264,6 +265,55 @@ def start_sleepwalker_client(
     )
 
 
+def start_chatterbox_client(
+    pm: ProcessManager,
+    project_root: Path,
+    config: Config,
+    player: ChatterboxPlayer,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Start a chatterbox client (LLM-powered MCP client + skeleton in MCP mode).
+
+    This spawns the chatterbox.py script which in turn spawns the skeleton.
+    """
+    import os
+    import sys
+
+    env = {
+        "PYTHONUNBUFFERED": "1",
+    }
+
+    # Pass API key from parent environment (never in config files)
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if api_key:
+        env["OPENROUTER_API_KEY"] = api_key
+
+    args = [
+        sys.executable,
+        "-m", "puppeteer.chatterbox",
+        "--server", config.server,
+        "--port", str(config.port),
+        "--username", player.name,
+        "--project-root", str(project_root),
+    ]
+
+    if player.deck:
+        args.extend(["--deck", str(project_root / player.deck)])
+    if player.model:
+        args.extend(["--model", player.model])
+    if player.base_url:
+        args.extend(["--base-url", player.base_url])
+    if player.system_prompt:
+        args.extend(["--system-prompt", player.system_prompt])
+
+    return pm.start_process(
+        args=args,
+        cwd=project_root,
+        env=env,
+        log_file=log_path,
+    )
+
+
 def start_streaming_client(
     pm: ProcessManager,
     project_root: Path,
@@ -296,7 +346,8 @@ def start_streaming_client(
 
     # Add recording path if configured
     if config.record:
-        record_path = config.record_output or (project_root / config.log_dir / f"recording_{config.timestamp}.mov")
+        game_dir = (project_root / config.log_dir / f"game_{config.timestamp}").resolve()
+        record_path = config.record_output or (game_dir / "recording.mov")
         jvm_args_list.append(f"-Dxmage.streaming.record={record_path}")
 
     jvm_args = " ".join(jvm_args_list)
@@ -335,11 +386,13 @@ def main() -> int:
             print("Recording requires streaming mode, enabling --streaming")
             config.streaming = True
 
-        # Create log directory (use absolute paths since subprocesses run from different dirs)
+        # Create log directory structure:
+        #   .context/ai-harness-logs/          (top-level, persists across runs)
+        #   .context/ai-harness-logs/game_TS/  (per-game directory)
         log_dir = (project_root / config.log_dir).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
-        config_dir = log_dir / "config"
-        config_dir.mkdir(parents=True, exist_ok=True)
+        game_dir = log_dir / f"game_{config.timestamp}"
+        game_dir.mkdir(parents=True, exist_ok=True)
 
         # Compile if needed
         if not config.skip_compile:
@@ -352,33 +405,28 @@ def main() -> int:
         config.port = find_available_port(config.server, config.start_port)
         print(f"Using port {config.port}")
 
-        # Generate server config
-        server_config_path = config_dir / f"server_{config.timestamp}.xml"
+        # Generate server config into game directory
+        server_config_path = game_dir / "server_config.xml"
         modify_server_config(
             source=project_root / "Mage.Server" / "config" / "config.xml",
             destination=server_config_path,
             port=config.port,
         )
 
-        # Set up log paths
-        server_log = log_dir / f"server_{config.timestamp}.log"
-        client_log = log_dir / f"client_{config.timestamp}.log"
+        # Set up log paths (all inside game directory)
+        server_log = game_dir / "server.log"
+        observer_log = game_dir / "observer.log"
 
-        # Write last.txt for easy reference
-        last_txt = log_dir / "last.txt"
-        with open(last_txt, "w") as f:
-            f.write(f"server_log={server_log}\n")
-            f.write(f"client_log={client_log}\n")
-            f.write(f"server={config.server}\n")
-            f.write(f"port={config.port}\n")
-            if config.record:
-                record_path = config.record_output or (log_dir / f"recording_{config.timestamp}.mov")
-                f.write(f"recording={record_path}\n")
+        # Update "last" symlink to point to this game directory
+        last_link = log_dir / "last"
+        last_link.unlink(missing_ok=True)
+        last_link.symlink_to(game_dir.name)
 
+        print(f"Game logs: {game_dir}")
         print(f"Server log: {server_log}")
-        print(f"Client log: {client_log}")
+        print(f"Observer log: {observer_log}")
         if config.record:
-            record_path = config.record_output or (log_dir / f"recording_{config.timestamp}.mov")
+            record_path = config.record_output or (game_dir / "recording.mov")
             print(f"Recording to: {record_path}")
 
         # Start server
@@ -396,6 +444,8 @@ def main() -> int:
         config.load_skeleton_config()
         if config.config_file:
             print(f"Using config: {config.config_file}")
+            # Copy config into game directory for reference
+            shutil.copy2(config.config_file, game_dir / "config.json")
 
         import time
 
@@ -406,49 +456,46 @@ def main() -> int:
         else:
             start_observer_client = start_gui_client
 
-        # Count headless clients (sleepwalker, potato, legacy skeleton)
+        # Count headless clients (sleepwalker, chatterbox, potato, legacy skeleton)
         headless_count = (
             len(config.sleepwalker_players) +
+            len(config.chatterbox_players) +
             len(config.potato_players) +
             len(config.skeleton_players)  # Legacy
         )
 
         # Start observer client first
-        observer_proc = start_observer_client(pm, project_root, config, client_log)
+        observer_proc = start_observer_client(pm, project_root, config, observer_log)
 
         # Bring the GUI window to the foreground on macOS
         bring_to_foreground_macos()
 
         if headless_count > 0:
             time.sleep(config.skeleton_delay)
-            client_idx = 0
 
             # Start sleepwalker clients (MCP-based, Python controls skeleton)
             for player in config.sleepwalker_players:
-                client_log_path = log_dir / f"sleepwalker_{client_idx}_{config.timestamp}.log"
-                with open(last_txt, "a") as f:
-                    f.write(f"sleepwalker_{client_idx}_log={client_log_path}\n")
-                print(f"Sleepwalker {client_idx} ({player.name}) log: {client_log_path}")
-                start_sleepwalker_client(pm, project_root, config, player.name, player.deck, client_log_path)
-                client_idx += 1
+                log_path = game_dir / f"{player.name}_mcp.log"
+                print(f"Sleepwalker ({player.name}) log: {log_path}")
+                start_sleepwalker_client(pm, project_root, config, player.name, player.deck, log_path)
+
+            # Start chatterbox clients (LLM-based, Python controls skeleton)
+            for player in config.chatterbox_players:
+                log_path = game_dir / f"{player.name}_llm.log"
+                print(f"Chatterbox ({player.name}) log: {log_path}")
+                start_chatterbox_client(pm, project_root, config, player, log_path)
 
             # Start potato clients (pure Java, auto-responds)
             for player in config.potato_players:
-                client_log_path = log_dir / f"potato_{client_idx}_{config.timestamp}.log"
-                with open(last_txt, "a") as f:
-                    f.write(f"potato_{client_idx}_log={client_log_path}\n")
-                print(f"Potato {client_idx} ({player.name}) log: {client_log_path}")
-                start_potato_client(pm, project_root, config, player.name, player.deck, client_log_path)
-                client_idx += 1
+                log_path = game_dir / f"{player.name}_mcp.log"
+                print(f"Potato ({player.name}) log: {log_path}")
+                start_potato_client(pm, project_root, config, player.name, player.deck, log_path)
 
             # Start legacy skeleton clients (treated as potato)
             for player in config.skeleton_players:
-                client_log_path = log_dir / f"skeleton_{client_idx}_{config.timestamp}.log"
-                with open(last_txt, "a") as f:
-                    f.write(f"skeleton_{client_idx}_log={client_log_path}\n")
-                print(f"Skeleton {client_idx} ({player.name}) log: {client_log_path}")
-                start_skeleton_client(pm, project_root, config, player.name, player.deck, client_log_path)
-                client_idx += 1
+                log_path = game_dir / f"{player.name}_mcp.log"
+                print(f"Skeleton ({player.name}) log: {log_path}")
+                start_skeleton_client(pm, project_root, config, player.name, player.deck, log_path)
 
             # Note: CPU players are handled by the GUI client/server
 

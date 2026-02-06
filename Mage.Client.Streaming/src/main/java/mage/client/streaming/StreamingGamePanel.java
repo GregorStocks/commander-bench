@@ -85,7 +85,8 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Replace the separate game chat and user chat panels with a single combined panel.
+     * Replace the default chat panels with streaming-optimized versions.
+     * Player chat (top) is kept separate from game log (bottom, with spam filtering).
      * This must be called BEFORE super.watchGame() which connects the chat to the server.
      */
     private void replaceChatWithCombinedPanel() {
@@ -94,7 +95,14 @@ public class StreamingGamePanel extends GamePanel {
         }
 
         try {
+            // Player chat panel (top) - shows player messages, no input for observers
+            ChatPanelBasic playerChatPanel = new ChatPanelBasic();
+            playerChatPanel.useExtendedView(ChatPanelBasic.VIEW_MODE.GAME);
+            playerChatPanel.disableInput();
+
+            // Game log panel (bottom) - filters spammy game messages and routes TALK to top
             combinedChatPanel = new CombinedChatPanel();
+            combinedChatPanel.setPlayerChatPanel(playerChatPanel);
 
             // Access fields via reflection (matching existing pattern in this class)
             Field gameChatField = GamePanel.class.getDeclaredField("gameChatPanel");
@@ -102,23 +110,23 @@ public class StreamingGamePanel extends GamePanel {
             Field userChatField = GamePanel.class.getDeclaredField("userChatPanel");
             userChatField.setAccessible(true);
 
-            // Replace both chat panel references with our combined panel
-            // (no connectedChat = all messages go to this single panel)
+            // Replace panel references (before super.watchGame connects chat)
             gameChatField.set(this, combinedChatPanel);
-            userChatField.set(this, combinedChatPanel);
+            userChatField.set(this, playerChatPanel);
 
-            // Replace the entire splitChatAndLogs with just our combined panel
-            // in the parent splitBattlefieldAndChats
-            Field splitBattlefieldField = GamePanel.class.getDeclaredField("splitBattlefieldAndChats");
-            splitBattlefieldField.setAccessible(true);
-            JSplitPane splitBattlefield = (JSplitPane) splitBattlefieldField.get(this);
-            if (splitBattlefield != null) {
-                splitBattlefield.setRightComponent(combinedChatPanel);
+            // Update the split pane components (keep the split layout)
+            Field splitChatField = GamePanel.class.getDeclaredField("splitChatAndLogs");
+            splitChatField.setAccessible(true);
+            JSplitPane splitChat = (JSplitPane) splitChatField.get(this);
+            if (splitChat != null) {
+                splitChat.setTopComponent(playerChatPanel);
+                splitChat.setBottomComponent(combinedChatPanel);
+                splitChat.setResizeWeight(0.5);  // Split evenly between chat and game log
             }
 
             chatPanelReplaced = true;
         } catch (NoSuchFieldException | IllegalAccessException e) {
-            logger.warn("Failed to setup combined chat panel", e);
+            logger.warn("Failed to setup chat panels", e);
         }
     }
 

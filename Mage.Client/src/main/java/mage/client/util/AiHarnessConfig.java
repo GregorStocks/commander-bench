@@ -16,6 +16,7 @@ import java.util.List;
  * Player types:
  * - "cpu" or "bot": Computer player (uses AI field, defaults to COMPUTER_MAD)
  * - "sleepwalker": Headless client with MCP control (creates HUMAN slot)
+ * - "chatterbox": LLM-powered headless client with MCP control (creates HUMAN slot)
  * - "potato": Headless client with auto-response (creates HUMAN slot)
  * - "skeleton": Legacy headless client (creates HUMAN slot)
  *
@@ -93,12 +94,16 @@ public class AiHarnessConfig {
          * Returns true if this is a headless client player (needs HUMAN slot).
          */
         public boolean isHeadless() {
-            return "skeleton".equals(type) || "sleepwalker".equals(type) || "potato".equals(type);
+            return "skeleton".equals(type) || "sleepwalker".equals(type) || "potato".equals(type) || "chatterbox".equals(type);
         }
 
         public PlayerType getPlayerType() {
             if (isHeadless()) {
                 return PlayerType.HUMAN;
+            }
+            if (!isBot()) {
+                throw new IllegalArgumentException("Unknown player type: \"" + type + "\". " +
+                        "Valid types: cpu, bot, sleepwalker, chatterbox, potato, skeleton");
             }
             // Bot/CPU player
             if (ai == null || ai.isEmpty()) {
@@ -107,8 +112,8 @@ public class AiHarnessConfig {
             try {
                 return PlayerType.valueOf(ai);
             } catch (IllegalArgumentException e) {
-                LOGGER.warn("Unknown AI type: " + ai + ", defaulting to COMPUTER_MAD");
-                return PlayerType.COMPUTER_MAD;
+                throw new IllegalArgumentException("Unknown AI type: \"" + ai + "\". " +
+                        "Valid types: COMPUTER_MAD, COMPUTER_MONTE_CARLO");
             }
         }
     }

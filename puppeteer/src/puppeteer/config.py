@@ -29,6 +29,16 @@ class SleepwalkerPlayer:
 
 
 @dataclass
+class ChatterboxPlayer:
+    """Chatterbox personality: LLM-powered commentator, auto-plays, chats via LLM."""
+    name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
+    model: str | None = None  # LLM model (e.g., "anthropic/claude-sonnet-4")
+    base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
+    system_prompt: str | None = None  # Custom system prompt
+
+
+@dataclass
 class CpuPlayer:
     """XMage built-in COMPUTER_MAD AI."""
     name: str
@@ -36,7 +46,7 @@ class CpuPlayer:
 
 
 # Union type for all player types
-Player = Union[PotatoPlayer, SleepwalkerPlayer, CpuPlayer, SkeletonPlayer]
+Player = Union[PotatoPlayer, SleepwalkerPlayer, ChatterboxPlayer, CpuPlayer, SkeletonPlayer]
 
 
 @dataclass
@@ -75,6 +85,7 @@ class Config:
     # Player lists by type
     potato_players: list[PotatoPlayer] = field(default_factory=list)
     sleepwalker_players: list[SleepwalkerPlayer] = field(default_factory=list)
+    chatterbox_players: list[ChatterboxPlayer] = field(default_factory=list)
     cpu_players: list[CpuPlayer] = field(default_factory=list)
 
     # Legacy: kept for backwards compatibility
@@ -107,6 +118,14 @@ class Config:
 
                 if player_type == "sleepwalker":
                     self.sleepwalker_players.append(SleepwalkerPlayer(name=name, deck=deck))
+                elif player_type == "chatterbox":
+                    self.chatterbox_players.append(ChatterboxPlayer(
+                        name=name,
+                        deck=deck,
+                        model=player.get("model"),
+                        base_url=player.get("base_url"),
+                        system_prompt=player.get("system_prompt"),
+                    ))
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
                 elif player_type == "cpu":

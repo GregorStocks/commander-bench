@@ -21,11 +21,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes four tools:
+ * Exposes seven tools:
  * - is_action_on_me: Check if action is pending
  * - take_action: Execute default action
+ * - wait_for_action: Block until action is pending (or timeout)
  * - get_game_log: Get game log text
+ * - get_game_state: Get structured game state
  * - send_chat_message: Send a chat message
+ * - get_oracle_text: Look up card rules
  */
 public class McpServer {
 
@@ -199,6 +202,59 @@ public class McpServer {
         sendChatTool.put("inputSchema", sendChatSchema);
         tools.add(sendChatTool);
 
+        // wait_for_action
+        Map<String, Object> waitActionTool = new HashMap<>();
+        waitActionTool.put("name", "wait_for_action");
+        waitActionTool.put("description",
+                "Block until a game action is required from this player, or until timeout. " +
+                "Returns the same info as is_action_on_me. Use this instead of polling is_action_on_me in a loop.");
+        Map<String, Object> waitActionSchema = new HashMap<>();
+        waitActionSchema.put("type", "object");
+        Map<String, Object> waitActionProps = new HashMap<>();
+        Map<String, Object> timeoutProp = new HashMap<>();
+        timeoutProp.put("type", "integer");
+        timeoutProp.put("description", "Max milliseconds to wait (default 15000)");
+        waitActionProps.put("timeout_ms", timeoutProp);
+        waitActionSchema.put("properties", waitActionProps);
+        waitActionSchema.put("additionalProperties", false);
+        waitActionTool.put("inputSchema", waitActionSchema);
+        tools.add(waitActionTool);
+
+        // auto_pass_until_event
+        Map<String, Object> autoPassTool = new HashMap<>();
+        autoPassTool.put("name", "auto_pass_until_event");
+        autoPassTool.put("description",
+                "Auto-handle all game actions (pass/default) and block until the game state changes meaningfully " +
+                "(turn change, life total change, permanents entering/leaving, cards going to graveyard). " +
+                "Returns a summary of what changed. Use this in a loop to observe the game.");
+        Map<String, Object> autoPassSchema = new HashMap<>();
+        autoPassSchema.put("type", "object");
+        Map<String, Object> autoPassProps = new HashMap<>();
+        Map<String, Object> minCharsProp = new HashMap<>();
+        minCharsProp.put("type", "integer");
+        minCharsProp.put("description", "Min new log characters to trigger return (default 50)");
+        autoPassProps.put("min_new_chars", minCharsProp);
+        Map<String, Object> autoPassTimeoutProp = new HashMap<>();
+        autoPassTimeoutProp.put("type", "integer");
+        autoPassTimeoutProp.put("description", "Max milliseconds to wait (default 30000)");
+        autoPassProps.put("timeout_ms", autoPassTimeoutProp);
+        autoPassSchema.put("properties", autoPassProps);
+        autoPassSchema.put("additionalProperties", false);
+        autoPassTool.put("inputSchema", autoPassSchema);
+        tools.add(autoPassTool);
+
+        // get_game_state
+        Map<String, Object> gameStateTool = new HashMap<>();
+        gameStateTool.put("name", "get_game_state");
+        gameStateTool.put("description",
+                "Get structured game state: turn, phase, players (life, hand, battlefield, graveyard), and stack.");
+        Map<String, Object> gameStateSchema = new HashMap<>();
+        gameStateSchema.put("type", "object");
+        gameStateSchema.put("properties", new HashMap<>());
+        gameStateSchema.put("additionalProperties", false);
+        gameStateTool.put("inputSchema", gameStateSchema);
+        tools.add(gameStateTool);
+
         // get_oracle_text
         Map<String, Object> getOracleTextTool = new HashMap<>();
         getOracleTextTool.put("name", "get_oracle_text");
@@ -257,6 +313,21 @@ public class McpServer {
                 boolean success = callbackHandler.sendChatMessage(message);
                 toolResult = new HashMap<>();
                 toolResult.put("success", success);
+                break;
+
+            case "wait_for_action":
+                int timeoutMs = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 15000;
+                toolResult = callbackHandler.waitForAction(timeoutMs);
+                break;
+
+            case "auto_pass_until_event":
+                int minNewChars = arguments.has("min_new_chars") ? arguments.get("min_new_chars").getAsInt() : 50;
+                int autoPassTimeout = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 10000;
+                toolResult = callbackHandler.autoPassUntilEvent(minNewChars, autoPassTimeout);
+                break;
+
+            case "get_game_state":
+                toolResult = callbackHandler.getGameState();
                 break;
 
             case "get_oracle_text":

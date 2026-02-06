@@ -33,7 +33,7 @@ def get_sleepy_noise():
 
 
 ACTION_DELAY_SECS = 0.5
-CHAT_INTERVAL_SECS = 5
+CHAT_INTERVAL_SECS = 30
 
 
 async def run_sleepwalker(

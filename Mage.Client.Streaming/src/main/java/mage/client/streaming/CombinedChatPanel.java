@@ -8,10 +8,12 @@ import java.util.Date;
 import java.util.regex.Pattern;
 
 /**
- * Combined chat panel that displays both game log and chat messages
- * in a single interleaved view for streaming/observer mode.
+ * Game log panel for streaming mode that filters spammy messages
+ * and routes player chat (TALK) messages to a separate panel.
  */
 public class CombinedChatPanel extends ChatPanelBasic {
+
+    private ChatPanelBasic playerChatPanel;
 
     public CombinedChatPanel() {
         super();
@@ -20,9 +22,24 @@ public class CombinedChatPanel extends ChatPanelBasic {
         disableInput();  // Observers cannot chat
     }
 
+    public void setPlayerChatPanel(ChatPanelBasic panel) {
+        this.playerChatPanel = panel;
+    }
+
     @Override
     public void receiveMessage(String username, String message, Date time,
             String turnInfo, MessageType messageType, MessageColor color) {
+        // Route player chat messages to the separate chat panel
+        if (messageType == MessageType.TALK
+                || messageType == MessageType.WHISPER_FROM
+                || messageType == MessageType.WHISPER_TO) {
+            if (playerChatPanel != null) {
+                playerChatPanel.receiveMessage(username, message, time, turnInfo, messageType, color);
+            }
+            return;
+        }
+
+        // Game log messages stay here, with spam filtering
         if (shouldFilterMessage(message)) {
             return;
         }

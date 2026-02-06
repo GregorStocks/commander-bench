@@ -8,6 +8,8 @@ import mage.interfaces.callback.ClientCallback;
 import mage.interfaces.callback.ClientCallbackMethod;
 import mage.remote.Session;
 import mage.view.AbilityPickerView;
+import mage.view.CommandObjectView;
+import mage.view.CounterView;
 import mage.view.CardsView;
 import mage.view.CardView;
 import mage.view.ChatMessage;
@@ -22,7 +24,9 @@ import mage.view.UserRequestMessage;
 import java.io.Serializable;
 import org.apache.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -47,6 +51,7 @@ public class SkeletonCallbackHandler {
     // MCP mode fields
     private volatile boolean mcpMode = false;
     private volatile PendingAction pendingAction = null;
+    private final Object actionLock = new Object(); // For wait_for_action blocking
     private final StringBuilder gameLog = new StringBuilder();
     private volatile UUID currentGameId = null;
     private volatile GameView lastGameView = null;
@@ -260,6 +265,368 @@ public class SkeletonCallbackHandler {
             return false;
         }
         return session.sendChatMessage(chatId, message);
+    }
+
+    public Map<String, Object> waitForAction(int timeoutMs) {
+        synchronized (actionLock) {
+            if (pendingAction == null) {
+                try {
+                    actionLock.wait(timeoutMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+        return getPendingActionInfo();
+    }
+
+    public Map<String, Object> autoPassUntilEvent(int minNewChars, int timeoutMs) {
+        long startTime = System.currentTimeMillis();
+        int startLogLength = getGameLogLength();
+        int actionsHandled = 0;
+
+        // Snapshot initial game state for change detection
+        GameView startView = lastGameView;
+        int startTurn = startView != null ? startView.getTurn() : -1;
+        Map<String, Integer> startLifeTotals = getLifeTotals(startView);
+        Map<String, Integer> startBattlefieldCounts = getBattlefieldCounts(startView);
+        Map<String, Integer> startGraveyardCounts = getGraveyardCounts(startView);
+
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            // Auto-handle any pending action
+            PendingAction action = pendingAction;
+            if (action != null) {
+                executeDefaultAction();
+                actionsHandled++;
+
+                // Check for meaningful game state changes after each action
+                GameView currentView = lastGameView;
+                if (currentView != null && startView != null) {
+                    String changes = describeStateChanges(
+                        startTurn, startLifeTotals, startBattlefieldCounts, startGraveyardCounts,
+                        currentView
+                    );
+                    if (changes != null) {
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("event_occurred", true);
+                        result.put("new_log", changes);
+                        result.put("new_chars", changes.length());
+                        result.put("actions_taken", actionsHandled);
+                        return result;
+                    }
+                }
+            }
+
+            // Check if enough new game log has accumulated
+            int currentLogLength = getGameLogLength();
+            if (currentLogLength - startLogLength >= minNewChars) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("event_occurred", true);
+                result.put("new_log", getGameLogSince(startLogLength));
+                result.put("new_chars", currentLogLength - startLogLength);
+                result.put("actions_taken", actionsHandled);
+                return result;
+            }
+
+            // Wait for new action or log entry (wakes on either)
+            long remaining = timeoutMs - (System.currentTimeMillis() - startTime);
+            if (remaining <= 0) break;
+            synchronized (actionLock) {
+                try {
+                    actionLock.wait(Math.min(remaining, 200));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+
+        // Timeout - return state summary so the LLM knows where things stand
+        Map<String, Object> result = new HashMap<>();
+        String summary = buildStateSummary(lastGameView);
+        int currentLogLength = getGameLogLength();
+        String newLog = currentLogLength > startLogLength ? getGameLogSince(startLogLength) : "";
+        String fullLog = !summary.isEmpty() ? summary + newLog : newLog;
+
+        result.put("event_occurred", !fullLog.isEmpty());
+        result.put("new_log", fullLog);
+        result.put("new_chars", fullLog.length());
+        result.put("actions_taken", actionsHandled);
+        return result;
+    }
+
+    private Map<String, Integer> getLifeTotals(GameView view) {
+        Map<String, Integer> totals = new HashMap<>();
+        if (view != null) {
+            for (PlayerView player : view.getPlayers()) {
+                totals.put(player.getName(), player.getLife());
+            }
+        }
+        return totals;
+    }
+
+    private Map<String, Integer> getBattlefieldCounts(GameView view) {
+        Map<String, Integer> counts = new HashMap<>();
+        if (view != null) {
+            for (PlayerView player : view.getPlayers()) {
+                counts.put(player.getName(), player.getBattlefield().size());
+            }
+        }
+        return counts;
+    }
+
+    private Map<String, Integer> getGraveyardCounts(GameView view) {
+        Map<String, Integer> counts = new HashMap<>();
+        if (view != null) {
+            for (PlayerView player : view.getPlayers()) {
+                counts.put(player.getName(), player.getGraveyard().size());
+            }
+        }
+        return counts;
+    }
+
+    /**
+     * Compare current game state to snapshots and describe meaningful changes.
+     * Returns null if no interesting changes detected.
+     */
+    private String describeStateChanges(
+        int startTurn,
+        Map<String, Integer> startLifeTotals,
+        Map<String, Integer> startBattlefieldCounts,
+        Map<String, Integer> startGraveyardCounts,
+        GameView currentView
+    ) {
+        StringBuilder changes = new StringBuilder();
+
+        // Turn changed
+        if (currentView.getTurn() != startTurn) {
+            changes.append("Turn ").append(currentView.getTurn())
+                   .append(" (").append(currentView.getActivePlayerName()).append("'s turn)\n");
+        }
+
+        // Life total changes
+        for (PlayerView player : currentView.getPlayers()) {
+            Integer startLife = startLifeTotals.get(player.getName());
+            if (startLife != null && startLife != player.getLife()) {
+                int diff = player.getLife() - startLife;
+                changes.append(player.getName()).append(": ")
+                       .append(startLife).append(" -> ").append(player.getLife())
+                       .append(" life (").append(diff > 0 ? "+" : "").append(diff).append(")\n");
+            }
+        }
+
+        // Battlefield changes
+        for (PlayerView player : currentView.getPlayers()) {
+            int currentCount = player.getBattlefield().size();
+            int startCount = startBattlefieldCounts.getOrDefault(player.getName(), 0);
+            if (currentCount != startCount) {
+                int diff = currentCount - startCount;
+                changes.append(player.getName()).append(": ")
+                       .append(diff > 0 ? "+" : "").append(diff)
+                       .append(" permanents (").append(currentCount).append(" total)\n");
+            }
+        }
+
+        // Graveyard changes
+        for (PlayerView player : currentView.getPlayers()) {
+            int currentCount = player.getGraveyard().size();
+            int startCount = startGraveyardCounts.getOrDefault(player.getName(), 0);
+            if (currentCount != startCount) {
+                int diff = currentCount - startCount;
+                changes.append(player.getName()).append("'s graveyard: ")
+                       .append(diff > 0 ? "+" : "").append(diff)
+                       .append(" cards (").append(currentCount).append(" total)\n");
+            }
+        }
+
+        if (changes.length() == 0) {
+            return null;
+        }
+
+        // Append current phase info for context
+        changes.append("Phase: ").append(currentView.getPhase());
+        if (currentView.getStep() != null) {
+            changes.append(" - ").append(currentView.getStep());
+        }
+        changes.append("\n");
+
+        return changes.toString();
+    }
+
+    /**
+     * Build a brief state summary for timeout returns so the LLM isn't left blind.
+     */
+    private String buildStateSummary(GameView view) {
+        if (view == null) return "";
+        StringBuilder summary = new StringBuilder();
+        summary.append("Turn ").append(view.getTurn())
+               .append(", ").append(view.getPhase());
+        if (view.getStep() != null) {
+            summary.append(" - ").append(view.getStep());
+        }
+        summary.append(", ").append(view.getActivePlayerName()).append("'s turn\n");
+        for (PlayerView player : view.getPlayers()) {
+            summary.append(player.getName()).append(": ").append(player.getLife()).append(" life, ")
+                   .append(player.getBattlefield().size()).append(" permanents\n");
+        }
+        return summary.toString();
+    }
+
+    private String getGameLogSince(int offset) {
+        synchronized (gameLog) {
+            if (offset >= gameLog.length()) return "";
+            return gameLog.substring(offset);
+        }
+    }
+
+    public Map<String, Object> getGameState() {
+        Map<String, Object> state = new HashMap<>();
+        GameView gameView = lastGameView;
+        if (gameView == null) {
+            state.put("available", false);
+            state.put("error", "No game state available yet");
+            return state;
+        }
+
+        state.put("available", true);
+        state.put("turn", gameView.getTurn());
+
+        // Phase info
+        if (gameView.getPhase() != null) {
+            state.put("phase", gameView.getPhase().toString());
+        }
+        if (gameView.getStep() != null) {
+            state.put("step", gameView.getStep().toString());
+        }
+
+        state.put("active_player", gameView.getActivePlayerName());
+        state.put("priority_player", gameView.getPriorityPlayerName());
+
+        // Players
+        List<Map<String, Object>> players = new ArrayList<>();
+        UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+
+        for (PlayerView player : gameView.getPlayers()) {
+            Map<String, Object> playerInfo = new HashMap<>();
+            playerInfo.put("name", player.getName());
+            playerInfo.put("life", player.getLife());
+            playerInfo.put("library_size", player.getLibraryCount());
+            playerInfo.put("hand_size", player.getHandCount());
+            playerInfo.put("is_active", player.isActive());
+
+            boolean isMe = player.getPlayerId().equals(myPlayerId);
+            playerInfo.put("is_you", isMe);
+
+            // Hand cards (only for our player)
+            if (isMe && gameView.getMyHand() != null) {
+                List<String> handCards = new ArrayList<>();
+                for (CardView card : gameView.getMyHand().values()) {
+                    handCards.add(card.getDisplayName());
+                }
+                playerInfo.put("hand", handCards);
+            }
+
+            // Battlefield
+            List<Map<String, Object>> battlefield = new ArrayList<>();
+            if (player.getBattlefield() != null) {
+                for (PermanentView perm : player.getBattlefield().values()) {
+                    Map<String, Object> permInfo = new HashMap<>();
+                    permInfo.put("name", perm.getDisplayName());
+                    permInfo.put("tapped", perm.isTapped());
+
+                    // Type line
+                    StringBuilder types = new StringBuilder();
+                    if (perm.getSuperTypes() != null) {
+                        for (Object st : perm.getSuperTypes()) {
+                            if (types.length() > 0) types.append(" ");
+                            types.append(st);
+                        }
+                    }
+                    if (perm.getCardTypes() != null) {
+                        for (Object ct : perm.getCardTypes()) {
+                            if (types.length() > 0) types.append(" ");
+                            types.append(ct);
+                        }
+                    }
+                    permInfo.put("types", types.toString());
+
+                    // P/T for creatures
+                    if (perm.isCreature()) {
+                        permInfo.put("power", perm.getPower());
+                        permInfo.put("toughness", perm.getToughness());
+                    }
+
+                    // Loyalty for planeswalkers
+                    if (perm.isPlaneswalker()) {
+                        permInfo.put("loyalty", perm.getLoyalty());
+                    }
+
+                    // Counters
+                    if (perm.getCounters() != null && !perm.getCounters().isEmpty()) {
+                        Map<String, Integer> counters = new HashMap<>();
+                        for (CounterView counter : perm.getCounters()) {
+                            counters.put(counter.getName(), counter.getCount());
+                        }
+                        permInfo.put("counters", counters);
+                    }
+
+                    // Summoning sickness
+                    if (perm.isCreature() && perm.hasSummoningSickness()) {
+                        permInfo.put("summoning_sickness", true);
+                    }
+
+                    battlefield.add(permInfo);
+                }
+            }
+            playerInfo.put("battlefield", battlefield);
+
+            // Graveyard
+            List<String> graveyard = new ArrayList<>();
+            if (player.getGraveyard() != null) {
+                for (CardView card : player.getGraveyard().values()) {
+                    graveyard.add(card.getDisplayName());
+                }
+            }
+            playerInfo.put("graveyard", graveyard);
+
+            // Player counters (poison, etc.)
+            if (player.getCounters() != null && !player.getCounters().isEmpty()) {
+                Map<String, Integer> counters = new HashMap<>();
+                for (CounterView counter : player.getCounters()) {
+                    counters.put(counter.getName(), counter.getCount());
+                }
+                playerInfo.put("counters", counters);
+            }
+
+            // Commander info
+            if (player.getCommandObjectList() != null && !player.getCommandObjectList().isEmpty()) {
+                List<String> commanders = new ArrayList<>();
+                for (CommandObjectView cmd : player.getCommandObjectList()) {
+                    commanders.add(cmd.getName());
+                }
+                playerInfo.put("commanders", commanders);
+            }
+
+            players.add(playerInfo);
+        }
+        state.put("players", players);
+
+        // Stack
+        List<Map<String, Object>> stack = new ArrayList<>();
+        if (gameView.getStack() != null) {
+            for (CardView card : gameView.getStack().values()) {
+                Map<String, Object> stackItem = new HashMap<>();
+                stackItem.put("name", card.getDisplayName());
+                stackItem.put("rules", card.getRules());
+                if (card.getTargets() != null && !card.getTargets().isEmpty()) {
+                    stackItem.put("target_count", card.getTargets().size());
+                }
+                stack.add(stackItem);
+            }
+        }
+        state.put("stack", stack);
+
+        return state;
     }
 
     public Map<String, Object> getOracleText(String cardName, String objectId) {
@@ -507,7 +874,10 @@ public class SkeletonCallbackHandler {
                 lastGameView = gameView;
             }
         }
-        pendingAction = new PendingAction(gameId, method, data, message);
+        synchronized (actionLock) {
+            pendingAction = new PendingAction(gameId, method, data, message);
+            actionLock.notifyAll();
+        }
         logger.info("[" + client.getUsername() + "] Stored pending action: " + method + " - " + message);
     }
 
@@ -540,6 +910,10 @@ public class SkeletonCallbackHandler {
                             gameLog.append("\n");
                         }
                         gameLog.append(logEntry);
+                    }
+                    // Wake up anyone waiting for game events (e.g., auto_pass_until_event)
+                    synchronized (actionLock) {
+                        actionLock.notifyAll();
                     }
                 }
             }
