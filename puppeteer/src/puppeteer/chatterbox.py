@@ -213,8 +213,6 @@ async def run_chatterbox(
         f"-Dxmage.headless.username={username}",
         "-Dxmage.headless.personality=sleepwalker",
     ]
-    if deck_path:
-        jvm_args_list.append(f"-Dxmage.headless.deck={deck_path}")
     if sys.platform == "darwin":
         jvm_args_list.append("-Dapple.awt.UIElement=true")
     jvm_args = " ".join(jvm_args_list)
@@ -222,9 +220,16 @@ async def run_chatterbox(
     env = os.environ.copy()
     env["MAVEN_OPTS"] = jvm_args
 
+    # Pass deck path as a Maven CLI arg (not in MAVEN_OPTS) because
+    # MAVEN_OPTS gets shell-split by the mvn script, breaking paths with spaces.
+    mvn_args = ["-q"]
+    if deck_path:
+        mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
+    mvn_args.append("exec:java")
+
     server_params = StdioServerParameters(
         command="mvn",
-        args=["-q", "exec:java"],
+        args=mvn_args,
         cwd=str(project_root / "Mage.Client.Headless"),
         env=env,
     )

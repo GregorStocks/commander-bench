@@ -47,3 +47,8 @@ ai-harness:
 .PHONY: ai-harness-quick
 ai-harness-quick:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --skip-compile $(ARGS)
+
+# LLM player mode: pilot AI + CPU opponents (consumes API tokens)
+.PHONY: ai-harness-llm
+ai-harness-llm:
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)

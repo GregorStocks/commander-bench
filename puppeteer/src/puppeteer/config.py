@@ -40,6 +40,16 @@ class ChatterboxPlayer:
 
 
 @dataclass
+class PilotPlayer:
+    """Pilot personality: LLM-powered strategic game player."""
+    name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
+    model: str | None = None  # LLM model (e.g., "google/gemini-2.0-flash-001")
+    base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
+    system_prompt: str | None = None  # Custom system prompt
+
+
+@dataclass
 class CpuPlayer:
     """XMage built-in COMPUTER_MAD AI."""
     name: str
@@ -47,7 +57,7 @@ class CpuPlayer:
 
 
 # Union type for all player types
-Player = Union[PotatoPlayer, SleepwalkerPlayer, ChatterboxPlayer, CpuPlayer, SkeletonPlayer]
+Player = Union[PotatoPlayer, SleepwalkerPlayer, ChatterboxPlayer, PilotPlayer, CpuPlayer, SkeletonPlayer]
 
 
 @dataclass
@@ -87,6 +97,7 @@ class Config:
     potato_players: list[PotatoPlayer] = field(default_factory=list)
     sleepwalker_players: list[SleepwalkerPlayer] = field(default_factory=list)
     chatterbox_players: list[ChatterboxPlayer] = field(default_factory=list)
+    pilot_players: list[PilotPlayer] = field(default_factory=list)
     cpu_players: list[CpuPlayer] = field(default_factory=list)
 
     # Legacy: kept for backwards compatibility
@@ -127,6 +138,14 @@ class Config:
                         base_url=player.get("base_url"),
                         system_prompt=player.get("system_prompt"),
                     ))
+                elif player_type == "pilot":
+                    self.pilot_players.append(PilotPlayer(
+                        name=name,
+                        deck=deck,
+                        model=player.get("model"),
+                        base_url=player.get("base_url"),
+                        system_prompt=player.get("system_prompt"),
+                    ))
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
                 elif player_type == "cpu":
@@ -135,12 +154,54 @@ class Config:
                     # Legacy: treat as potato for backwards compatibility
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
 
+    def get_players_config_json(self) -> str:
+        """Serialize resolved player config to JSON for passing to observer/GUI client."""
+        players = []
+        for p in self.pilot_players:
+            d = {"type": "pilot", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            if p.model:
+                d["model"] = p.model
+            players.append(d)
+        for p in self.chatterbox_players:
+            d = {"type": "chatterbox", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            if p.model:
+                d["model"] = p.model
+            players.append(d)
+        for p in self.sleepwalker_players:
+            d = {"type": "sleepwalker", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            players.append(d)
+        for p in self.potato_players:
+            d = {"type": "potato", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            players.append(d)
+        for p in self.cpu_players:
+            d = {"type": "cpu", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            players.append(d)
+        for p in self.skeleton_players:
+            d = {"type": "skeleton", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            players.append(d)
+        if not players:
+            return ""
+        return json.dumps({"players": players}, separators=(',', ':'))
+
     def resolve_random_decks(self, project_root: Path) -> None:
         """Replace any deck="random" with a randomly chosen Commander .dck file."""
         all_players = (
             self.potato_players +
             self.sleepwalker_players +
             self.chatterbox_players +
+            self.pilot_players +
             self.cpu_players +
             self.skeleton_players
         )

@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from puppeteer.config import ChatterboxPlayer, Config
+from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
 from puppeteer.port import find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
@@ -79,6 +79,7 @@ def compile_project(project_root: Path, streaming: bool = False) -> bool:
     modules = "Mage.Server,Mage.Client,Mage.Client.Headless"
     if streaming:
         modules += ",Mage.Client.Streaming"
+
     result = subprocess.run(
         [
             "mvn",
@@ -87,7 +88,6 @@ def compile_project(project_root: Path, streaming: bool = False) -> bool:
             "-pl",
             modules,
             "-am",
-            "compile",
             "install",
         ],
         cwd=project_root,
@@ -141,14 +141,8 @@ def start_gui_client(
     log_path: Path,
 ) -> subprocess.Popen:
     """Start the GUI client."""
-    # Read config file content to pass via environment variable
-    # (env vars handle special characters better than MAVEN_OPTS)
-    config_json = ""
-    if config.config_file and config.config_file.exists():
-        import json
-        with open(config.config_file) as f:
-            config_data = json.load(f)
-            config_json = json.dumps(config_data, separators=(',', ':'))
+    # Pass resolved player config (with actual deck paths, not "random")
+    config_json = config.get_players_config_json()
 
     jvm_args = " ".join([
         config.jvm_opens,
@@ -201,8 +195,6 @@ def start_potato_client(
     log_path: Path,
 ) -> subprocess.Popen:
     """Start a potato client (pure Java, auto-responds)."""
-    import shlex
-
     jvm_args_list = [
         config.jvm_headless_opts,
         f"-Dxmage.headless.server={config.server}",
@@ -211,16 +203,19 @@ def start_potato_client(
         "-Dxmage.headless.personality=potato",
     ]
 
-    if deck_path:
-        resolved_path = project_root / deck_path
-        # Quote the path to handle spaces in filenames
-        jvm_args_list.append(f"-Dxmage.headless.deck={shlex.quote(str(resolved_path))}")
-
     jvm_args = " ".join(jvm_args_list)
     env = {"MAVEN_OPTS": jvm_args}
 
+    # Pass deck path as a Maven CLI arg (not in MAVEN_OPTS) because
+    # MAVEN_OPTS gets shell-split by the mvn script, breaking paths with spaces.
+    mvn_args = ["mvn", "-q"]
+    if deck_path:
+        resolved_path = project_root / deck_path
+        mvn_args.append(f"-Dxmage.headless.deck={resolved_path}")
+    mvn_args.append("exec:java")
+
     return pm.start_process(
-        args=["mvn", "-q", "exec:java"],
+        args=mvn_args,
         cwd=project_root / "Mage.Client.Headless",
         env=env,
         log_file=log_path,
@@ -314,6 +309,55 @@ def start_chatterbox_client(
     )
 
 
+def start_pilot_client(
+    pm: ProcessManager,
+    project_root: Path,
+    config: Config,
+    player: PilotPlayer,
+    log_path: Path,
+) -> subprocess.Popen:
+    """Start a pilot client (LLM-powered game player via MCP).
+
+    This spawns the pilot.py script which in turn spawns the skeleton.
+    """
+    import os
+    import sys
+
+    env = {
+        "PYTHONUNBUFFERED": "1",
+    }
+
+    # Pass API key from parent environment (never in config files)
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if api_key:
+        env["OPENROUTER_API_KEY"] = api_key
+
+    args = [
+        sys.executable,
+        "-m", "puppeteer.pilot",
+        "--server", config.server,
+        "--port", str(config.port),
+        "--username", player.name,
+        "--project-root", str(project_root),
+    ]
+
+    if player.deck:
+        args.extend(["--deck", str(project_root / player.deck)])
+    if player.model:
+        args.extend(["--model", player.model])
+    if player.base_url:
+        args.extend(["--base-url", player.base_url])
+    if player.system_prompt:
+        args.extend(["--system-prompt", player.system_prompt])
+
+    return pm.start_process(
+        args=args,
+        cwd=project_root,
+        env=env,
+        log_file=log_path,
+    )
+
+
 def start_streaming_client(
     pm: ProcessManager,
     project_root: Path,
@@ -325,13 +369,8 @@ def start_streaming_client(
     This client automatically requests hand permission from all players,
     making it suitable for Twitch streaming where viewers should see all hands.
     """
-    # Read config file content to pass via environment variable
-    config_json = ""
-    if config.config_file and config.config_file.exists():
-        import json
-        with open(config.config_file) as f:
-            config_data = json.load(f)
-            config_json = json.dumps(config_data, separators=(',', ':'))
+    # Pass resolved player config (with actual deck paths, not "random")
+    config_json = config.get_players_config_json()
 
     jvm_args_list = [
         config.jvm_opens,
@@ -458,10 +497,11 @@ def main() -> int:
         else:
             start_observer_client = start_gui_client
 
-        # Count headless clients (sleepwalker, chatterbox, potato, legacy skeleton)
+        # Count headless clients (sleepwalker, chatterbox, pilot, potato, legacy skeleton)
         headless_count = (
             len(config.sleepwalker_players) +
             len(config.chatterbox_players) +
+            len(config.pilot_players) +
             len(config.potato_players) +
             len(config.skeleton_players)  # Legacy
         )
@@ -486,6 +526,12 @@ def main() -> int:
                 log_path = game_dir / f"{player.name}_llm.log"
                 print(f"Chatterbox ({player.name}) log: {log_path}")
                 start_chatterbox_client(pm, project_root, config, player, log_path)
+
+            # Start pilot clients (LLM-based game player)
+            for player in config.pilot_players:
+                log_path = game_dir / f"{player.name}_pilot.log"
+                print(f"Pilot ({player.name}) log: {log_path}")
+                start_pilot_client(pm, project_root, config, player, log_path)
 
             # Start potato clients (pure Java, auto-responds)
             for player in config.potato_players:

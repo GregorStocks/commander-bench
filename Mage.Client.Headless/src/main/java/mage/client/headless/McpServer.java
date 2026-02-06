@@ -2,6 +2,7 @@ package mage.client.headless;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -21,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes seven tools:
+ * Exposes ten tools:
  * - is_action_on_me: Check if action is pending
  * - take_action: Execute default action
  * - wait_for_action: Block until action is pending (or timeout)
@@ -29,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * - get_game_state: Get structured game state
  * - send_chat_message: Send a chat message
  * - get_oracle_text: Look up card rules
+ * - auto_pass_until_event: Auto-pass and wait for game state changes
+ * - get_action_choices: Get detailed choices for pending action
+ * - choose_action: Respond with a specific choice
  */
 public class McpServer {
 
@@ -277,6 +281,59 @@ public class McpServer {
         getOracleTextTool.put("inputSchema", getOracleTextSchema);
         tools.add(getOracleTextTool);
 
+        // get_action_choices
+        Map<String, Object> getChoicesTool = new HashMap<>();
+        getChoicesTool.put("name", "get_action_choices");
+        getChoicesTool.put("description",
+                "Get detailed information about the current pending action including all available choices " +
+                "with human-readable descriptions. Call this before choose_action to see what options are available. " +
+                "Returns response_type (boolean/index/amount/pile/multi_amount) and choices array for indexed types.");
+        Map<String, Object> getChoicesSchema = new HashMap<>();
+        getChoicesSchema.put("type", "object");
+        getChoicesSchema.put("properties", new HashMap<>());
+        getChoicesSchema.put("additionalProperties", false);
+        getChoicesTool.put("inputSchema", getChoicesSchema);
+        tools.add(getChoicesTool);
+
+        // choose_action
+        Map<String, Object> chooseActionTool = new HashMap<>();
+        chooseActionTool.put("name", "choose_action");
+        chooseActionTool.put("description",
+                "Respond to the current pending action with a specific choice. Call get_action_choices first " +
+                "to see available options. Provide exactly one of: index (for target/ability/choice selections), " +
+                "answer (boolean for yes/no and mana), amount (integer for amount requests), " +
+                "amounts (array of integers for multi-amount), pile (1 or 2 for pile choices).");
+        Map<String, Object> chooseActionSchema = new HashMap<>();
+        chooseActionSchema.put("type", "object");
+        Map<String, Object> chooseActionProps = new HashMap<>();
+        Map<String, Object> indexProp = new HashMap<>();
+        indexProp.put("type", "integer");
+        indexProp.put("description", "Choice index from get_action_choices (for target, ability, choice actions)");
+        chooseActionProps.put("index", indexProp);
+        Map<String, Object> answerProp = new HashMap<>();
+        answerProp.put("type", "boolean");
+        answerProp.put("description", "Yes/No response (for ask, select, mana actions). Also false to cancel target selection.");
+        chooseActionProps.put("answer", answerProp);
+        Map<String, Object> amountProp = new HashMap<>();
+        amountProp.put("type", "integer");
+        amountProp.put("description", "Amount value (for get_amount actions)");
+        chooseActionProps.put("amount", amountProp);
+        Map<String, Object> amountsProp = new HashMap<>();
+        amountsProp.put("type", "array");
+        Map<String, Object> amountsItems = new HashMap<>();
+        amountsItems.put("type", "integer");
+        amountsProp.put("items", amountsItems);
+        amountsProp.put("description", "Multiple amount values (for multi_amount actions)");
+        chooseActionProps.put("amounts", amountsProp);
+        Map<String, Object> pileProp = new HashMap<>();
+        pileProp.put("type", "integer");
+        pileProp.put("description", "Pile number: 1 or 2 (for pile choices)");
+        chooseActionProps.put("pile", pileProp);
+        chooseActionSchema.put("properties", chooseActionProps);
+        chooseActionSchema.put("additionalProperties", false);
+        chooseActionTool.put("inputSchema", chooseActionSchema);
+        tools.add(chooseActionTool);
+
         Map<String, Object> result = new HashMap<>();
         result.put("tools", tools);
         return result;
@@ -334,6 +391,26 @@ public class McpServer {
                 String cardName = arguments.has("card_name") ? arguments.get("card_name").getAsString() : null;
                 String objectId = arguments.has("object_id") ? arguments.get("object_id").getAsString() : null;
                 toolResult = callbackHandler.getOracleText(cardName, objectId);
+                break;
+
+            case "get_action_choices":
+                toolResult = callbackHandler.getActionChoices();
+                break;
+
+            case "choose_action":
+                Integer choiceIndex = arguments.has("index") ? arguments.get("index").getAsInt() : null;
+                Boolean choiceAnswer = arguments.has("answer") ? arguments.get("answer").getAsBoolean() : null;
+                Integer choiceAmount = arguments.has("amount") ? arguments.get("amount").getAsInt() : null;
+                int[] choiceAmounts = null;
+                if (arguments.has("amounts")) {
+                    JsonArray arr = arguments.getAsJsonArray("amounts");
+                    choiceAmounts = new int[arr.size()];
+                    for (int i = 0; i < arr.size(); i++) {
+                        choiceAmounts[i] = arr.get(i).getAsInt();
+                    }
+                }
+                Integer choicePile = arguments.has("pile") ? arguments.get("pile").getAsInt() : null;
+                toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile);
                 break;
 
             default:

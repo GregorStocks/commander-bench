@@ -20,6 +20,7 @@ import mage.view.PermanentView;
 import mage.view.PlayerView;
 import mage.view.TableClientMessage;
 import mage.view.UserRequestMessage;
+import mage.util.MultiAmountMessage;
 
 import java.io.Serializable;
 import org.apache.log4j.Logger;
@@ -55,6 +56,7 @@ public class SkeletonCallbackHandler {
     private final StringBuilder gameLog = new StringBuilder();
     private volatile UUID currentGameId = null;
     private volatile GameView lastGameView = null;
+    private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
         this.client = client;
@@ -79,6 +81,7 @@ public class SkeletonCallbackHandler {
         pendingAction = null;
         currentGameId = null;
         lastGameView = null;
+        lastChoices = null;
         synchronized (gameLog) {
             gameLog.setLength(0);
         }
@@ -236,6 +239,386 @@ public class SkeletonCallbackHandler {
         }
 
         return result;
+    }
+
+    /**
+     * Get structured information about the current pending action's available choices.
+     * Returns indexed choices so external clients can pick by index via chooseAction().
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getActionChoices() {
+        Map<String, Object> result = new HashMap<>();
+        PendingAction action = pendingAction;
+
+        if (action == null) {
+            result.put("action_pending", false);
+            return result;
+        }
+
+        result.put("action_pending", true);
+        result.put("action_type", action.getMethod().name());
+        result.put("message", action.getMessage());
+
+        ClientCallbackMethod method = action.getMethod();
+        Object data = action.getData();
+
+        switch (method) {
+            case GAME_ASK:
+                result.put("response_type", "boolean");
+                result.put("hint", "true = Yes, false = No");
+                lastChoices = null;
+                break;
+
+            case GAME_SELECT:
+                result.put("response_type", "boolean");
+                result.put("hint", "true = Yes/Proceed, false = No/Pass priority");
+                lastChoices = null;
+                break;
+
+            case GAME_TARGET: {
+                GameClientMessage msg = (GameClientMessage) data;
+                result.put("response_type", "index");
+                result.put("required", msg.isFlag());
+                result.put("can_cancel", true);
+
+                Set<UUID> targets = findValidTargets(msg);
+                List<Map<String, Object>> choiceList = new ArrayList<>();
+                List<Object> indexToUuid = new ArrayList<>();
+
+                if (targets != null) {
+                    CardsView cardsView = msg.getCardsView1();
+                    int idx = 0;
+                    for (UUID targetId : targets) {
+                        Map<String, Object> choiceEntry = new HashMap<>();
+                        choiceEntry.put("index", idx);
+                        choiceEntry.put("description", describeTarget(targetId, cardsView));
+                        choiceList.add(choiceEntry);
+                        indexToUuid.add(targetId);
+                        idx++;
+                    }
+                }
+
+                result.put("choices", choiceList);
+                lastChoices = indexToUuid;
+                break;
+            }
+
+            case GAME_CHOOSE_ABILITY: {
+                AbilityPickerView picker = (AbilityPickerView) data;
+                Map<UUID, String> choices = picker.getChoices();
+                result.put("response_type", "index");
+
+                List<Map<String, Object>> choiceList = new ArrayList<>();
+                List<Object> indexToUuid = new ArrayList<>();
+
+                if (choices != null) {
+                    int idx = 0;
+                    for (Map.Entry<UUID, String> entry : choices.entrySet()) {
+                        Map<String, Object> choiceEntry = new HashMap<>();
+                        choiceEntry.put("index", idx);
+                        choiceEntry.put("description", entry.getValue());
+                        choiceList.add(choiceEntry);
+                        indexToUuid.add(entry.getKey());
+                        idx++;
+                    }
+                }
+
+                result.put("choices", choiceList);
+                lastChoices = indexToUuid;
+                break;
+            }
+
+            case GAME_CHOOSE_CHOICE: {
+                GameClientMessage msg = (GameClientMessage) data;
+                Choice choice = msg.getChoice();
+                result.put("response_type", "index");
+
+                List<Map<String, Object>> choiceList = new ArrayList<>();
+                List<Object> indexToKey = new ArrayList<>();
+
+                if (choice != null) {
+                    if (choice.isKeyChoice()) {
+                        Map<String, String> keyChoices = choice.getKeyChoices();
+                        if (keyChoices != null) {
+                            int idx = 0;
+                            for (Map.Entry<String, String> entry : keyChoices.entrySet()) {
+                                Map<String, Object> choiceEntry = new HashMap<>();
+                                choiceEntry.put("index", idx);
+                                choiceEntry.put("description", entry.getValue());
+                                choiceList.add(choiceEntry);
+                                indexToKey.add(entry.getKey());
+                                idx++;
+                            }
+                        }
+                    } else {
+                        Set<String> choices = choice.getChoices();
+                        if (choices != null) {
+                            int idx = 0;
+                            for (String c : choices) {
+                                Map<String, Object> choiceEntry = new HashMap<>();
+                                choiceEntry.put("index", idx);
+                                choiceEntry.put("description", c);
+                                choiceList.add(choiceEntry);
+                                indexToKey.add(c);
+                                idx++;
+                            }
+                        }
+                    }
+                }
+
+                result.put("choices", choiceList);
+                lastChoices = indexToKey;
+                break;
+            }
+
+            case GAME_CHOOSE_PILE: {
+                GameClientMessage msg = (GameClientMessage) data;
+                result.put("response_type", "pile");
+
+                List<String> pile1 = new ArrayList<>();
+                List<String> pile2 = new ArrayList<>();
+                if (msg.getCardsView1() != null) {
+                    for (CardView card : msg.getCardsView1().values()) {
+                        pile1.add(card.getDisplayName());
+                    }
+                }
+                if (msg.getCardsView2() != null) {
+                    for (CardView card : msg.getCardsView2().values()) {
+                        pile2.add(card.getDisplayName());
+                    }
+                }
+                result.put("pile1", pile1);
+                result.put("pile2", pile2);
+                lastChoices = null;
+                break;
+            }
+
+            case GAME_PLAY_MANA:
+            case GAME_PLAY_XMANA:
+                result.put("response_type", "boolean");
+                result.put("hint", "true = auto-pay mana, false = cancel/pass");
+                lastChoices = null;
+                break;
+
+            case GAME_GET_AMOUNT: {
+                GameClientMessage msg = (GameClientMessage) data;
+                result.put("response_type", "amount");
+                result.put("min", msg.getMin());
+                result.put("max", msg.getMax());
+                lastChoices = null;
+                break;
+            }
+
+            case GAME_GET_MULTI_AMOUNT: {
+                GameClientMessage msg = (GameClientMessage) data;
+                result.put("response_type", "multi_amount");
+                result.put("total_min", msg.getMin());
+                result.put("total_max", msg.getMax());
+
+                List<Map<String, Object>> items = new ArrayList<>();
+                if (msg.getMessages() != null) {
+                    for (MultiAmountMessage mam : msg.getMessages()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("description", mam.message);
+                        item.put("min", mam.min);
+                        item.put("max", mam.max);
+                        item.put("default", mam.defaultValue);
+                        items.add(item);
+                    }
+                }
+                result.put("items", items);
+                lastChoices = null;
+                break;
+            }
+
+            default:
+                result.put("response_type", "unknown");
+                result.put("error", "Unhandled action type: " + method);
+                lastChoices = null;
+        }
+
+        return result;
+    }
+
+    /**
+     * Respond to the current pending action with a specific choice.
+     * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
+     */
+    public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile) {
+        Map<String, Object> result = new HashMap<>();
+        PendingAction action = pendingAction;
+
+        if (action == null) {
+            result.put("success", false);
+            result.put("error", "No pending action");
+            return result;
+        }
+
+        // Clear pending action first
+        pendingAction = null;
+
+        UUID gameId = action.getGameId();
+        ClientCallbackMethod method = action.getMethod();
+        Object data = action.getData();
+
+        result.put("success", true);
+        result.put("action_type", method.name());
+
+        try {
+            switch (method) {
+                case GAME_ASK:
+                case GAME_SELECT:
+                case GAME_PLAY_MANA:
+                case GAME_PLAY_XMANA:
+                    if (answer == null) {
+                        result.put("success", false);
+                        result.put("error", "Boolean 'answer' required for " + method);
+                        // Re-store the action so it can be retried
+                        pendingAction = action;
+                        return result;
+                    }
+                    session.sendPlayerBoolean(gameId, answer);
+                    result.put("action_taken", answer ? "yes" : "no");
+                    break;
+
+                case GAME_TARGET:
+                    // Support cancelling with answer=false
+                    if (answer != null && !answer) {
+                        session.sendPlayerBoolean(gameId, false);
+                        result.put("action_taken", "cancelled");
+                        break;
+                    }
+                    if (index == null) {
+                        result.put("success", false);
+                        result.put("error", "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
+                        pendingAction = action;
+                        return result;
+                    }
+                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                        result.put("success", false);
+                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
+                        pendingAction = action;
+                        return result;
+                    }
+                    session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
+                    result.put("action_taken", "selected_target_" + index);
+                    break;
+
+                case GAME_CHOOSE_ABILITY:
+                    if (index == null) {
+                        result.put("success", false);
+                        result.put("error", "Integer 'index' required for GAME_CHOOSE_ABILITY");
+                        pendingAction = action;
+                        return result;
+                    }
+                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                        result.put("success", false);
+                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
+                        pendingAction = action;
+                        return result;
+                    }
+                    session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
+                    result.put("action_taken", "selected_ability_" + index);
+                    break;
+
+                case GAME_CHOOSE_CHOICE:
+                    if (index == null) {
+                        result.put("success", false);
+                        result.put("error", "Integer 'index' required for GAME_CHOOSE_CHOICE");
+                        pendingAction = action;
+                        return result;
+                    }
+                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                        result.put("success", false);
+                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
+                        pendingAction = action;
+                        return result;
+                    }
+                    session.sendPlayerString(gameId, (String) lastChoices.get(index));
+                    result.put("action_taken", "selected_choice_" + index);
+                    break;
+
+                case GAME_CHOOSE_PILE:
+                    if (pile == null) {
+                        result.put("success", false);
+                        result.put("error", "Integer 'pile' (1 or 2) required for GAME_CHOOSE_PILE");
+                        pendingAction = action;
+                        return result;
+                    }
+                    session.sendPlayerBoolean(gameId, pile == 1);
+                    result.put("action_taken", "selected_pile_" + pile);
+                    break;
+
+                case GAME_GET_AMOUNT: {
+                    if (amount == null) {
+                        result.put("success", false);
+                        result.put("error", "Integer 'amount' required for GAME_GET_AMOUNT");
+                        pendingAction = action;
+                        return result;
+                    }
+                    GameClientMessage msg = (GameClientMessage) data;
+                    int clamped = Math.max(msg.getMin(), Math.min(msg.getMax(), amount));
+                    session.sendPlayerInteger(gameId, clamped);
+                    result.put("action_taken", "amount_" + clamped);
+                    break;
+                }
+
+                case GAME_GET_MULTI_AMOUNT: {
+                    if (amounts == null) {
+                        result.put("success", false);
+                        result.put("error", "Array 'amounts' required for GAME_GET_MULTI_AMOUNT");
+                        pendingAction = action;
+                        return result;
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < amounts.length; i++) {
+                        if (i > 0) sb.append(",");
+                        sb.append(amounts[i]);
+                    }
+                    session.sendPlayerString(gameId, sb.toString());
+                    result.put("action_taken", "multi_amount");
+                    break;
+                }
+
+                default:
+                    result.put("success", false);
+                    result.put("error", "Unknown action type: " + method);
+            }
+        } finally {
+            lastChoices = null;
+        }
+
+        return result;
+    }
+
+    private String describeTarget(UUID targetId, CardsView cardsView) {
+        // Try cardsView first (cards presented in the targeting UI)
+        if (cardsView != null) {
+            CardView cv = cardsView.get(targetId);
+            if (cv != null) {
+                return buildCardDescription(cv);
+            }
+        }
+        // Fall back to game state lookup
+        CardView cv = findCardViewById(targetId);
+        if (cv != null) {
+            return buildCardDescription(cv);
+        }
+        return "Unknown (" + targetId.toString().substring(0, 8) + ")";
+    }
+
+    private String buildCardDescription(CardView cv) {
+        StringBuilder sb = new StringBuilder(cv.getDisplayName());
+        if (cv instanceof PermanentView) {
+            PermanentView pv = (PermanentView) cv;
+            if (pv.isCreature() && cv.getPower() != null && cv.getToughness() != null) {
+                sb.append(" (").append(cv.getPower()).append("/").append(cv.getToughness()).append(")");
+            }
+            if (pv.isTapped()) {
+                sb.append(" [tapped]");
+            }
+        }
+        return sb.toString();
     }
 
     public String getGameLog(int maxChars) {
@@ -744,7 +1127,7 @@ public class SkeletonCallbackHandler {
             callback.decompressData();
             UUID objectId = callback.getObjectId();
             ClientCallbackMethod method = callback.getMethod();
-            logger.info("[" + client.getUsername() + "] Callback received: " + method);
+            logger.debug("[" + client.getUsername() + "] Callback received: " + method);
 
             switch (method) {
                 case START_GAME:
@@ -878,7 +1261,7 @@ public class SkeletonCallbackHandler {
             pendingAction = new PendingAction(gameId, method, data, message);
             actionLock.notifyAll();
         }
-        logger.info("[" + client.getUsername() + "] Stored pending action: " + method + " - " + message);
+        logger.debug("[" + client.getUsername() + "] Stored pending action: " + method + " - " + message);
     }
 
     private String extractMessage(Object data) {
@@ -1126,7 +1509,11 @@ public class SkeletonCallbackHandler {
         activeGames.remove(gameId);
         logger.info("[" + client.getUsername() + "] Game over: " + message.getMessage());
 
-        if (activeGames.isEmpty()) {
+        if (mcpMode) {
+            // In MCP mode, the external controller manages the lifecycle.
+            // Don't auto-disconnect — a new game in the match may start shortly.
+            logger.info("[" + client.getUsername() + "] Game ended (MCP mode, waiting for controller)");
+        } else if (activeGames.isEmpty()) {
             logger.info("[" + client.getUsername() + "] No more active games, stopping client");
             client.stop();
         }
