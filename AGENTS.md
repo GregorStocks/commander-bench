@@ -25,16 +25,16 @@ Use Makefile targets instead of running uv commands directly:
 
 ```bash
 # Start streaming observer with recording (compiles first)
-make ai-harness
+make run-dumb
 
 # Skip compilation (faster iteration)
-make ai-harness-quick
+make run-dumb ARGS="--skip-compile"
 
 # Record to specific file
-make ai-harness OUTPUT=/path/to/video.mov
+make run-dumb OUTPUT=/path/to/video.mov
 
 # Pass additional args
-make ai-harness ARGS="--config myconfig.json"
+make run-dumb ARGS="--config myconfig.json"
 ```
 
 Recordings are saved to `.context/ai-harness-logs/recording_<timestamp>.mov` by default.
