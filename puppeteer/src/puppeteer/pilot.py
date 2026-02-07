@@ -64,38 +64,30 @@ PILOT_TOOLS = {
 }
 
 DEFAULT_SYSTEM_PROMPT = """\
-You are a skilled Magic: The Gathering player controlling a player in a Commander game.
+You are a Magic: The Gathering player in a Commander game. You have a fun, \
+trash-talking personality. Use send_chat_message to comment on the game - react to big \
+plays, taunt opponents, celebrate your own plays, and have fun! Send a chat message \
+every few turns.
 
-Your game loop:
+GAME LOOP:
 1. Call wait_for_action to wait for the game to need your input
 2. Call get_action_choices to see what you can do
 3. Call choose_action with your decision
 4. Go back to step 1
 
-For important decisions (casting spells, choosing targets, combat), consider calling \
-get_game_state first to assess the board.
+HOW ACTIONS WORK:
+- get_action_choices tells you the phase (is_my_main_phase, step, active_player) and \
+  available plays.
+- response_type=select: Every card listed is playable RIGHT NOW - the game only shows \
+  cards you can afford to cast with your current mana. Play a card with \
+  choose_action(index=N), or pass priority with answer=false.
+- response_type=boolean: No cards are playable. Pass priority with answer=false.
+- GAME_ASK (boolean): Answer true/false. For MULLIGAN: your_hand shows your hand.
+- GAME_CHOOSE_ABILITY (index): Pick an ability by index.
+- GAME_TARGET (index): Pick a target by index.
+- Mana payment is handled automatically - you just pick cards to play.
 
-Decision guidelines:
-- GAME_SELECT (response_type=boolean): true = take action, false = pass. \
-  Say true when you have spells to cast, lands to play, or abilities to activate. \
-  Say false to pass priority when you have nothing useful to do.
-- GAME_ASK (response_type=boolean): Read the question carefully and answer yes/no.
-- GAME_CHOOSE_ABILITY (response_type=index): Pick the best ability. Play lands when \
-  possible, cast creatures and removal spells, activate useful abilities.
-- GAME_TARGET (response_type=index): Pick the best target. Prioritize removing \
-  threatening creatures and problematic permanents.
-- GAME_PLAY_MANA (response_type=boolean): Almost always answer false (auto-pay).
-
-Strategy:
-- Play a land every turn when possible
-- Cast creatures and spells when you have mana
-- Attack when you have favorable combat
-- Remove threatening permanents
-- Keep mana open for responses when appropriate
-- In Commander, spread damage and don't make yourself the biggest threat early
-
-IMPORTANT: Always call get_action_choices before choose_action. \
-The index values in choose_action correspond to the choices array from get_action_choices.\
+IMPORTANT: Always call get_action_choices before choose_action.\
 """
 
 
@@ -130,12 +122,8 @@ def should_auto_pass(action_info: dict) -> tuple[bool, dict | None]:
     Returns (should_auto, choose_args) where choose_args is the
     arguments to pass to choose_action if should_auto is True.
     """
-    action_type = action_info.get("action_type", "")
-
-    # Always auto-handle mana payment
-    if action_type in ("GAME_PLAY_MANA", "GAME_PLAY_XMANA"):
-        return True, {"answer": False}
-
+    # GAME_PLAY_MANA is handled automatically by the Java client (auto-taps lands)
+    # so it should never reach the pilot. No other actions are auto-passed.
     return False, None
 
 
@@ -254,7 +242,7 @@ async def run_pilot_loop(
             if len(messages) > 40:
                 messages = (
                     [messages[0]]
-                    + [{"role": "user", "content": "Continue playing. Make strategic decisions. Always call get_action_choices before choose_action."}]
+                    + [{"role": "user", "content": "Continue playing. Call get_action_choices before choose_action. All cards listed are playable right now with your current mana. Play cards with index=N, pass with answer=false. Send a chat message every few turns."}]
                     + messages[-25:]
                 )
 

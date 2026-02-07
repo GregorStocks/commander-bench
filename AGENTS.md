@@ -1,3 +1,12 @@
+## Git
+
+Local `master` is often behind. Always use `origin/master` as the source of truth for rebasing and diffing:
+
+```bash
+git fetch origin
+git rebase origin/master
+```
+
 ## Code Isolation Philosophy
 
 Don't touch Java outside of `Mage.Client.Streaming` and `Mage.Client.Headless`. This means avoiding changes to `Mage.Client`, `Mage.Server*`, `Mage.Common`, `Mage`, `Mage.Sets`, etc. This keeps us in sync with upstream XMage.
