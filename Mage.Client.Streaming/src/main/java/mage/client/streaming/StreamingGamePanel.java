@@ -1042,11 +1042,7 @@ public class StreamingGamePanel extends GamePanel {
      * Format a USD cost value for display.
      */
     private static String formatCost(double costUsd) {
-        if (costUsd < 0.01) {
-            return String.format("$%.4f", costUsd);
-        } else {
-            return String.format("$%.2f", costUsd);
-        }
+        return String.format("$%.4f", costUsd);
     }
 
     /**
