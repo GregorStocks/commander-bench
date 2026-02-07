@@ -5,7 +5,7 @@ import time
 
 
 def is_port_in_use(host: str, port: int, timeout: float = 1.0) -> bool:
-    """Check if a port is in use (something is listening)."""
+    """Check if a port is in use by attempting to connect (something is listening)."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(timeout)
     try:
@@ -15,11 +15,26 @@ def is_port_in_use(host: str, port: int, timeout: float = 1.0) -> bool:
         sock.close()
 
 
+def can_bind_port(port: int) -> bool:
+    """Check if we can actually bind to a port. More reliable than connect-based
+    checks since it detects TIME_WAIT and other states that prevent binding."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
+
+
 def find_available_port(host: str, start_port: int, max_attempts: int = 100) -> int:
-    """Find an available port starting from start_port."""
+    """Find an available port starting from start_port.
+    Uses bind() to check availability, which catches TIME_WAIT and other
+    states that connect-based checks miss. Also checks secondary port (port+8)."""
     for offset in range(max_attempts):
         port = start_port + offset
-        if not is_port_in_use(host, port):
+        if can_bind_port(port) and can_bind_port(port + 8):
             return port
     raise RuntimeError(
         f"No available port found in range {start_port}-{start_port + max_attempts}"

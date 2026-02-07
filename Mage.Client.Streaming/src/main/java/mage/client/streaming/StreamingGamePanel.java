@@ -14,10 +14,12 @@ import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
 import mage.client.game.PlayerPanelExt;
+import mage.client.components.HoverButton;
 import mage.client.plugins.adapters.MageActionCallback;
 import mage.client.plugins.impl.Plugins;
 import mage.client.util.CardsViewUtil;
 import mage.client.util.GUISizeHelper;
+import mage.client.util.ImageHelper;
 import mage.constants.PlayerAction;
 import mage.constants.Zone;
 import mage.view.CardView;
@@ -28,6 +30,8 @@ import mage.view.GameView;
 import mage.view.PlayerView;
 import mage.view.SimpleCardsView;
 import org.apache.log4j.Logger;
+import org.mage.plugins.card.images.ImageCache;
+import org.mage.plugins.card.images.ImageCacheData;
 
 import mage.client.streaming.recording.FrameCaptureService;
 import mage.client.streaming.recording.FFmpegEncoder;
@@ -37,6 +41,7 @@ import com.google.gson.JsonParser;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -81,6 +86,9 @@ public class StreamingGamePanel extends GamePanel {
     // Commander panels injected into each player's play area
     private final Map<UUID, CommanderPanel> commanderPanels = new HashMap<>();
     private boolean commanderPanelsInjected = false;
+
+    // Commander avatar replacement (player UUID -> commander UUID that was used)
+    private final Map<UUID, UUID> playerCommanderAvatars = new HashMap<>();
 
     // LLM cost display support
     private final Map<UUID, JLabel> costLabels = new HashMap<>();
@@ -170,6 +178,8 @@ public class StreamingGamePanel extends GamePanel {
         // Inject and distribute commanders to each player's PlayAreaPanel
         injectCommanderPanels(game);
         distributeCommanders(game);
+        // Replace default avatars with commander card art
+        replaceAvatarsWithCommanderArt(game);
         // Clean up player panels (hide redundant elements)
         updatePlayerPanelVisibility(game);
     }
@@ -747,6 +757,122 @@ public class StreamingGamePanel extends GamePanel {
             logger.info("Player " + player.getName() + " commanders found: " + commanders.size());
             panel.loadCards(commanders, getBigCard(), getGameId());
         }
+    }
+
+    /**
+     * Replace default player avatars with commander card art.
+     * Uses the first CommanderView from each player's command object list
+     * to load the card image, crop the art portion, and update the avatar HoverButton.
+     */
+    private void replaceAvatarsWithCommanderArt(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            PlayAreaPanel playArea = players.get(playerId);
+            if (playArea == null) {
+                continue;
+            }
+
+            // Find the first CommanderView for this player
+            CommanderView commander = null;
+            for (CommandObjectView obj : player.getCommandObjectList()) {
+                if (obj instanceof CommanderView) {
+                    commander = (CommanderView) obj;
+                    break;
+                }
+            }
+
+            if (commander == null) {
+                continue;
+            }
+
+            // Skip if we already replaced avatar with this commander's art
+            UUID commanderId = commander.getId();
+            if (commanderId.equals(playerCommanderAvatars.get(playerId))) {
+                continue;
+            }
+
+            // Get the card image from cache
+            ImageCacheData cacheData = ImageCache.getCardImageOriginal(commander);
+            BufferedImage cardImage = cacheData != null ? cacheData.getImage() : null;
+
+            if (cardImage == null) {
+                // Image not yet loaded/downloaded - will retry on next update
+                continue;
+            }
+
+            // Crop the art region and resize for avatar
+            BufferedImage artCrop = cropCardArt(cardImage);
+            Rectangle avatarRect = new Rectangle(80, 80);
+            BufferedImage avatarImage = ImageHelper.getResizedImage(artCrop, avatarRect);
+
+            // Update the HoverButton avatar via reflection
+            try {
+                PlayerPanelExt playerPanel = playArea.getPlayerPanel();
+                Field avatarField = PlayerPanelExt.class.getDeclaredField("avatar");
+                avatarField.setAccessible(true);
+                HoverButton avatar = (HoverButton) avatarField.get(playerPanel);
+
+                if (avatar != null) {
+                    avatar.update(
+                            player.getName(),
+                            avatarImage,
+                            avatarImage,
+                            avatarImage,
+                            avatarImage,
+                            avatarRect
+                    );
+                    avatar.repaint();
+                }
+
+                playerCommanderAvatars.put(playerId, commanderId);
+                logger.info("Replaced avatar for " + player.getName() +
+                        " with commander art: " + commander.getName());
+
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                logger.warn("Failed to replace avatar for " + player.getName(), e);
+            }
+        }
+    }
+
+    /**
+     * Crop the art portion from a full MTG card image.
+     * Uses conservative percentages that work for both old (pre-8th) and modern frames.
+     * Returns a square crop from the center of the art region.
+     */
+    private static BufferedImage cropCardArt(BufferedImage cardImage) {
+        int cardW = cardImage.getWidth();
+        int cardH = cardImage.getHeight();
+
+        // Conservative art box that works for old and new frames
+        int artX = (int) (cardW * 0.08);
+        int artY = (int) (cardH * 0.12);
+        int artW = (int) (cardW * 0.84);
+        int artH = (int) (cardH * 0.37);
+
+        // Clamp to image bounds
+        artX = Math.max(0, Math.min(artX, cardW - 1));
+        artY = Math.max(0, Math.min(artY, cardH - 1));
+        artW = Math.min(artW, cardW - artX);
+        artH = Math.min(artH, cardH - artY);
+
+        // Extract a centered square from the art box
+        int squareSize = Math.min(artW, artH);
+        int squareX = artX + (artW - squareSize) / 2;
+        int squareY = artY + (artH - squareSize) / 2;
+
+        if (squareSize <= 0) {
+            squareSize = Math.min(cardW, cardH) / 2;
+            squareX = (cardW - squareSize) / 2;
+            squareY = (cardH - squareSize) / 2;
+        }
+
+        return cardImage.getSubimage(squareX, squareY, squareSize, squareSize);
     }
 
     /**
