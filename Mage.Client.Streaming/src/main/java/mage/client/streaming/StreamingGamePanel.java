@@ -32,11 +32,16 @@ import org.apache.log4j.Logger;
 import mage.client.streaming.recording.FrameCaptureService;
 import mage.client.streaming.recording.FFmpegEncoder;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import javax.swing.*;
 import java.awt.*;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -76,6 +81,14 @@ public class StreamingGamePanel extends GamePanel {
     // Commander panels injected into each player's play area
     private final Map<UUID, CommanderPanel> commanderPanels = new HashMap<>();
     private boolean commanderPanelsInjected = false;
+
+    // LLM cost display support
+    private final Map<UUID, JLabel> costLabels = new HashMap<>();
+    private final Map<String, Double> playerCosts = new HashMap<>();
+    private Timer costPollTimer;
+    private Path gameDirPath;
+    private final Set<String> chatterboxPlayerNames = new HashSet<>();
+    private boolean costPollingInitialized = false;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -137,6 +150,7 @@ public class StreamingGamePanel extends GamePanel {
         // Hide the central hand container (we show hands in play areas instead)
         hideHandContainer();
         requestHandPermissions(game);
+        initCostPolling();
     }
 
     @Override
@@ -167,6 +181,10 @@ public class StreamingGamePanel extends GamePanel {
     @Override
     public void endMessage(int messageId, GameView gameView, Map<String, Serializable> options, String message) {
         super.endMessage(messageId, gameView, options, message);
+
+        if (costPollTimer != null) {
+            costPollTimer.stop();
+        }
 
         logger.info("Game ended, will auto-close in 10 seconds");
 
@@ -750,6 +768,9 @@ public class StreamingGamePanel extends GamePanel {
 
             PlayerPanelExt playerPanel = playArea.getPlayerPanel();
             cleanupPlayerPanel(playerPanel, player);
+
+            // Show cost label for chatterbox players
+            updateCostLabel(player, playerPanel);
         }
     }
 
@@ -896,6 +917,135 @@ public class StreamingGamePanel extends GamePanel {
             } catch (NoSuchFieldException | IllegalAccessException e) {
                 // Field may not exist, ignore
             }
+        }
+    }
+
+    // ---- LLM cost display ----
+
+    /**
+     * Initialize cost file polling for chatterbox (LLM) players.
+     * Reads the game directory and player config from system properties/environment,
+     * then starts a Swing timer to poll cost files every 2 seconds.
+     */
+    private void initCostPolling() {
+        if (costPollingInitialized) {
+            return;
+        }
+        costPollingInitialized = true;
+
+        String gameDirStr = System.getProperty("xmage.streaming.gameDir");
+        if (gameDirStr == null || gameDirStr.isEmpty()) {
+            return;
+        }
+        gameDirPath = Paths.get(gameDirStr);
+
+        // Parse players config to find chatterbox player names
+        String configJson = System.getenv("XMAGE_AI_HARNESS_PLAYERS_CONFIG");
+        if (configJson != null && !configJson.isEmpty()) {
+            parseChatterboxPlayers(configJson);
+        }
+
+        if (chatterboxPlayerNames.isEmpty()) {
+            return;
+        }
+
+        logger.info("Cost polling enabled for chatterbox players: " + chatterboxPlayerNames);
+
+        // Poll cost files every 2 seconds
+        costPollTimer = new Timer(2000, e -> pollCostFiles());
+        costPollTimer.start();
+    }
+
+    /**
+     * Parse the players config JSON to extract chatterbox player names.
+     */
+    private void parseChatterboxPlayers(String configJson) {
+        try {
+            JsonObject root = JsonParser.parseString(configJson).getAsJsonObject();
+            if (root.has("players")) {
+                for (com.google.gson.JsonElement elem : root.getAsJsonArray("players")) {
+                    JsonObject player = elem.getAsJsonObject();
+                    String type = player.has("type") ? player.get("type").getAsString() : "";
+                    if ("chatterbox".equals(type) || "pilot".equals(type)) {
+                        chatterboxPlayerNames.add(player.get("name").getAsString());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to parse chatterbox players from config", e);
+        }
+    }
+
+    /**
+     * Poll cost JSON files written by chatterbox processes.
+     */
+    private void pollCostFiles() {
+        if (gameDirPath == null) {
+            return;
+        }
+        for (String username : chatterboxPlayerNames) {
+            Path costFile = gameDirPath.resolve(username + "_cost.json");
+            try {
+                if (Files.exists(costFile)) {
+                    String content = new String(Files.readAllBytes(costFile));
+                    JsonObject data = JsonParser.parseString(content).getAsJsonObject();
+                    double cost = data.get("cost_usd").getAsDouble();
+                    playerCosts.put(username, cost);
+                }
+            } catch (Exception e) {
+                // File may be mid-write, ignore and retry next poll
+            }
+        }
+    }
+
+    /**
+     * Update or create the cost label for a player if they are a chatterbox.
+     */
+    private void updateCostLabel(PlayerView player, PlayerPanelExt playerPanel) {
+        String playerName = player.getName();
+        if (!chatterboxPlayerNames.contains(playerName)) {
+            return;
+        }
+
+        Double cost = playerCosts.get(playerName);
+        if (cost == null) {
+            return;
+        }
+
+        UUID playerId = player.getPlayerId();
+        JLabel costLabel = costLabels.get(playerId);
+
+        if (costLabel == null) {
+            // Create and inject cost label into the west panel
+            costLabel = new JLabel();
+            costLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            costLabel.setForeground(new Color(0, 200, 0));
+            costLabel.setFont(costLabel.getFont().deriveFont(Font.BOLD, 11f));
+            costLabel.setPreferredSize(new Dimension(94, 16));
+            costLabel.setMaximumSize(new Dimension(94, 16));
+
+            Container westPanel = playerPanel.getParent();
+            if (westPanel instanceof JPanel) {
+                // Insert after playerPanel (index 1), before commander panel
+                westPanel.add(costLabel, 1);
+                westPanel.revalidate();
+                westPanel.repaint();
+                costLabels.put(playerId, costLabel);
+            }
+        }
+
+        costLabel.setText(formatCost(cost));
+        costLabel.setVisible(true);
+    }
+
+    /**
+     * Format a USD cost value for display.
+     */
+    private static String formatCost(double costUsd) {
+        if (costUsd < 0.01) {
+            return String.format("$%.4f", costUsd);
+        } else {
+            return String.format("$%.2f", costUsd);
         }
     }
 

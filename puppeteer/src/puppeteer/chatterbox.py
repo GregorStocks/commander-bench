@@ -16,6 +16,41 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 MAX_TOKENS = 256
 
+# Per-1M-token prices (input, output) for cost estimation.
+# Matched by longest model name prefix.
+MODEL_PRICES: dict[str, tuple[float, float]] = {
+    "google/gemini-2.0-flash": (0.10, 0.40),
+    "google/gemini-2.5-flash": (0.15, 0.60),
+    "google/gemini-2.5-pro": (1.25, 10.00),
+    "anthropic/claude-sonnet": (3.00, 15.00),
+    "anthropic/claude-haiku": (0.80, 4.00),
+    "anthropic/claude-opus": (15.00, 75.00),
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "openai/gpt-4o": (2.50, 10.00),
+}
+DEFAULT_PRICE = (1.00, 3.00)  # fallback per 1M tokens
+
+
+def _get_model_price(model: str) -> tuple[float, float]:
+    """Get (input, output) price per 1M tokens for a model, matched by longest prefix."""
+    best_match = ""
+    for prefix in MODEL_PRICES:
+        if model.startswith(prefix) and len(prefix) > len(best_match):
+            best_match = prefix
+    return MODEL_PRICES[best_match] if best_match else DEFAULT_PRICE
+
+
+def _write_cost_file(game_dir: Path, username: str, cost: float) -> None:
+    """Write cumulative cost to a JSON file for the streaming client to read."""
+    cost_file = game_dir / f"{username}_cost.json"
+    tmp_file = cost_file.with_suffix(".tmp")
+    try:
+        tmp_file.write_text(json.dumps({"cost_usd": cost}))
+        tmp_file.rename(cost_file)
+    except Exception as e:
+        print(f"[chatterbox] Failed to write cost file: {e}")
+
+
 DEFAULT_SYSTEM_PROMPT = """\
 You are a player in a Magic: The Gathering game. You don't control your own game \
 decisions - they are handled automatically. Your job is to be an entertaining \
@@ -64,6 +99,8 @@ async def run_llm_loop(
     model: str,
     system_prompt: str,
     tools: list[dict],
+    username: str = "",
+    game_dir: Path | None = None,
 ) -> None:
     """Run the LLM-driven agentic loop."""
     messages = [
@@ -71,6 +108,8 @@ async def run_llm_loop(
         {"role": "user", "content": "The game is starting. Begin your loop: call auto_pass_until_event to wait for interesting game events."},
     ]
     calls_since_chat = 0
+    input_price, output_price = _get_model_price(model)
+    cumulative_cost = 0.0
 
     while True:
         try:
@@ -82,6 +121,14 @@ async def run_llm_loop(
                 max_tokens=MAX_TOKENS,
             )
             choice = response.choices[0]
+
+            # Track token usage and cost
+            if response.usage:
+                input_cost = (response.usage.prompt_tokens or 0) * input_price / 1_000_000
+                output_cost = (response.usage.completion_tokens or 0) * output_price / 1_000_000
+                cumulative_cost += input_cost + output_cost
+                if game_dir:
+                    _write_cost_file(game_dir, username, cumulative_cost)
 
             # If the LLM produced tool calls, process them
             if choice.message.tool_calls:
@@ -189,6 +236,7 @@ async def run_chatterbox(
     model: str = DEFAULT_MODEL,
     base_url: str = DEFAULT_BASE_URL,
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    game_dir: Path | None = None,
 ) -> None:
     """Run the chatterbox client."""
     print(f"[chatterbox] Starting for {username}@{server}:{port}")
@@ -246,7 +294,8 @@ async def run_chatterbox(
             print(f"[chatterbox] Available tools: {[t.name for t in tools_result.tools]}")
 
             print("[chatterbox] Starting LLM loop...")
-            await run_llm_loop(session, llm_client, model, system_prompt, openai_tools)
+            await run_llm_loop(session, llm_client, model, system_prompt, openai_tools,
+                               username=username, game_dir=game_dir)
 
 
 def main() -> int:
@@ -261,6 +310,7 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help=f"API base URL (default: {DEFAULT_BASE_URL})")
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="Custom system prompt")
+    parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
     args = parser.parse_args()
 
     # Determine project root
@@ -289,6 +339,7 @@ def main() -> int:
             model=args.model,
             base_url=args.base_url,
             system_prompt=args.system_prompt,
+            game_dir=args.game_dir,
         ))
     except KeyboardInterrupt:
         pass

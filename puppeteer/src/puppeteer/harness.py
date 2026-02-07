@@ -266,6 +266,7 @@ def start_chatterbox_client(
     config: Config,
     player: ChatterboxPlayer,
     log_path: Path,
+    game_dir: Path | None = None,
 ) -> subprocess.Popen:
     """Start a chatterbox client (LLM-powered MCP client + skeleton in MCP mode).
 
@@ -300,6 +301,8 @@ def start_chatterbox_client(
         args.extend(["--base-url", player.base_url])
     if player.system_prompt:
         args.extend(["--system-prompt", player.system_prompt])
+    if game_dir:
+        args.extend(["--game-dir", str(game_dir)])
 
     return pm.start_process(
         args=args,
@@ -315,6 +318,7 @@ def start_pilot_client(
     config: Config,
     player: PilotPlayer,
     log_path: Path,
+    game_dir: Path | None = None,
 ) -> subprocess.Popen:
     """Start a pilot client (LLM-powered game player via MCP).
 
@@ -349,6 +353,8 @@ def start_pilot_client(
         args.extend(["--base-url", player.base_url])
     if player.system_prompt:
         args.extend(["--system-prompt", player.system_prompt])
+    if game_dir:
+        args.extend(["--game-dir", str(game_dir)])
 
     return pm.start_process(
         args=args,
@@ -363,6 +369,7 @@ def start_streaming_client(
     project_root: Path,
     config: Config,
     log_path: Path,
+    game_dir: Path | None = None,
 ) -> subprocess.Popen:
     """Start the streaming observer client.
 
@@ -383,10 +390,14 @@ def start_streaming_client(
         f"-Dxmage.aiHarness.password={config.password}",
     ]
 
+    # Add game directory for cost file polling
+    if game_dir:
+        jvm_args_list.append(f"-Dxmage.streaming.gameDir={game_dir}")
+
     # Add recording path if configured
     if config.record:
-        game_dir = (project_root / config.log_dir / f"game_{config.timestamp}").resolve()
-        record_path = config.record_output or (game_dir / "recording.mov")
+        resolved_game_dir = game_dir or (project_root / config.log_dir / f"game_{config.timestamp}").resolve()
+        record_path = config.record_output or (resolved_game_dir / "recording.mov")
         jvm_args_list.append(f"-Dxmage.streaming.record={record_path}")
 
     jvm_args = " ".join(jvm_args_list)
@@ -507,7 +518,10 @@ def main() -> int:
         )
 
         # Start observer client first
-        observer_proc = start_observer_client(pm, project_root, config, observer_log)
+        if config.streaming:
+            observer_proc = start_observer_client(pm, project_root, config, observer_log, game_dir=game_dir)
+        else:
+            observer_proc = start_observer_client(pm, project_root, config, observer_log)
 
         # Bring the GUI window to the foreground on macOS
         bring_to_foreground_macos()
@@ -525,13 +539,13 @@ def main() -> int:
             for player in config.chatterbox_players:
                 log_path = game_dir / f"{player.name}_llm.log"
                 print(f"Chatterbox ({player.name}) log: {log_path}")
-                start_chatterbox_client(pm, project_root, config, player, log_path)
+                start_chatterbox_client(pm, project_root, config, player, log_path, game_dir=game_dir)
 
             # Start pilot clients (LLM-based game player)
             for player in config.pilot_players:
                 log_path = game_dir / f"{player.name}_pilot.log"
                 print(f"Pilot ({player.name}) log: {log_path}")
-                start_pilot_client(pm, project_root, config, player, log_path)
+                start_pilot_client(pm, project_root, config, player, log_path, game_dir=game_dir)
 
             # Start potato clients (pure Java, auto-responds)
             for player in config.potato_players:
