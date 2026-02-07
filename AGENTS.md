@@ -38,3 +38,7 @@ make ai-harness ARGS="--config myconfig.json"
 ```
 
 Recordings are saved to `.context/ai-harness-logs/recording_<timestamp>.mov` by default.
+
+## Issues
+
+Issues are tracked as JSON files in `issues/`. See `doc/issues.md` for format and queries.
