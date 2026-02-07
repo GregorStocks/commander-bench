@@ -41,18 +41,13 @@ package:
 install: clean build package
 
 # Default: streaming with recording enabled
-# Pass ARGS for additional options: make ai-harness ARGS="--skip-compile"
-# Pass OUTPUT to specify recording path: make ai-harness OUTPUT=/path/to/video.mov
-.PHONY: ai-harness
-ai-harness:
+# Pass ARGS for additional options: make run-dumb ARGS="--skip-compile"
+# Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
+.PHONY: run-dumb
+run-dumb:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
 
-# Convenience: skip compilation (common case)
-.PHONY: ai-harness-quick
-ai-harness-quick:
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --skip-compile $(ARGS)
-
 # LLM player mode: pilot AI + CPU opponents (consumes API tokens)
-.PHONY: ai-harness-llm
-ai-harness-llm:
+.PHONY: run-llm
+run-llm:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
