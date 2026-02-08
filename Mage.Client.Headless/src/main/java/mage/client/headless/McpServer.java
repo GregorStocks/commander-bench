@@ -152,7 +152,9 @@ public class McpServer {
         // is_action_on_me
         Map<String, Object> isActionTool = new HashMap<>();
         isActionTool.put("name", "is_action_on_me");
-        isActionTool.put("description", "Check if game action is currently required from this player");
+        isActionTool.put("description",
+                "Check if game action is currently required from this player. " +
+                "Returns action_pending (boolean), and if true: action_type, game_id, and message.");
         Map<String, Object> isActionSchema = new HashMap<>();
         isActionSchema.put("type", "object");
         isActionSchema.put("properties", new HashMap<>());
@@ -174,7 +176,9 @@ public class McpServer {
         // get_game_log
         Map<String, Object> getLogTool = new HashMap<>();
         getLogTool.put("name", "get_game_log");
-        getLogTool.put("description", "Get the game log text");
+        getLogTool.put("description",
+                "Get the game log text. Returns log (string), total_length, returned_length, and truncated (boolean). " +
+                "If max_chars is set, returns the most recent max_chars characters.");
         Map<String, Object> getLogSchema = new HashMap<>();
         getLogSchema.put("type", "object");
         Map<String, Object> getLogProps = new HashMap<>();
@@ -231,7 +235,10 @@ public class McpServer {
                 "Auto-pass priority until you can actually do something. Skips empty priorities where " +
                 "you have no playable cards, and returns when: (1) you have cards you can play, or " +
                 "(2) a non-priority decision is needed (mulligan, target selection, etc.). " +
-                "Call this after making your play or passing to skip ahead efficiently.");
+                "Call this after making your play or passing to skip ahead efficiently. " +
+                "Returns action_pending, action_type, actions_passed (count of auto-passed priorities), " +
+                "and has_playable_cards (true if you have non-mana cards to play). " +
+                "On timeout: action_pending=false, timeout=true.");
         Map<String, Object> passPrioritySchema = new HashMap<>();
         passPrioritySchema.put("type", "object");
         Map<String, Object> passPriorityProps = new HashMap<>();
@@ -250,7 +257,8 @@ public class McpServer {
         autoPassTool.put("description",
                 "Auto-handle all game actions (pass/default) and block until the game state changes meaningfully " +
                 "(turn change, life total change, permanents entering/leaving, cards going to graveyard). " +
-                "Returns a summary of what changed. Use this in a loop to observe the game.");
+                "Returns event_occurred (boolean), new_log (description of changes), new_chars, " +
+                "and actions_taken (count). Use this in a loop to observe the game.");
         Map<String, Object> autoPassSchema = new HashMap<>();
         autoPassSchema.put("type", "object");
         Map<String, Object> autoPassProps = new HashMap<>();
@@ -260,7 +268,7 @@ public class McpServer {
         autoPassProps.put("min_new_chars", minCharsProp);
         Map<String, Object> autoPassTimeoutProp = new HashMap<>();
         autoPassTimeoutProp.put("type", "integer");
-        autoPassTimeoutProp.put("description", "Max milliseconds to wait (default 30000)");
+        autoPassTimeoutProp.put("description", "Max milliseconds to wait (default 10000)");
         autoPassProps.put("timeout_ms", autoPassTimeoutProp);
         autoPassSchema.put("properties", autoPassProps);
         autoPassSchema.put("additionalProperties", false);
@@ -271,7 +279,11 @@ public class McpServer {
         Map<String, Object> gameStateTool = new HashMap<>();
         gameStateTool.put("name", "get_game_state");
         gameStateTool.put("description",
-                "Get structured game state: turn, phase, players (life, hand, battlefield, graveyard), and stack.");
+                "Get structured game state: turn, phase/step, active_player, priority_player, and stack. " +
+                "Each player has: name, life, library_size, hand_size, is_active, is_you, battlefield, graveyard, " +
+                "and optionally counters and commanders. Your hand includes card details with playable flag. " +
+                "Battlefield permanents include tapped state, types, power/toughness, loyalty, counters, " +
+                "and summoning_sickness.");
         Map<String, Object> gameStateSchema = new HashMap<>();
         gameStateSchema.put("type", "object");
         gameStateSchema.put("properties", new HashMap<>());
@@ -284,7 +296,9 @@ public class McpServer {
         getOracleTextTool.put("name", "get_oracle_text");
         getOracleTextTool.put("description",
                 "Get oracle text (rules) for a card by name or in-game object ID. " +
-                "Provide exactly one of card_name or object_id (not both).");
+                "Provide exactly one of card_name or object_id (not both). " +
+                "Returns success, source ('database' or 'game'), name, and rules. " +
+                "Database lookups also return set_code and card_number.");
         Map<String, Object> getOracleTextSchema = new HashMap<>();
         getOracleTextSchema.put("type", "object");
         Map<String, Object> getOracleTextProps = new HashMap<>();
@@ -307,9 +321,13 @@ public class McpServer {
         getChoicesTool.put("description",
                 "Get detailed information about the current pending action including all available choices " +
                 "with human-readable descriptions. Call this before choose_action to see what options are available. " +
-                "Returns response_type: 'select' (playable cards to pick by index, or pass with answer=false), " +
-                "'boolean' (yes/no), 'index' (target/ability/choice), 'amount', 'pile', or 'multi_amount'. " +
-                "For mulligan decisions, includes your_hand with card details.");
+                "Always includes phase context: turn, phase, step, active_player, is_my_main_phase, players. " +
+                "Returns response_type: 'select' (GAME_SELECT: playable cards by index, pass with answer=false; " +
+                "GAME_PLAY_MANA: mana sources with choice_type 'tap_source'/'mana_source'/'pool_mana'), " +
+                "'boolean' (yes/no; mulligan includes your_hand with card details), " +
+                "'index' (target/ability/choice; target includes required and can_cancel), " +
+                "'amount' (includes min/max), 'pile' (includes pile1/pile2 card names), " +
+                "or 'multi_amount' (includes items array with per-item min/max/default).");
         Map<String, Object> getChoicesSchema = new HashMap<>();
         getChoicesSchema.put("type", "object");
         getChoicesSchema.put("properties", new HashMap<>());
@@ -322,11 +340,13 @@ public class McpServer {
         chooseActionTool.put("name", "choose_action");
         chooseActionTool.put("description",
                 "Respond to the current pending action with a specific choice. Call get_action_choices first " +
-                "to see available options. For GAME_SELECT with playable cards (response_type=select): " +
-                "use 'index' to play a card, or 'answer: false' to pass priority. " +
-                "For GAME_PLAY_MANA, 'index' can be a mana source or a mana type from pool. " +
-                "For other types: index (target/ability/choice), answer (boolean for yes/no), " +
-                "amount (integer), amounts (array of integers), pile (1 or 2).");
+                "to see available options. For GAME_SELECT (response_type=select): " +
+                "'index' to play a card, or 'answer: false' to pass priority. " +
+                "For GAME_PLAY_MANA: 'index' to tap a mana source or spend pool mana, 'answer: false' to cancel. " +
+                "For GAME_TARGET: 'index' to select target, 'answer: false' to cancel. " +
+                "For GAME_ASK: 'answer' true/false. For GAME_CHOOSE_ABILITY/CHOICE: 'index'. " +
+                "For GAME_GET_AMOUNT: 'amount'. For GAME_GET_MULTI_AMOUNT: 'amounts' array. " +
+                "For GAME_CHOOSE_PILE: 'pile' (1 or 2).");
         Map<String, Object> chooseActionSchema = new HashMap<>();
         chooseActionSchema.put("type", "object");
         Map<String, Object> chooseActionProps = new HashMap<>();
