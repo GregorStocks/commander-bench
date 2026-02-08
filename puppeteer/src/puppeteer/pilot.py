@@ -11,60 +11,19 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
 
+from puppeteer.llm_cost import (
+    DEFAULT_BASE_URL,
+    get_model_price,
+    load_prices,
+    required_api_key_env,
+    write_cost_file,
+)
+
 
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
-DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
-
-# Per-1M-token prices (input, output) for cost estimation.
-# Matched by longest model name prefix.
-MODEL_PRICES: dict[str, tuple[float, float]] = {
-    "google/gemini-2.0-flash": (0.10, 0.40),
-    "google/gemini-2.5-flash": (0.15, 0.60),
-    "google/gemini-2.5-pro": (1.25, 10.00),
-    "anthropic/claude-sonnet": (3.00, 15.00),
-    "anthropic/claude-haiku": (0.80, 4.00),
-    "anthropic/claude-opus": (15.00, 75.00),
-    "openai/gpt-4o-mini": (0.15, 0.60),
-    "openai/gpt-4o": (2.50, 10.00),
-}
-DEFAULT_PRICE = (1.00, 3.00)  # fallback per 1M tokens
-
-
-def _required_api_key_env(base_url: str) -> str:
-    """Infer the expected API key env var from the configured base URL."""
-    host = (base_url or DEFAULT_BASE_URL).lower()
-    if "openrouter.ai" in host:
-        return "OPENROUTER_API_KEY"
-    if "api.openai.com" in host:
-        return "OPENAI_API_KEY"
-    if "anthropic.com" in host:
-        return "ANTHROPIC_API_KEY"
-    if "googleapis.com" in host or "generativelanguage.googleapis.com" in host:
-        return "GEMINI_API_KEY"
-    return "OPENROUTER_API_KEY"
-
-
-def _get_model_price(model: str) -> tuple[float, float]:
-    """Get (input, output) price per 1M tokens for a model, matched by longest prefix."""
-    best_match = ""
-    for prefix in MODEL_PRICES:
-        if model.startswith(prefix) and len(prefix) > len(best_match):
-            best_match = prefix
-    return MODEL_PRICES[best_match] if best_match else DEFAULT_PRICE
-
-
-def _write_cost_file(game_dir: Path, username: str, cost: float) -> None:
-    """Write cumulative cost to a JSON file for the streaming client to read."""
-    cost_file = game_dir / f"{username}_cost.json"
-    tmp_file = cost_file.with_suffix(".tmp")
-    try:
-        tmp_file.write_text(json.dumps({"cost_usd": cost}))
-        tmp_file.rename(cost_file)
-    except Exception as e:
-        print(f"[pilot] Failed to write cost file: {e}")
 
 # Tools the pilot is allowed to use (excludes auto_pass_until_event to prevent
 # accidentally skipping all decisions, and excludes is_action_on_me since
@@ -156,13 +115,14 @@ async def run_pilot_loop(
     tools: list[dict],
     username: str = "",
     game_dir: Path | None = None,
+    prices: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Run the LLM-driven game-playing loop."""
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": "The game is starting. Call wait_for_action to begin."},
     ]
-    input_price, output_price = _get_model_price(model)
+    model_price = get_model_price(model, prices or {})
     cumulative_cost = 0.0
     empty_responses = 0  # consecutive LLM responses with no reasoning text
     consecutive_timeouts = 0
@@ -196,12 +156,12 @@ async def run_pilot_loop(
             choice = response.choices[0]
 
             # Track token usage and cost
-            if response.usage:
-                input_cost = (response.usage.prompt_tokens or 0) * input_price / 1_000_000
-                output_cost = (response.usage.completion_tokens or 0) * output_price / 1_000_000
+            if response.usage and model_price is not None:
+                input_cost = (response.usage.prompt_tokens or 0) * model_price[0] / 1_000_000
+                output_cost = (response.usage.completion_tokens or 0) * model_price[1] / 1_000_000
                 cumulative_cost += input_cost + output_cost
                 if game_dir:
-                    _write_cost_file(game_dir, username, cumulative_cost)
+                    write_cost_file(game_dir, username, cumulative_cost)
 
             # If the LLM produced tool calls, process them
             if choice.message.tool_calls:
@@ -355,6 +315,7 @@ async def run_pilot(
     base_url: str = DEFAULT_BASE_URL,
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
     game_dir: Path | None = None,
+    prices: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Run the pilot client."""
     print(f"[pilot] Starting for {username}@{server}:{port}")
@@ -412,7 +373,7 @@ async def run_pilot(
 
             print("[pilot] Starting game-playing loop...")
             await run_pilot_loop(session, llm_client, model, system_prompt, openai_tools,
-                                username=username, game_dir=game_dir)
+                                username=username, game_dir=game_dir, prices=prices)
 
 
 def main() -> int:
@@ -441,13 +402,14 @@ def main() -> int:
             project_root = project_root.parent
 
     # API key: CLI arg > provider-specific env var based on base URL.
-    required_key_env = _required_api_key_env(args.base_url)
+    required_key_env = required_api_key_env(args.base_url)
     api_key = args.api_key or os.environ.get(required_key_env, "")
     if not api_key.strip():
         print(f"[pilot] ERROR: Missing API key for {args.base_url}")
         print(f"[pilot] Set {required_key_env} or pass --api-key.")
         return 2
 
+    prices = load_prices()
     print(f"[pilot] Project root: {project_root}")
 
     try:
@@ -462,6 +424,7 @@ def main() -> int:
             base_url=args.base_url,
             system_prompt=args.system_prompt,
             game_dir=args.game_dir,
+            prices=prices,
         ))
     except KeyboardInterrupt:
         pass
