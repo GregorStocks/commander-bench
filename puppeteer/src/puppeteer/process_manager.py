@@ -11,10 +11,6 @@ from pathlib import Path
 import psutil
 
 
-# Default location for PID file (relative to cwd)
-PID_FILE_PATH = Path(".context/ai-harness-logs/harness.pids")
-
-
 def kill_tree(pid: int):
     """Kill a process and all its children."""
     try:
@@ -56,33 +52,6 @@ def kill_tree(pid: int):
         pass
 
 
-def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
-    """Kill any processes left over from a previous harness run."""
-    if not pid_file.exists():
-        return
-
-    try:
-        with open(pid_file) as f:
-            for line in f:
-                try:
-                    pid = int(line.strip())
-                    proc = psutil.Process(pid)
-                    # Verify this is actually one of our processes
-                    env = proc.environ()
-                    if env.get("XMAGE_AI_HARNESS") == "1":
-                        print(f"Killing orphaned process {pid}")
-                        kill_tree(pid)
-                except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
-                    pass
-    except OSError:
-        pass
-    finally:
-        try:
-            pid_file.unlink(missing_ok=True)
-        except OSError:
-            pass
-
-
 class ProcessManager:
     """Manages subprocess lifecycle with proper cleanup on signals.
 
@@ -90,18 +59,12 @@ class ProcessManager:
     - The parent receives SIGINT, SIGTERM, or SIGHUP
     - The parent exits normally
     - The parent exits due to an unhandled exception
-
-    Also cleans up orphaned processes from previous runs on startup.
     """
 
     def __init__(self):
         self._processes: list[subprocess.Popen] = []
         self._lock = threading.Lock()
         self._cleaned_up = False
-        self._pid_file = PID_FILE_PATH
-
-        # Clean up any orphaned processes from previous runs
-        self._cleanup_orphans()
 
         self._setup_signal_handlers()
         # Register atexit handler for cleanup on normal exit or unhandled exceptions
@@ -119,20 +82,6 @@ class ProcessManager:
         print(f"\nReceived signal {signum}, stopping all processes...")
         self.cleanup()
         sys.exit(0)
-
-    def _cleanup_orphans(self):
-        """Kill any processes left over from a previous harness run."""
-        cleanup_orphans(self._pid_file)
-
-    def _write_pid_file(self):
-        """Write current tracked PIDs to file for orphan cleanup."""
-        try:
-            self._pid_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._pid_file, "w") as f:
-                for proc in self._processes:
-                    f.write(f"{proc.pid}\n")
-        except OSError:
-            pass
 
     def start_process(
         self,
@@ -165,7 +114,6 @@ class ProcessManager:
 
         with self._lock:
             self._processes.append(proc)
-            self._write_pid_file()
 
         return proc
 
@@ -186,9 +134,3 @@ class ProcessManager:
                     self._kill_tree(proc.pid)
 
             self._processes.clear()
-
-            # Remove PID file since we've cleaned up
-            try:
-                self._pid_file.unlink(missing_ok=True)
-            except OSError:
-                pass
