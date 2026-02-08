@@ -124,7 +124,6 @@ class ProcessManager:
     - The parent exits normally
     - The parent exits due to an unhandled exception
 
-    Also cleans up orphaned processes from previous runs on startup.
     """
 
     def __init__(self):
@@ -132,9 +131,6 @@ class ProcessManager:
         self._lock = threading.Lock()
         self._cleaned_up = False
         self._pid_file = PID_FILE_PATH
-
-        # Clean up any orphaned processes from previous runs
-        self._cleanup_orphans()
 
         self._setup_signal_handlers()
         # Register atexit handler for cleanup on normal exit or unhandled exceptions
@@ -152,10 +148,6 @@ class ProcessManager:
         print(f"\nReceived signal {signum}, stopping all processes...")
         self.cleanup()
         sys.exit(0)
-
-    def _cleanup_orphans(self):
-        """Kill any processes left over from a previous harness run."""
-        cleanup_orphans(self._pid_file)
 
     def _write_pid_file(self):
         """Write current tracked PIDs to file for orphan cleanup."""
