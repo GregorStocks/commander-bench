@@ -1,6 +1,7 @@
 """Main harness orchestration."""
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,36 @@ from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
 from puppeteer.port import find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
+
+DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def _required_api_key_env(base_url: str) -> str:
+    """Infer the expected API key env var from the configured base URL."""
+    host = (base_url or DEFAULT_LLM_BASE_URL).lower()
+    if "openrouter.ai" in host:
+        return "OPENROUTER_API_KEY"
+    if "api.openai.com" in host:
+        return "OPENAI_API_KEY"
+    if "anthropic.com" in host:
+        return "ANTHROPIC_API_KEY"
+    if "googleapis.com" in host or "generativelanguage.googleapis.com" in host:
+        return "GEMINI_API_KEY"
+    return "OPENROUTER_API_KEY"
+
+
+def _missing_llm_api_keys(config: Config) -> list[str]:
+    """Return validation errors for LLM players missing required API keys."""
+    errors: list[str] = []
+    llm_players = [*config.chatterbox_players, *config.pilot_players]
+    for player in llm_players:
+        base_url = player.base_url or DEFAULT_LLM_BASE_URL
+        key_env = _required_api_key_env(base_url)
+        if not os.environ.get(key_env, "").strip():
+            errors.append(
+                f"{player.name} ({base_url}) requires {key_env}"
+            )
+    return errors
 
 
 def bring_to_foreground_macos() -> None:
@@ -428,6 +459,16 @@ def main() -> int:
     pm = ProcessManager()
 
     try:
+        # Load player config as early as possible so invalid LLM setup fails fast.
+        config.load_skeleton_config()
+        missing_llm_keys = _missing_llm_api_keys(config)
+        if missing_llm_keys:
+            print("ERROR: LLM players configured without required API keys:")
+            for missing in missing_llm_keys:
+                print(f"  - {missing}")
+            print("Set the required key(s) or use a non-LLM config (e.g. make run-dumb).")
+            return 2
+
         # Set timestamp
         config.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -490,8 +531,7 @@ def main() -> int:
 
         print("Server is ready!")
 
-        # Load skeleton player config (passed to GUI client via environment variable)
-        config.load_skeleton_config()
+        # Player config was already loaded above (passed to observer/GUI via environment variable)
         if config.config_file:
             print(f"Using config: {config.config_file}")
             # Copy config into game directory for reference

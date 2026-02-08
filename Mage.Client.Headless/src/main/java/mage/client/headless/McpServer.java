@@ -324,18 +324,19 @@ public class McpServer {
                 "Respond to the current pending action with a specific choice. Call get_action_choices first " +
                 "to see available options. For GAME_SELECT with playable cards (response_type=select): " +
                 "use 'index' to play a card, or 'answer: false' to pass priority. " +
-                "For other types: index (target/ability/choice), answer (boolean for yes/no/mana), " +
+                "For GAME_PLAY_MANA, 'index' can be a mana source or a mana type from pool. " +
+                "For other types: index (target/ability/choice), answer (boolean for yes/no), " +
                 "amount (integer), amounts (array of integers), pile (1 or 2).");
         Map<String, Object> chooseActionSchema = new HashMap<>();
         chooseActionSchema.put("type", "object");
         Map<String, Object> chooseActionProps = new HashMap<>();
         Map<String, Object> indexProp = new HashMap<>();
         indexProp.put("type", "integer");
-        indexProp.put("description", "Choice index from get_action_choices (for target, ability, choice actions)");
+        indexProp.put("description", "Choice index from get_action_choices (for target/ability/choice and mana source/pool choices)");
         chooseActionProps.put("index", indexProp);
         Map<String, Object> answerProp = new HashMap<>();
         answerProp.put("type", "boolean");
-        answerProp.put("description", "Yes/No response (for ask, select, mana actions). Also false to cancel target selection.");
+        answerProp.put("description", "Yes/No response (for ask/select). Also false to cancel target/mana selection.");
         chooseActionProps.put("answer", answerProp);
         Map<String, Object> amountProp = new HashMap<>();
         amountProp.put("type", "integer");

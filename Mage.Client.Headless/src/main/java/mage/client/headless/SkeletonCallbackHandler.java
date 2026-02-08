@@ -3,6 +3,7 @@ package mage.client.headless;
 import mage.cards.repository.CardInfo;
 import mage.cards.repository.CardRepository;
 import mage.choices.Choice;
+import mage.constants.ManaType;
 import mage.constants.PlayerAction;
 import mage.interfaces.callback.ClientCallback;
 import mage.interfaces.callback.ClientCallbackMethod;
@@ -16,6 +17,7 @@ import mage.view.ChatMessage;
 import mage.view.ExileView;
 import mage.view.GameClientMessage;
 import mage.view.GameView;
+import mage.view.ManaPoolView;
 import mage.view.PermanentView;
 import mage.view.PlayerView;
 import mage.view.TableClientMessage;
@@ -441,22 +443,37 @@ public class SkeletonCallbackHandler {
                 // Auto-tap couldn't find a source — show available mana sources to the LLM
                 GameClientMessage manaMsg = (GameClientMessage) data;
                 result.put("response_type", "select");
-                result.put("hint", "Choose a mana source to tap, or answer: false to cancel the spell.");
+                result.put("hint", "Choose a mana source to tap or a mana type from pool, or answer: false to cancel the spell.");
 
                 PlayableObjectsList manaPlayable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;
                 List<Map<String, Object>> manaChoiceList = new ArrayList<>();
-                List<Object> manaIndexToUuid = new ArrayList<>();
+                List<Object> manaIndexToChoice = new ArrayList<>();
+                UUID payingForId = extractPayingForId(manaMsg.getMessage());
 
                 if (manaPlayable != null) {
                     int idx = 0;
                     for (Map.Entry<UUID, PlayableObjectStats> entry : manaPlayable.getObjects().entrySet()) {
                         UUID manaObjectId = entry.getKey();
+                        if (manaObjectId.equals(payingForId)) {
+                            continue;
+                        }
                         PlayableObjectStats stats = entry.getValue();
                         List<String> abilityNames = stats.getPlayableAbilityNames();
+                        String manaAbilityText = null;
+                        for (String name : abilityNames) {
+                            if (name.contains("{T}: Add ")) {
+                                manaAbilityText = name;
+                                break;
+                            }
+                        }
+                        if (manaAbilityText == null) {
+                            continue;
+                        }
 
                         CardView cardView = findCardViewById(manaObjectId);
                         Map<String, Object> choiceEntry = new HashMap<>();
                         choiceEntry.put("index", idx);
+                        choiceEntry.put("choice_type", "tap_source");
 
                         StringBuilder desc = new StringBuilder();
                         if (cardView != null) {
@@ -464,22 +481,31 @@ public class SkeletonCallbackHandler {
                         } else {
                             desc.append("Unknown (" + manaObjectId.toString().substring(0, 8) + ")");
                         }
-                        // Show what mana it produces
-                        for (String name : abilityNames) {
-                            if (name.contains("{T}: Add ")) {
-                                desc.append(" — ").append(name);
-                                break;
-                            }
-                        }
+                        desc.append(" — ").append(manaAbilityText);
                         choiceEntry.put("description", desc.toString());
                         manaChoiceList.add(choiceEntry);
-                        manaIndexToUuid.add(manaObjectId);
+                        manaIndexToChoice.add(manaObjectId);
+                        idx++;
+                    }
+                }
+
+                List<ManaType> poolChoices = getPoolManaChoices(lastGameView, manaMsg.getMessage());
+                if (!poolChoices.isEmpty()) {
+                    int idx = manaChoiceList.size();
+                    ManaPoolView manaPool = getMyManaPoolView(lastGameView);
+                    for (ManaType manaType : poolChoices) {
+                        Map<String, Object> choiceEntry = new HashMap<>();
+                        choiceEntry.put("index", idx);
+                        choiceEntry.put("choice_type", "pool_mana");
+                        choiceEntry.put("description", "Mana Pool — " + prettyManaType(manaType) + " (" + getManaPoolCount(manaPool, manaType) + ")");
+                        manaChoiceList.add(choiceEntry);
+                        manaIndexToChoice.add(manaType);
                         idx++;
                     }
                 }
 
                 result.put("choices", manaChoiceList);
-                lastChoices = manaIndexToUuid;
+                lastChoices = manaIndexToChoice;
                 break;
             }
 
@@ -702,7 +728,7 @@ public class SkeletonCallbackHandler {
 
                 case GAME_PLAY_MANA:
                 case GAME_PLAY_XMANA:
-                    // index = tap a mana source, answer=false = cancel the spell
+                    // index = tap a mana source OR spend a mana type from pool, answer=false = cancel
                     if (index != null) {
                         if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
                             result.put("success", false);
@@ -710,14 +736,33 @@ public class SkeletonCallbackHandler {
                             pendingAction = action;
                             return result;
                         }
-                        session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
-                        result.put("action_taken", "tapped_mana_" + index);
+                        Object manaChoice = lastChoices.get(index);
+                        if (manaChoice instanceof UUID) {
+                            session.sendPlayerUUID(gameId, (UUID) manaChoice);
+                            result.put("action_taken", "tapped_mana_" + index);
+                        } else if (manaChoice instanceof ManaType) {
+                            UUID manaPlayerId = getManaPoolPlayerId(gameId, lastGameView);
+                            if (manaPlayerId == null) {
+                                result.put("success", false);
+                                result.put("error", "Could not resolve player ID for mana pool selection");
+                                pendingAction = action;
+                                return result;
+                            }
+                            ManaType manaType = (ManaType) manaChoice;
+                            session.sendPlayerManaType(gameId, manaPlayerId, manaType);
+                            result.put("action_taken", "used_pool_" + manaType.toString());
+                        } else {
+                            result.put("success", false);
+                            result.put("error", "Unsupported mana choice type at index " + index);
+                            pendingAction = action;
+                            return result;
+                        }
                     } else if (answer != null && !answer) {
                         session.sendPlayerBoolean(gameId, false);
                         result.put("action_taken", "cancelled_spell");
                     } else {
                         result.put("success", false);
-                        result.put("error", "Provide 'index' to tap a mana source or 'answer: false' to cancel");
+                        result.put("error", "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel");
                         pendingAction = action;
                         return result;
                     }
@@ -1838,35 +1883,181 @@ public class SkeletonCallbackHandler {
         session.sendPlayerBoolean(gameId, true);
     }
 
+    private UUID extractPayingForId(String message) {
+        // Extract object_id='...' from callback HTML so we can avoid tapping the paid object itself.
+        if (message == null) {
+            return null;
+        }
+        int idx = message.indexOf("object_id='");
+        if (idx < 0) {
+            return null;
+        }
+        int start = idx + "object_id='".length();
+        int end = message.indexOf("'", start);
+        if (end <= start) {
+            return null;
+        }
+        try {
+            return UUID.fromString(message.substring(start, end));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private ManaPoolView getMyManaPoolView(GameView gameView) {
+        if (gameView == null) {
+            return null;
+        }
+        PlayerView myPlayer = gameView.getMyPlayer();
+        if (myPlayer == null) {
+            return null;
+        }
+        return myPlayer.getManaPool();
+    }
+
+    private int getManaPoolCount(ManaPoolView manaPool, ManaType manaType) {
+        if (manaPool == null) {
+            return 0;
+        }
+        switch (manaType) {
+            case WHITE:
+                return manaPool.getWhite();
+            case BLUE:
+                return manaPool.getBlue();
+            case BLACK:
+                return manaPool.getBlack();
+            case RED:
+                return manaPool.getRed();
+            case GREEN:
+                return manaPool.getGreen();
+            case COLORLESS:
+                return manaPool.getColorless();
+            default:
+                return 0;
+        }
+    }
+
+    private String prettyManaType(ManaType manaType) {
+        switch (manaType) {
+            case WHITE:
+                return "White";
+            case BLUE:
+                return "Blue";
+            case BLACK:
+                return "Black";
+            case RED:
+                return "Red";
+            case GREEN:
+                return "Green";
+            case COLORLESS:
+                return "Colorless";
+            default:
+                return manaType.toString();
+        }
+    }
+
+    private void addPreferredPoolManaChoice(List<ManaType> orderedChoices, ManaPoolView manaPool, ManaType manaType) {
+        if (getManaPoolCount(manaPool, manaType) > 0 && !orderedChoices.contains(manaType)) {
+            orderedChoices.add(manaType);
+        }
+    }
+
+    private boolean hasExplicitManaSymbol(String promptText) {
+        if (promptText == null) {
+            return false;
+        }
+        String msg = promptText.toUpperCase();
+        return msg.contains("{W}")
+                || msg.contains("{U}")
+                || msg.contains("{B}")
+                || msg.contains("{R}")
+                || msg.contains("{G}")
+                || msg.contains("{C}");
+    }
+
+    private boolean addExplicitPoolChoices(List<ManaType> orderedChoices, ManaPoolView manaPool, String promptText) {
+        if (promptText == null) {
+            return false;
+        }
+        String msg = promptText.toUpperCase();
+        boolean hasExplicitSymbols = false;
+        if (msg.contains("{W}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.WHITE);
+        }
+        if (msg.contains("{U}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.BLUE);
+        }
+        if (msg.contains("{B}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.BLACK);
+        }
+        if (msg.contains("{R}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.RED);
+        }
+        if (msg.contains("{G}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.GREEN);
+        }
+        if (msg.contains("{C}")) {
+            hasExplicitSymbols = true;
+            addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.COLORLESS);
+        }
+        return hasExplicitSymbols;
+    }
+
+    private List<ManaType> getPoolManaChoices(GameView gameView, String promptText) {
+        ManaPoolView manaPool = getMyManaPoolView(gameView);
+        if (manaPool == null) {
+            return new ArrayList<>();
+        }
+
+        List<ManaType> orderedChoices = new ArrayList<>();
+        boolean hasExplicitSymbols = addExplicitPoolChoices(orderedChoices, manaPool, promptText);
+        if (hasExplicitSymbols) {
+            // If explicit symbols are present (e.g. "{G}"), only offer matching pool mana types.
+            return orderedChoices;
+        }
+
+        // Generic/no-symbol payment: allow any available pool mana in stable order.
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.WHITE);
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.BLUE);
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.BLACK);
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.RED);
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.GREEN);
+        addPreferredPoolManaChoice(orderedChoices, manaPool, ManaType.COLORLESS);
+
+        return orderedChoices;
+    }
+
+    private UUID getManaPoolPlayerId(UUID gameId, GameView gameView) {
+        if (gameView != null) {
+            PlayerView myPlayer = gameView.getMyPlayer();
+            if (myPlayer != null && myPlayer.getPlayerId() != null) {
+                return myPlayer.getPlayerId();
+            }
+        }
+        return activeGames.get(gameId);
+    }
+
     /**
      * Try to auto-tap a mana source. Returns true if a source was tapped,
      * false if no suitable source was found (caller should fall through to LLM).
      */
     private boolean handleGamePlayManaAuto(UUID gameId, ClientCallback callback) {
-        GameClientMessage message = (GameClientMessage) callback.getData();
+        return handleGamePlayManaAuto(gameId, (GameClientMessage) callback.getData());
+    }
+
+    private boolean handleGamePlayManaAuto(UUID gameId, GameClientMessage message) {
         GameView gameView = message.getGameView();
         if (gameView != null) {
             lastGameView = gameView;
         }
 
-        // Extract the object being paid for from the message HTML (object_id='...')
-        // so we don't tap it for mana when it needs to tap/sacrifice for its own ability.
-        UUID payingForId = null;
         String msg = message.getMessage();
-        if (msg != null) {
-            int idx = msg.indexOf("object_id='");
-            if (idx >= 0) {
-                int start = idx + "object_id='".length();
-                int end = msg.indexOf("'", start);
-                if (end > start) {
-                    try {
-                        payingForId = UUID.fromString(msg.substring(start, end));
-                    } catch (IllegalArgumentException e) {
-                        // ignore malformed UUID
-                    }
-                }
-            }
-        }
+        UUID payingForId = extractPayingForId(msg);
 
         // Find a mana source from canPlayObjects and tap it
         PlayableObjectsList playable = gameView != null ? gameView.getCanPlayObjects() : null;
@@ -1895,10 +2086,36 @@ public class SkeletonCallbackHandler {
             }
         }
 
-        // No suitable mana source found — auto-cancel the spell.
-        // The server's canPlayObjects often over-counts mana (e.g. Llanowar Wastes has 3 tap
-        // abilities but can only tap once), so the spell may be reported as playable when it
-        // isn't. Track it so we don't retry in an infinite loop.
+        // Try to spend mana already in pool.
+        List<ManaType> poolChoices = getPoolManaChoices(gameView, msg);
+        if (!poolChoices.isEmpty()) {
+            UUID manaPlayerId = getManaPoolPlayerId(gameId, gameView);
+            boolean canAutoSelectPoolType = poolChoices.size() == 1 || hasExplicitManaSymbol(msg);
+            if (manaPlayerId != null) {
+                if (!canAutoSelectPoolType && mcpMode) {
+                    logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> pool has multiple options, waiting for manual choice");
+                    return false;
+                }
+                ManaType manaType = poolChoices.get(0);
+                if (canAutoSelectPoolType) {
+                    logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> using pool " + manaType.toString());
+                } else {
+                    logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> using first available pool type " + manaType.toString());
+                }
+                session.sendPlayerManaType(gameId, manaPlayerId, manaType);
+                return true;
+            }
+            logger.warn("[" + client.getUsername() + "] Mana: couldn't resolve player ID for mana pool payment");
+        }
+
+        // No suitable source/pool choice found:
+        // - MCP mode: return false so caller stores pending action for manual choice.
+        // - potato mode: cancel spell and mark cast as failed to avoid loops.
+        if (mcpMode) {
+            logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> no auto source available, waiting for manual choice");
+            return false;
+        }
+
         logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> no mana source available, cancelling spell");
         if (payingForId != null) {
             failedManaCasts.add(payingForId);
