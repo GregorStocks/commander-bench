@@ -187,6 +187,7 @@ public class StreamingGamePanel extends GamePanel {
     @Override
     public synchronized void updateGame(int messageId, GameView game) {
         super.updateGame(messageId, game);
+        restoreDeadPlayerPanelSizes();
         this.lastGame = game;
         // Schedule auto-dismissal of any popup dialogs created by the parent
         schedulePopupDismissal();
@@ -258,6 +259,34 @@ public class StreamingGamePanel extends GamePanel {
     @Override
     protected void updateExileWindows(GameView game) {
         // No-op: exile is displayed inline per-player in streaming mode
+    }
+
+    /**
+     * Undo the parent class behavior that shrinks eliminated players' panels to 95px.
+     * In streaming mode we want dead players' board state to remain fully visible.
+     */
+    private void restoreDeadPlayerPanelSizes() {
+        Set<Container> parentsToRevalidate = new HashSet<>();
+        for (PlayAreaPanel playArea : getPlayers().values()) {
+            Container parent = playArea.getParent();
+            if (parent == null || !(parent.getLayout() instanceof GridBagLayout)) {
+                continue;
+            }
+            GridBagLayout layout = (GridBagLayout) parent.getLayout();
+            GridBagConstraints gbc = layout.getConstraints(playArea);
+            // Parent sets dead players to 0.01 and living players to 0.99;
+            // reset all to equal weighting so dead players keep their full area.
+            if (Math.abs(gbc.weightx - 0.5) > 0.01) {
+                gbc.weightx = 0.5;
+                layout.setConstraints(playArea, gbc);
+                parentsToRevalidate.add(parent);
+            }
+            playArea.setPreferredSize(null);
+        }
+        for (Container parent : parentsToRevalidate) {
+            parent.validate();
+            parent.repaint();
+        }
     }
 
     /**
