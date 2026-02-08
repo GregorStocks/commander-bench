@@ -94,19 +94,20 @@ def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
 
     # Strategy 2: find orphans by command-line markers using pgrep.
     # We avoid psutil.environ() entirely because it can hang indefinitely
-    # on macOS (even for java/python processes).  All harness Java processes
-    # have "-Dxmage.*" system properties in their command line, and harness
-    # Python scripts run as "puppeteer.sleepwalker" / "puppeteer.pilot" / etc.
-    my_pid = os.getpid()
+    # on macOS (even for java/python processes).  Matches:
+    #   - Java processes with -Dxmage.* system properties
+    #   - All puppeteer Python processes (main harness + child scripts)
+    #   - uv wrappers that launched puppeteer
+    skip_pids = killed_pids | {os.getpid(), os.getppid()}
     try:
         result = subprocess.run(
-            ["pgrep", "-f", r"xmage[.]|puppeteer[.](sleepwalker|pilot|chatterbox)"],
+            ["pgrep", "-f", r"xmage[.]|python.*-m puppeteer"],
             capture_output=True, text=True, timeout=5,
         )
         for line in result.stdout.strip().splitlines():
             try:
                 pid = int(line.strip())
-                if pid != my_pid and pid not in killed_pids:
+                if pid not in skip_pids:
                     print(f"Killing orphaned process {pid}")
                     kill_tree(pid)
             except ValueError:
