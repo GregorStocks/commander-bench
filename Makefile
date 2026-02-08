@@ -16,8 +16,8 @@ lint:
 
 .PHONY: log-clean
 log-clean:
-	rm -rf .context/ai-harness-logs/*
-	@echo "Cleaned ai-harness logs"
+	rm -rf ~/mage-logs/*
+	@echo "Cleaned mage-logs"
 
 .PHONY: build
 build:

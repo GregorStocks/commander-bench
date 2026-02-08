@@ -1,6 +1,7 @@
 """Main harness orchestration."""
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -478,12 +479,34 @@ def main() -> int:
             config.streaming = True
 
         # Create log directory structure:
-        #   .context/ai-harness-logs/          (top-level, persists across runs)
-        #   .context/ai-harness-logs/game_TS/  (per-game directory)
+        #   ~/mage-logs/                       (top-level, persists across workspaces)
+        #   ~/mage-logs/game_TS/               (per-game directory)
         log_dir = (project_root / config.log_dir).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
         game_dir = log_dir / f"game_{config.timestamp}"
         game_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write provenance manifest
+        def _git(cmd: str) -> str:
+            try:
+                return subprocess.check_output(
+                    f"git {cmd}", shell=True, cwd=project_root,
+                    stderr=subprocess.DEVNULL, text=True,
+                ).strip()
+            except Exception:
+                return ""
+
+        manifest = {
+            "timestamp": config.timestamp,
+            "branch": _git("rev-parse --abbrev-ref HEAD"),
+            "commit": _git("rev-parse HEAD"),
+            "commit_log": _git("log --oneline -10").splitlines(),
+            "command": sys.argv,
+            "config_file": str(config.config_file) if config.config_file else None,
+        }
+        (game_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n"
+        )
 
         # Compile if needed
         if not config.skip_compile:

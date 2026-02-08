@@ -71,7 +71,7 @@ class Config:
     password: str = ""
     server_wait: int = 90
     skeleton_delay: int = 5
-    log_dir: Path = field(default_factory=lambda: Path(".context/ai-harness-logs"))
+    log_dir: Path = field(default_factory=lambda: Path.home() / "mage-logs")
     jvm_opens: str = "--add-opens=java.base/java.io=ALL-UNNAMED"
 
     @property
