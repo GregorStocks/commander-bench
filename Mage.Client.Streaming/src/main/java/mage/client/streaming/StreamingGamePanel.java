@@ -11,6 +11,7 @@ import mage.client.dialog.MageDialog;
 import mage.client.dialog.PreferencesDialog;
 import mage.client.game.ExilePanel;
 import mage.client.game.GamePanel;
+import mage.client.game.GraveyardPanel;
 import mage.client.game.HandPanel;
 import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
@@ -27,7 +28,9 @@ import mage.view.CardView;
 import mage.view.CardsView;
 import mage.view.CommanderView;
 import mage.view.CommandObjectView;
+import mage.view.CounterView;
 import mage.view.GameView;
+import mage.view.PermanentView;
 import mage.view.PlayerView;
 import mage.view.SimpleCardsView;
 import org.apache.log4j.Logger;
@@ -37,6 +40,7 @@ import org.mage.plugins.card.images.ImageCacheData;
 import mage.client.streaming.recording.FrameCaptureService;
 import mage.client.streaming.recording.FFmpegEncoder;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -45,14 +49,19 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.Serializable;
 import java.lang.reflect.Field;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -101,6 +110,10 @@ public class StreamingGamePanel extends GamePanel {
     private Path gameDirPath;
     private final Set<String> chatterboxPlayerNames = new HashSet<>();
     private boolean costPollingInitialized = false;
+
+    // Overlay publishing support
+    private static final int OVERLAY_PUSH_INTERVAL_MS = 200;
+    private long lastOverlayPushMs = 0L;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -167,6 +180,7 @@ public class StreamingGamePanel extends GamePanel {
         initCostPolling();
         // Schedule auto-dismissal of any popup dialogs created during init
         schedulePopupDismissal();
+        pushOverlayState(game, true);
     }
 
     @Override
@@ -192,6 +206,7 @@ public class StreamingGamePanel extends GamePanel {
         replaceAvatarsWithCommanderArt(game);
         // Clean up player panels (hide redundant elements)
         updatePlayerPanelVisibility(game);
+        pushOverlayState(game, false);
     }
 
     /**
@@ -201,6 +216,7 @@ public class StreamingGamePanel extends GamePanel {
     @Override
     public void endMessage(int messageId, GameView gameView, Map<String, Serializable> options, String message) {
         super.endMessage(messageId, gameView, options, message);
+        pushOverlayState(gameView, true);
 
         if (costPollTimer != null) {
             costPollTimer.stop();
@@ -1250,6 +1266,366 @@ public class StreamingGamePanel extends GamePanel {
      */
     private static String formatCost(double costUsd) {
         return String.format("$%.4f", costUsd);
+    }
+
+    // ---- Overlay state publishing ----
+
+    private void pushOverlayState(GameView game, boolean force) {
+        LocalOverlayServer overlayServer = LocalOverlayServer.getInstance();
+        if (!overlayServer.isRunning() || game == null) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if (!force && now - lastOverlayPushMs < OVERLAY_PUSH_INTERVAL_MS) {
+            return;
+        }
+        lastOverlayPushMs = now;
+
+        try {
+            overlayServer.updateState(buildOverlayStateJson(game));
+        } catch (Exception e) {
+            logger.debug("Failed to publish overlay state", e);
+        }
+    }
+
+    private String buildOverlayStateJson(GameView game) {
+        OverlayLayoutSnapshot layout = buildOverlayLayoutSnapshot(game);
+
+        JsonObject root = new JsonObject();
+        root.addProperty("status", "live");
+        root.addProperty("updatedAt", Instant.now().toString());
+        root.addProperty("gameId", streamingGameId != null ? streamingGameId.toString() : "");
+        root.addProperty("turn", game.getTurn());
+        root.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
+        root.addProperty("step", game.getStep() != null ? game.getStep().name() : "");
+        root.addProperty("activePlayer", safe(game.getActivePlayerName()));
+        root.addProperty("priorityPlayer", safe(game.getPriorityPlayerName()));
+        root.add("players", buildOverlayPlayers(game, layout));
+        root.add("stack", cardsToJson(game.getStack(), "stack", null, layout));
+        root.add("layout", buildOverlayLayoutJson(layout));
+        return root.toString();
+    }
+
+    private JsonArray buildOverlayPlayers(GameView game, OverlayLayoutSnapshot layout) {
+        JsonArray playersArray = new JsonArray();
+        Map<String, Card> loadedCards = getLoadedCards();
+
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            JsonObject playerJson = new JsonObject();
+            playerJson.addProperty("id", playerId.toString());
+            playerJson.addProperty("name", safe(player.getName()));
+            playerJson.addProperty("life", player.getLife());
+            playerJson.addProperty("libraryCount", player.getLibraryCount());
+            playerJson.addProperty("handCount", player.getHandCount());
+            playerJson.addProperty("isActive", player.isActive());
+            playerJson.addProperty("hasLeft", player.hasLeft());
+            playerJson.add("counters", countersToJson(player));
+            playerJson.add("battlefield", battlefieldToJson(player, layout));
+            playerJson.add("commanders", commandersToJson(player, layout));
+            playerJson.add("graveyard", cardsToJson(player.getGraveyard(), "graveyard", playerId, layout));
+            playerJson.add("exile", cardsToJson(player.getExile(), "exile", playerId, layout));
+
+            CardsView handCards = getHandCardsForPlayer(player, game, loadedCards);
+            playerJson.add("hand", cardsToJson(handCards, "hand", playerId, layout));
+
+            playersArray.add(playerJson);
+        }
+
+        return playersArray;
+    }
+
+    private JsonArray countersToJson(PlayerView player) {
+        JsonArray counters = new JsonArray();
+        for (CounterView counter : player.getCounters()) {
+            JsonObject counterJson = new JsonObject();
+            counterJson.addProperty("name", safe(counter.getName()));
+            counterJson.addProperty("count", counter.getCount());
+            counters.add(counterJson);
+        }
+        return counters;
+    }
+
+    private JsonArray battlefieldToJson(PlayerView player, OverlayLayoutSnapshot layout) {
+        JsonArray cards = new JsonArray();
+        List<PermanentView> permanents = new ArrayList<>(player.getBattlefield().values());
+        permanents.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
+        for (PermanentView permanent : permanents) {
+            cards.add(cardToJson(permanent, "battlefield", player.getPlayerId(), layout));
+        }
+        return cards;
+    }
+
+    private JsonArray commandersToJson(PlayerView player, OverlayLayoutSnapshot layout) {
+        JsonArray commanders = new JsonArray();
+        for (CommandObjectView obj : player.getCommandObjectList()) {
+            if (obj instanceof CommanderView) {
+                commanders.add(cardToJson((CommanderView) obj, "commanders", player.getPlayerId(), layout));
+            }
+        }
+        return commanders;
+    }
+
+    private JsonArray cardsToJson(CardsView cardsView, String zone, UUID playerId, OverlayLayoutSnapshot layout) {
+        JsonArray cards = new JsonArray();
+        if (cardsView == null || cardsView.isEmpty()) {
+            return cards;
+        }
+
+        List<CardView> sorted = new ArrayList<>(cardsView.values());
+        sorted.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
+        for (CardView card : sorted) {
+            cards.add(cardToJson(card, zone, playerId, layout));
+        }
+        return cards;
+    }
+
+    private JsonObject cardToJson(CardView card, String zone, UUID playerId, OverlayLayoutSnapshot layout) {
+        JsonObject cardJson = new JsonObject();
+        String displayName = safe(card.getDisplayName());
+        String cardName = displayName.isEmpty() ? safe(card.getName()) : displayName;
+
+        String cardId = card.getId() != null ? card.getId().toString() : "";
+        cardJson.addProperty("id", cardId);
+        cardJson.addProperty("name", cardName);
+        cardJson.addProperty("displayFullName", safe(card.getDisplayFullName()));
+        cardJson.addProperty("manaCost", safe(card.getManaCostStr()));
+        cardJson.addProperty("typeLine", formatTypeLine(card));
+        cardJson.addProperty("rules", formatRules(card.getRules()));
+        cardJson.addProperty("power", safe(card.getPower()));
+        cardJson.addProperty("toughness", safe(card.getToughness()));
+        cardJson.addProperty("loyalty", safe(card.getLoyalty()));
+        cardJson.addProperty("defense", safe(card.getDefense()));
+        cardJson.addProperty("expansionSetCode", safe(card.getExpansionSetCode()));
+        cardJson.addProperty("cardNumber", safe(card.getCardNumber()));
+        cardJson.addProperty("imageUrl", buildCardImageUrl(card));
+        cardJson.addProperty("tapped", card instanceof PermanentView && ((PermanentView) card).isTapped());
+        cardJson.addProperty("damage", card instanceof PermanentView ? ((PermanentView) card).getDamage() : 0);
+        if (!cardId.isEmpty()) {
+            Rectangle rect = layout.cardRectsByKey.get(layoutCardKey(playerId, zone, card.getId()));
+            if (rect != null) {
+                cardJson.add("layout", rectangleToJson(rect));
+            }
+        }
+
+        return cardJson;
+    }
+
+    private OverlayLayoutSnapshot buildOverlayLayoutSnapshot(GameView game) {
+        OverlayLayoutSnapshot snapshot = new OverlayLayoutSnapshot();
+        snapshot.sourceWidth = Math.max(1, getWidth());
+        snapshot.sourceHeight = Math.max(1, getHeight());
+
+        if (game == null || game.getPlayers() == null) {
+            return snapshot;
+        }
+
+        Map<UUID, PlayAreaPanel> playAreas = getPlayers();
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            PlayAreaPanel playArea = playAreas.get(playerId);
+            if (playArea == null) {
+                continue;
+            }
+
+            Rectangle playAreaRect = toOverlayRect(playArea);
+            if (playAreaRect != null) {
+                snapshot.playAreaRects.put(playerId, playAreaRect);
+            }
+
+            addCardRectsFromMap(
+                    snapshot,
+                    playerId,
+                    "battlefield",
+                    playArea.getBattlefieldPanel().getPermanentPanels()
+            );
+            addCardRectsFromHandPanel(snapshot, playerId, playArea.getHandPanel());
+            addCardRectsFromPanelField(snapshot, playerId, "graveyard", playArea.getGraveyardPanel());
+            addCardRectsFromPanelField(snapshot, playerId, "exile", playArea.getExilePanel());
+
+            CommanderPanel commanderPanel = commanderPanels.get(playerId);
+            if (commanderPanel != null) {
+                addCardRectsFromMap(snapshot, playerId, "commanders", commanderPanel.getCardPanels());
+            }
+        }
+
+        return snapshot;
+    }
+
+    private void addCardRectsFromHandPanel(OverlayLayoutSnapshot snapshot, UUID playerId, HandPanel handPanel) {
+        if (handPanel == null) {
+            return;
+        }
+        try {
+            Field handField = HandPanel.class.getDeclaredField("hand");
+            handField.setAccessible(true);
+            Cards handCards = (Cards) handField.get(handPanel);
+            addCardRectsFromMap(snapshot, playerId, "hand", handCards.getMageCardsForUpdate());
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Best effort only; if this fails, non-positional overlay still works.
+        }
+    }
+
+    private void addCardRectsFromPanelField(OverlayLayoutSnapshot snapshot, UUID playerId, String zone, JPanel panel) {
+        if (panel == null) {
+            return;
+        }
+        if (!(panel instanceof GraveyardPanel || panel instanceof ExilePanel)) {
+            return;
+        }
+        try {
+            Field cardsField = panel.getClass().getDeclaredField("cards");
+            cardsField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<UUID, MageCard> cardMap = (Map<UUID, MageCard>) cardsField.get(panel);
+            addCardRectsFromMap(snapshot, playerId, zone, cardMap);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Best effort only; if this fails, non-positional overlay still works.
+        }
+    }
+
+    private void addCardRectsFromMap(
+            OverlayLayoutSnapshot snapshot,
+            UUID playerId,
+            String zone,
+            Map<UUID, MageCard> cardsMap
+    ) {
+        if (cardsMap == null || cardsMap.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<UUID, MageCard> entry : cardsMap.entrySet()) {
+            UUID cardId = entry.getKey();
+            MageCard card = entry.getValue();
+            if (cardId == null || card == null) {
+                continue;
+            }
+            Rectangle rect = toOverlayRect(card);
+            if (rect == null) {
+                continue;
+            }
+            snapshot.cardRectsByKey.put(layoutCardKey(playerId, zone, cardId), rect);
+        }
+    }
+
+    private Rectangle toOverlayRect(Component component) {
+        if (component == null || component.getParent() == null || !component.isVisible()) {
+            return null;
+        }
+        try {
+            Rectangle rect = SwingUtilities.convertRectangle(component.getParent(), component.getBounds(), this);
+            if (rect.width <= 0 || rect.height <= 0) {
+                return null;
+            }
+            return rect;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private JsonObject buildOverlayLayoutJson(OverlayLayoutSnapshot layout) {
+        JsonObject layoutJson = new JsonObject();
+        layoutJson.addProperty("sourceWidth", layout.sourceWidth);
+        layoutJson.addProperty("sourceHeight", layout.sourceHeight);
+
+        JsonArray playAreas = new JsonArray();
+        for (Map.Entry<UUID, Rectangle> entry : layout.playAreaRects.entrySet()) {
+            JsonObject area = rectangleToJson(entry.getValue());
+            area.addProperty("playerId", entry.getKey().toString());
+            playAreas.add(area);
+        }
+        layoutJson.add("playAreas", playAreas);
+        return layoutJson;
+    }
+
+    private static JsonObject rectangleToJson(Rectangle rect) {
+        JsonObject json = new JsonObject();
+        json.addProperty("x", rect.x);
+        json.addProperty("y", rect.y);
+        json.addProperty("width", rect.width);
+        json.addProperty("height", rect.height);
+        return json;
+    }
+
+    private static String layoutCardKey(UUID playerId, String zone, UUID cardId) {
+        String player = playerId == null ? "global" : playerId.toString();
+        String z = zone == null ? "unknown" : zone;
+        return player + "|" + z + "|" + cardId;
+    }
+
+    private static final class OverlayLayoutSnapshot {
+        private int sourceWidth;
+        private int sourceHeight;
+        private final Map<String, Rectangle> cardRectsByKey = new LinkedHashMap<>();
+        private final Map<UUID, Rectangle> playAreaRects = new LinkedHashMap<>();
+    }
+
+    private static String formatRules(List<String> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return "";
+        }
+        return String.join("\n", rules);
+    }
+
+    private static String formatTypeLine(CardView card) {
+        StringBuilder sb = new StringBuilder();
+
+        if (card.getSuperTypes() != null && !card.getSuperTypes().isEmpty()) {
+            for (Object superType : card.getSuperTypes()) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(superType.toString());
+            }
+        }
+
+        if (card.getCardTypes() != null && !card.getCardTypes().isEmpty()) {
+            for (Object cardType : card.getCardTypes()) {
+                if (sb.length() > 0) {
+                    sb.append(' ');
+                }
+                sb.append(cardType.toString());
+            }
+        }
+
+        String subTypes = card.getSubTypes() == null ? "" : card.getSubTypes().toString();
+        if (!subTypes.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(" - ");
+            }
+            sb.append(subTypes);
+        }
+
+        return sb.toString();
+    }
+
+    private static String buildCardImageUrl(CardView card) {
+        String setCode = safe(card.getExpansionSetCode());
+        String cardNumber = safe(card.getCardNumber());
+        if (!setCode.isEmpty() && !cardNumber.isEmpty()) {
+            return "https://api.scryfall.com/cards/"
+                    + encodeUrlComponent(setCode.toLowerCase(Locale.ROOT))
+                    + "/"
+                    + encodeUrlComponent(cardNumber)
+                    + "?format=image&version=normal";
+        }
+
+        String cardName = safe(card.getName());
+        if (!cardName.isEmpty()) {
+            return "https://api.scryfall.com/cards/named?exact="
+                    + encodeUrlComponent(cardName)
+                    + "&format=image&version=normal";
+        }
+
+        return "";
+    }
+
+    private static String encodeUrlComponent(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     /**

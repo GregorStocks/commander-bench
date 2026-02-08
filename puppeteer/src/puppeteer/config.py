@@ -23,6 +23,13 @@ class PotatoPlayer:
 
 
 @dataclass
+class StallerPlayer:
+    """Staller personality: pure Java, intentionally slow auto-responder."""
+    name: str
+    deck: str | None = None  # Path to .dck file, relative to project root
+
+
+@dataclass
 class SleepwalkerPlayer:
     """Sleepwalker personality: MCP-based, Python client controls via stdio."""
     name: str
@@ -57,7 +64,15 @@ class CpuPlayer:
 
 
 # Union type for all player types
-Player = Union[PotatoPlayer, SleepwalkerPlayer, ChatterboxPlayer, PilotPlayer, CpuPlayer, SkeletonPlayer]
+Player = Union[
+    PotatoPlayer,
+    StallerPlayer,
+    SleepwalkerPlayer,
+    ChatterboxPlayer,
+    PilotPlayer,
+    CpuPlayer,
+    SkeletonPlayer,
+]
 
 
 @dataclass
@@ -88,6 +103,9 @@ class Config:
     streaming: bool = False
     record: bool = False
     record_output: Path | None = None
+    overlay: bool = True
+    overlay_port: int = 17888
+    overlay_host: str = "127.0.0.1"
 
     # Runtime state (set during execution)
     port: int = 0
@@ -95,6 +113,7 @@ class Config:
 
     # Player lists by type
     potato_players: list[PotatoPlayer] = field(default_factory=list)
+    staller_players: list[StallerPlayer] = field(default_factory=list)
     sleepwalker_players: list[SleepwalkerPlayer] = field(default_factory=list)
     chatterbox_players: list[ChatterboxPlayer] = field(default_factory=list)
     pilot_players: list[PilotPlayer] = field(default_factory=list)
@@ -148,6 +167,8 @@ class Config:
                     ))
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
+                elif player_type == "staller":
+                    self.staller_players.append(StallerPlayer(name=name, deck=deck))
                 elif player_type == "cpu":
                     self.cpu_players.append(CpuPlayer(name=name, deck=deck))
                 elif player_type == "skeleton":
@@ -181,6 +202,11 @@ class Config:
             if p.deck:
                 d["deck"] = p.deck
             players.append(d)
+        for p in self.staller_players:
+            d = {"type": "staller", "name": p.name}
+            if p.deck:
+                d["deck"] = p.deck
+            players.append(d)
         for p in self.cpu_players:
             d = {"type": "cpu", "name": p.name}
             if p.deck:
@@ -199,6 +225,7 @@ class Config:
         """Replace any deck="random" with a randomly chosen Commander .dck file."""
         all_players = (
             self.potato_players +
+            self.staller_players +
             self.sleepwalker_players +
             self.chatterbox_players +
             self.pilot_players +

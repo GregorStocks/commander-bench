@@ -43,6 +43,8 @@ install: clean build package
 # Default: streaming with recording enabled
 # Pass ARGS for additional options: make run-dumb ARGS="--skip-compile"
 # Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
+# Overlay controls: make run-dumb ARGS="--overlay-port 18080"
+# Disable overlay: make run-dumb ARGS="--no-overlay"
 .PHONY: run-dumb
 run-dumb:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
@@ -51,3 +53,15 @@ run-dumb:
 .PHONY: run-llm
 run-llm:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
+
+# Standalone test server (stays running until Ctrl-C)
+# Optional: make run-staller PORT=18080
+.PHONY: run-staller
+run-staller:
+	@PORT_VALUE=$${PORT:-17171}; \
+	CONFIG_PATH="$(PWD)/.context/ai-harness-logs/server_config_$${PORT_VALUE}.xml"; \
+	mkdir -p "$(PWD)/.context/ai-harness-logs"; \
+	PORT=$$PORT_VALUE CONFIG_PATH="$$CONFIG_PATH" uv run --project puppeteer python -c "import os; from pathlib import Path; from puppeteer.xml_config import modify_server_config; modify_server_config(Path('Mage.Server/config/config.xml'), Path(os.environ['CONFIG_PATH']), int(os.environ['PORT']))"; \
+	echo "Starting staller server on localhost:$$PORT_VALUE"; \
+	echo "Config: $$CONFIG_PATH"; \
+	cd Mage.Server && MAVEN_OPTS="-Dxmage.testMode=true -Dxmage.config.path=$$CONFIG_PATH" mvn -q exec:java

@@ -1,0 +1,67 @@
+{
+  "status": "mock",
+  "updatedAt": "2026-02-07T00:00:00Z",
+  "gameId": "mock-game",
+  "turn": 3,
+  "phase": "MAIN",
+  "step": "PRECOMBAT_MAIN",
+  "activePlayer": "player-1",
+  "priorityPlayer": "player-1",
+  "stack": [],
+  "layout": {
+    "sourceWidth": 1920,
+    "sourceHeight": 1080,
+    "playAreas": []
+  },
+  "players": [
+    {
+      "id": "player-1",
+      "name": "player-1",
+      "life": 40,
+      "libraryCount": 92,
+      "handCount": 7,
+      "isActive": true,
+      "hasLeft": false,
+      "counters": [],
+      "commanders": [
+        {
+          "id": "c-1",
+          "name": "Krenko, Mob Boss",
+          "displayFullName": "Krenko, Mob Boss",
+          "manaCost": "{2}{R}{R}",
+          "typeLine": "Legendary Creature - Goblin Warrior",
+          "rules": "{T}: Create X 1/1 red Goblin creature tokens, where X is the number of Goblins you control.",
+          "power": "3",
+          "toughness": "3",
+          "loyalty": "",
+          "defense": "",
+          "expansionSetCode": "M13",
+          "cardNumber": "142",
+          "imageUrl": "https://api.scryfall.com/cards/named?exact=Krenko%2C%20Mob%20Boss&format=image&version=normal",
+          "tapped": false,
+          "damage": 0,
+          "layout": { "x": 70, "y": 650, "width": 68, "height": 95 }
+        }
+      ],
+      "battlefield": [],
+      "hand": [],
+      "graveyard": [],
+      "exile": []
+    },
+    {
+      "id": "player-2",
+      "name": "player-2",
+      "life": 40,
+      "libraryCount": 92,
+      "handCount": 7,
+      "isActive": false,
+      "hasLeft": false,
+      "counters": [],
+      "commanders": [],
+      "battlefield": [],
+      "hand": [],
+      "graveyard": [],
+      "exile": []
+    }
+  ]
+}

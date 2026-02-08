@@ -35,14 +35,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Callback handler for the skeleton headless client.
- * Supports two modes:
+ * Supports multiple modes:
  * - potato mode (default): Always passes priority and chooses the first available option
+ * - staller mode: Same decisions as potato, but intentionally delayed and kept alive between games
  * - MCP mode (sleepwalker): Stores pending actions for external client to handle via MCP
  */
 public class SkeletonCallbackHandler {
 
     private static final Logger logger = Logger.getLogger(SkeletonCallbackHandler.class);
-    private static final int ACTION_DELAY_MS = 500;
+    private static final int DEFAULT_ACTION_DELAY_MS = 500;
 
     private final SkeletonMageClient client;
     private Session session;
@@ -51,6 +52,8 @@ public class SkeletonCallbackHandler {
 
     // MCP mode fields
     private volatile boolean mcpMode = false;
+    private volatile int actionDelayMs = DEFAULT_ACTION_DELAY_MS;
+    private volatile boolean keepAliveAfterGame = false;
     private volatile PendingAction pendingAction = null;
     private final Object actionLock = new Object(); // For wait_for_action blocking
     private final StringBuilder gameLog = new StringBuilder();
@@ -75,6 +78,16 @@ public class SkeletonCallbackHandler {
         return mcpMode;
     }
 
+    public void setActionDelayMs(int actionDelayMs) {
+        this.actionDelayMs = Math.max(0, actionDelayMs);
+        logger.info("[" + client.getUsername() + "] action delay set to " + this.actionDelayMs + " ms");
+    }
+
+    public void setKeepAliveAfterGame(boolean keepAliveAfterGame) {
+        this.keepAliveAfterGame = keepAliveAfterGame;
+        logger.info("[" + client.getUsername() + "] keepAliveAfterGame=" + keepAliveAfterGame);
+    }
+
     public void reset() {
         activeGames.clear();
         gameChatIds.clear();
@@ -89,7 +102,7 @@ public class SkeletonCallbackHandler {
 
     private void sleepBeforeAction() {
         try {
-            Thread.sleep(ACTION_DELAY_MS);
+            Thread.sleep(actionDelayMs);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -1513,6 +1526,8 @@ public class SkeletonCallbackHandler {
             // In MCP mode, the external controller manages the lifecycle.
             // Don't auto-disconnect — a new game in the match may start shortly.
             logger.info("[" + client.getUsername() + "] Game ended (MCP mode, waiting for controller)");
+        } else if (keepAliveAfterGame) {
+            logger.info("[" + client.getUsername() + "] Game ended (staller mode, staying connected)");
         } else if (activeGames.isEmpty()) {
             logger.info("[" + client.getUsername() + "] No more active games, stopping client");
             client.stop();

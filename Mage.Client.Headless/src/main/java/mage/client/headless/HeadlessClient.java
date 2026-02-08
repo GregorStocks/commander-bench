@@ -17,6 +17,7 @@ import org.apache.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -25,8 +26,9 @@ import java.util.UUID;
  * This client connects to an XMage server, joins the first available table
  * with an open human slot, and responds to all game callbacks automatically.
  *
- * Supports two personalities:
+ * Supports three personalities:
  * - potato (default): Auto-responds to all callbacks (passes priority, picks first option)
+ * - staller: Same responses as potato, but intentionally delayed and kept alive between games
  * - sleepwalker: Exposes MCP server on stdio for external client control
  *
  * Usage:
@@ -46,8 +48,11 @@ public class HeadlessClient {
     private static final int TABLE_POLL_INTERVAL_MS = 1000;
     private static final int TABLE_POLL_TIMEOUT_MS = 60000;
     private static final int PING_INTERVAL_MS = 20000; // 20 seconds, same as normal client
+    private static final int DEFAULT_ACTION_DELAY_MS = 500;
+    private static final int DEFAULT_STALLER_DELAY_MS = 15000;
 
     private static final String PERSONALITY_POTATO = "potato";
+    private static final String PERSONALITY_STALLER = "staller";
     private static final String PERSONALITY_SLEEPWALKER = "sleepwalker";
 
     public static void main(String[] args) {
@@ -55,9 +60,18 @@ public class HeadlessClient {
         int port = getIntArg(args, "--port", Integer.getInteger("xmage.headless.port", 17171));
         String username = getArg(args, "--username", System.getProperty("xmage.headless.username", "skeleton-" + System.currentTimeMillis()));
         String password = getArg(args, "--password", System.getProperty("xmage.headless.password", ""));
-        String personality = getArg(args, "--personality", System.getProperty("xmage.headless.personality", PERSONALITY_POTATO));
+        String personalityArg = getArg(args, "--personality", System.getProperty("xmage.headless.personality", PERSONALITY_POTATO));
+        String personality = personalityArg.toLowerCase(Locale.ROOT);
 
         boolean isSleepwalker = PERSONALITY_SLEEPWALKER.equalsIgnoreCase(personality);
+        boolean isStaller = PERSONALITY_STALLER.equalsIgnoreCase(personality);
+        boolean isPotato = PERSONALITY_POTATO.equalsIgnoreCase(personality);
+
+        if (!isSleepwalker && !isStaller && !isPotato) {
+            logger.warn("Unknown personality '" + personalityArg + "', falling back to '" + PERSONALITY_POTATO + "'");
+            personality = PERSONALITY_POTATO;
+            isPotato = true;
+        }
 
         // In sleepwalker mode, redirect all log4j output to stderr since stdout is used for MCP
         if (isSleepwalker) {
@@ -76,6 +90,12 @@ public class HeadlessClient {
         if (isSleepwalker) {
             callbackHandler.setMcpMode(true);
         }
+        int actionDelayMs = isStaller
+                ? Integer.getInteger("xmage.headless.stallerDelayMs", DEFAULT_STALLER_DELAY_MS)
+                : DEFAULT_ACTION_DELAY_MS;
+        actionDelayMs = Integer.getInteger("xmage.headless.actionDelayMs", actionDelayMs);
+        callbackHandler.setActionDelayMs(actionDelayMs);
+        callbackHandler.setKeepAliveAfterGame(isStaller);
 
         Connection connection = new Connection();
         connection.setHost(server);
@@ -161,7 +181,7 @@ public class HeadlessClient {
             }
             mcpServer.stop();
         } else {
-            // Potato mode: just keep alive while client is running
+            // Potato/staller mode: keep alive while client is running
             long lastPingTime = System.currentTimeMillis();
             while (client.isRunning()) {
                 try {

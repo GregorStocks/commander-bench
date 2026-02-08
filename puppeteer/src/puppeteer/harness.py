@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
-from puppeteer.port import find_available_port, wait_for_port
+from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
@@ -56,6 +56,23 @@ def parse_args() -> Config:
         metavar="PATH",
         help="Record game to video file (optionally specify output path)",
     )
+    parser.add_argument(
+        "--no-overlay",
+        action="store_true",
+        help="Disable local overlay server in streaming client",
+    )
+    parser.add_argument(
+        "--overlay-port",
+        type=int,
+        default=17888,
+        help="Local overlay server port (default: 17888)",
+    )
+    parser.add_argument(
+        "--overlay-host",
+        type=str,
+        default="127.0.0.1",
+        help="Local overlay bind host (default: 127.0.0.1)",
+    )
     args = parser.parse_args()
 
     # Determine record output path
@@ -69,6 +86,9 @@ def parse_args() -> Config:
         streaming=args.streaming,
         record=bool(args.record),
         record_output=record_output,
+        overlay=not args.no_overlay,
+        overlay_port=args.overlay_port,
+        overlay_host=args.overlay_host,
     )
     return config
 
@@ -93,6 +113,35 @@ def compile_project(project_root: Path, streaming: bool = False) -> bool:
         cwd=project_root,
     )
     return result.returncode == 0
+
+
+def refresh_streaming_resources(project_root: Path) -> bool:
+    """Refresh streaming client resources under target/classes.
+
+    This keeps overlay static files in sync even when --skip-compile is used.
+    """
+    result = subprocess.run(
+        [
+            "mvn",
+            "-q",
+            "-pl",
+            "Mage.Client.Streaming",
+            "resources:resources",
+        ],
+        cwd=project_root,
+    )
+    return result.returncode == 0
+
+
+def find_available_overlay_port(start_port: int, max_attempts: int = 100) -> int:
+    """Find a free local port for the overlay server."""
+    for offset in range(max_attempts):
+        port = start_port + offset
+        if can_bind_port(port):
+            return port
+    raise RuntimeError(
+        f"No available overlay port found in range {start_port}-{start_port + max_attempts - 1}"
+    )
 
 
 def start_server(
@@ -193,14 +242,15 @@ def start_potato_client(
     name: str,
     deck_path: str | None,
     log_path: Path,
+    personality: str = "potato",
 ) -> subprocess.Popen:
-    """Start a potato client (pure Java, auto-responds)."""
+    """Start an auto-responder headless client (potato/staller)."""
     jvm_args_list = [
         config.jvm_headless_opts,
         f"-Dxmage.headless.server={config.server}",
         f"-Dxmage.headless.port={config.port}",
         f"-Dxmage.headless.username={name}",
-        "-Dxmage.headless.personality=potato",
+        f"-Dxmage.headless.personality={personality}",
     ]
 
     jvm_args = " ".join(jvm_args_list)
@@ -400,6 +450,11 @@ def start_streaming_client(
         record_path = config.record_output or (resolved_game_dir / "recording.mov")
         jvm_args_list.append(f"-Dxmage.streaming.record={record_path}")
 
+    # Add local overlay settings
+    jvm_args_list.append(f"-Dxmage.streaming.overlay.enabled={'true' if config.overlay else 'false'}")
+    jvm_args_list.append(f"-Dxmage.streaming.overlay.port={config.overlay_port}")
+    jvm_args_list.append(f"-Dxmage.streaming.overlay.host={config.overlay_host}")
+
     jvm_args = " ".join(jvm_args_list)
 
     env = {
@@ -450,10 +505,25 @@ def main() -> int:
                 print("ERROR: Compilation failed")
                 return 1
 
+        if config.streaming:
+            print("Refreshing streaming resources...")
+            if not refresh_streaming_resources(project_root):
+                print("ERROR: Failed to refresh streaming resources")
+                return 1
+
         # Find available port
         print(f"Finding available port starting from {config.start_port}...")
         config.port = find_available_port(config.server, config.start_port)
         print(f"Using port {config.port}")
+
+        # Pick an available overlay port for this run to support parallel observers.
+        if config.streaming and config.overlay:
+            requested_overlay_port = config.overlay_port
+            config.overlay_port = find_available_overlay_port(requested_overlay_port)
+            if config.overlay_port != requested_overlay_port:
+                print(
+                    f"Overlay port {requested_overlay_port} unavailable, using {config.overlay_port}"
+                )
 
         # Generate server config into game directory
         server_config_path = game_dir / "server_config.xml"
@@ -478,6 +548,11 @@ def main() -> int:
         if config.record:
             record_path = config.record_output or (game_dir / "recording.mov")
             print(f"Recording to: {record_path}")
+        if config.streaming and config.overlay:
+            base = f"http://{config.overlay_host}:{config.overlay_port}"
+            print(f"Overlay URL: {base}/")
+            print(f"Overlay mock URL: {base}/?mock=1")
+            print(f"Video overlay URL: {base}/video_overlay.html")
 
         # Start server
         print("Starting XMage server...")
@@ -514,6 +589,7 @@ def main() -> int:
             len(config.chatterbox_players) +
             len(config.pilot_players) +
             len(config.potato_players) +
+            len(config.staller_players) +
             len(config.skeleton_players)  # Legacy
         )
 
@@ -552,6 +628,20 @@ def main() -> int:
                 log_path = game_dir / f"{player.name}_mcp.log"
                 print(f"Potato ({player.name}) log: {log_path}")
                 start_potato_client(pm, project_root, config, player.name, player.deck, log_path)
+
+            # Start staller clients (pure Java, intentionally slow auto-responders)
+            for player in config.staller_players:
+                log_path = game_dir / f"{player.name}_mcp.log"
+                print(f"Staller ({player.name}) log: {log_path}")
+                start_potato_client(
+                    pm,
+                    project_root,
+                    config,
+                    player.name,
+                    player.deck,
+                    log_path,
+                    personality="staller",
+                )
 
             # Start legacy skeleton clients (treated as potato)
             for player in config.skeleton_players:
