@@ -3,6 +3,7 @@ package mage.client.streaming;
 import mage.abilities.icon.CardIconRenderSettings;
 import mage.cards.Card;
 import mage.cards.MageCard;
+import mage.cards.MageCardLocation;
 import mage.client.MagePane;
 import mage.client.SessionHandler;
 import mage.client.cards.Cards;
@@ -1513,6 +1514,26 @@ public class StreamingGamePanel extends GamePanel {
             return null;
         }
         try {
+            // MageCard.getBounds() is deprecated and returns oversized Swing-allocated
+            // bounds. Use getCardLocationOnScreen() which returns the actual visual
+            // card rectangle (accounting for outer/draw space), then convert from
+            // screen coordinates to this panel's coordinate space.
+            if (component instanceof MageCard) {
+                MageCard card = (MageCard) component;
+                MageCardLocation cardLoc = card.getCardLocationOnScreen();
+                Point panelOrigin = this.getLocationOnScreen();
+                Rectangle rect = new Rectangle(
+                        cardLoc.getCardX() - panelOrigin.x,
+                        cardLoc.getCardY() - panelOrigin.y,
+                        cardLoc.getCardWidth(),
+                        cardLoc.getCardHeight()
+                );
+                if (rect.width <= 0 || rect.height <= 0) {
+                    return null;
+                }
+                return rect;
+            }
+
             Rectangle rect = SwingUtilities.convertRectangle(component.getParent(), component.getBounds(), this);
             if (rect.width <= 0 || rect.height <= 0) {
                 return null;
