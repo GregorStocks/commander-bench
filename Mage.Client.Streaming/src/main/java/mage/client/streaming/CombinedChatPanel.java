@@ -60,6 +60,9 @@ public class CombinedChatPanel extends ChatPanelBasic {
         if (message == null) {
             return false;
         }
+        if (message.startsWith("HOTKEYS:")) {
+            return true;
+        }
         for (Pattern pattern : FILTER_PATTERNS) {
             if (pattern.matcher(message).find()) {
                 return true;
