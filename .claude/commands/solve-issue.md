@@ -12,7 +12,7 @@ Pick and solve exactly **one** issue, then create a PR.
 3. Implement the fix
 4. Update tests to expect the correct behavior
 5. Run `make lint` to verify
-6. Delete the issue file (e.g., `rm issues/the-issue-name.json`)
+6. Delete the issue file (e.g., `rm issues/the-issue-name.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
 7. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
 8. Create a PR, then stop - leave remaining issues for the next Claude
 
