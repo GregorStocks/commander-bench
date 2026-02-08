@@ -2,9 +2,9 @@
   "matchTimeLimit": "MIN__20",
   "matchBufferTime": "SEC__10",
   "players": [
-    {"type": "pilot", "name": "Gemini2Flash", "deck": "random", "model": "google/gemini-2.0-flash-001"},
-    {"type": "pilot", "name": "GPT-4o-mini", "deck": "random", "model": "openai/gpt-4o-mini"},
-    {"type": "pilot", "name": "DeepSeekV3", "deck": "random", "model": "deepseek/deepseek-v3.2"},
+    {"type": "pilot", "name": "Gemini2.5FlashLite", "deck": "random", "model": "google/gemini-2.5-flash-lite"},
+    {"type": "pilot", "name": "GPT-4.1-mini", "deck": "random", "model": "openai/gpt-4.1-mini"},
+    {"type": "pilot", "name": "Gemini2.5Flash", "deck": "random", "model": "google/gemini-2.5-flash"},
     {"type": "pilot", "name": "Devstral", "deck": "random", "model": "mistralai/devstral-small"}
   ]
 }

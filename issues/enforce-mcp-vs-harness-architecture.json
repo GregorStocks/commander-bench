@@ -1,0 +1,10 @@
+{
+  "title": "Enforce MCP-layer-vs-harness architecture boundary",
+  "description": "AGENTS.md now documents that game logic and XMage workarounds belong in the Java MCP layer (Mage.Client.Headless), not the Python harness. Audit the codebase and move any violations.\n\nKnown violations:\n\n1. `pilot.py:should_auto_pass()` (line 99) — This is a game-logic decision (whether to auto-pass a given action type) living in Python. It currently always returns False, but the scaffolding and call sites (lines 131-139, 221-229) exist in the Python harness. Auto-passing logic should be handled entirely in the Java MCP layer (SkeletonCallbackHandler already has `passPriority()` and `executeDefaultAction()` for this).\n\n2. `pilot.py` degraded-LLM auto-pass fallback (lines 247-258) — When the LLM stops responding, pilot.py enters an infinite `auto_pass_until_event` loop. This is game-lifecycle logic that could be handled more robustly in the Java layer (e.g., the MCP server could detect LLM silence and auto-pass on its own).\n\n3. The system prompt in `pilot.py` (line 65) documents GAME_PLAY_MANA behavior — this is describing Java-side auto-tapper behavior to the LLM as a workaround hint, which ideally the LLM shouldn't need to know about at all if the MCP layer handles it cleanly.\n\nWhen resolving this issue, also search for any other cases where Python code makes game-logic decisions or works around XMage quirks, and move them to Java.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["streaming-client", "architecture"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}
