@@ -57,29 +57,50 @@ def kill_tree(pid: int):
 
 
 def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
-    """Kill any processes left over from a previous harness run."""
-    if not pid_file.exists():
-        return
+    """Kill any processes left over from a previous harness run.
 
-    try:
-        with open(pid_file) as f:
-            for line in f:
-                try:
-                    pid = int(line.strip())
-                    proc = psutil.Process(pid)
-                    # Verify this is actually one of our processes
-                    env = proc.environ()
-                    if env.get("XMAGE_AI_HARNESS") == "1":
-                        print(f"Killing orphaned process {pid}")
-                        kill_tree(pid)
-                except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
-                    pass
-    except OSError:
-        pass
-    finally:
+    Uses two strategies:
+    1. PID-file based: read tracked PIDs and kill verified ones (fast, targeted).
+    2. Process-scan fallback: scan all processes for XMAGE_AI_HARNESS=1 env var.
+       This catches orphans when the PID file was lost (SIGKILL, crash, etc.)
+       or when child Java processes outlived their tracked Python parents.
+    """
+    # Strategy 1: PID-file based cleanup
+    killed_pids: set[int] = set()
+    if pid_file.exists():
         try:
-            pid_file.unlink(missing_ok=True)
+            with open(pid_file) as f:
+                for line in f:
+                    try:
+                        pid = int(line.strip())
+                        proc = psutil.Process(pid)
+                        # Verify this is actually one of our processes
+                        env = proc.environ()
+                        if env.get("XMAGE_AI_HARNESS") == "1":
+                            print(f"Killing orphaned process {pid}")
+                            kill_tree(pid)
+                            killed_pids.add(pid)
+                    except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
+                        pass
         except OSError:
+            pass
+        finally:
+            try:
+                pid_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    # Strategy 2: scan all processes for any we missed
+    my_pid = os.getpid()
+    for proc in psutil.process_iter():
+        try:
+            if proc.pid == my_pid or proc.pid in killed_pids:
+                continue
+            env = proc.environ()
+            if env.get("XMAGE_AI_HARNESS") == "1":
+                print(f"Killing orphaned process {proc.pid} ({proc.name()})")
+                kill_tree(proc.pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
 
 
@@ -147,6 +168,10 @@ class ProcessManager:
         receive signals when the parent is killed.
         """
         merged_env = os.environ.copy()
+        # Mark all harness-managed processes so cleanup_orphans() can find them
+        # even without a PID file.  This also propagates to grandchild processes
+        # (e.g. Java skeletons spawned by sleepwalker/pilot Python scripts).
+        merged_env["XMAGE_AI_HARNESS"] = "1"
         if env:
             merged_env.update(env)
 
