@@ -36,9 +36,6 @@ Use Makefile targets instead of running uv commands directly:
 # Start streaming observer with recording (compiles first)
 make run-dumb
 
-# Skip compilation (faster iteration)
-make run-dumb ARGS="--skip-compile"
-
 # Record to specific file
 make run-dumb OUTPUT=/path/to/video.mov
 

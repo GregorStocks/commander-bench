@@ -41,7 +41,6 @@ package:
 install: clean build package
 
 # Default: streaming with recording enabled
-# Pass ARGS for additional options: make run-dumb ARGS="--skip-compile"
 # Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
 .PHONY: run-dumb
 run-dumb:

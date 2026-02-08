@@ -83,7 +83,6 @@ class Config:
         return " ".join(opts)
 
     # CLI options
-    skip_compile: bool = False
     config_file: Path | None = None
     streaming: bool = False
     record: bool = False
