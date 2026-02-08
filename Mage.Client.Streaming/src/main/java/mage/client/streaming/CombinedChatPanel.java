@@ -5,6 +5,7 @@ import mage.view.ChatMessage.MessageColor;
 import mage.view.ChatMessage.MessageType;
 
 import java.util.Date;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -14,6 +15,7 @@ import java.util.regex.Pattern;
 public class CombinedChatPanel extends ChatPanelBasic {
 
     private ChatPanelBasic playerChatPanel;
+    private RoundTracker roundTracker;
 
     public CombinedChatPanel() {
         super();
@@ -24,6 +26,43 @@ public class CombinedChatPanel extends ChatPanelBasic {
 
     public void setPlayerChatPanel(ChatPanelBasic panel) {
         this.playerChatPanel = panel;
+    }
+
+    public void setRoundTracker(RoundTracker tracker) {
+        this.roundTracker = tracker;
+    }
+
+    // Pattern to match "T<number>" at the start of turnInfo (e.g. "T5" or "T5.1")
+    private static final Pattern TURN_NUM_PATTERN = Pattern.compile("^T\\d+");
+    // Pattern to match "TURN <number>" at the start of a message (e.g. "TURN 13 for Mad AI 2 (40 - 40)")
+    private static final Pattern TURN_MSG_PATTERN = Pattern.compile("^TURN \\d+");
+
+    /**
+     * Replace the raw turn number in turnInfo (e.g. "T5.1") with the game round ("T2.1").
+     */
+    private String fixTurnInfo(String turnInfo) {
+        if (turnInfo == null || roundTracker == null) {
+            return turnInfo;
+        }
+        Matcher m = TURN_NUM_PATTERN.matcher(turnInfo);
+        if (m.find()) {
+            return "T" + roundTracker.getGameRound() + turnInfo.substring(m.end());
+        }
+        return turnInfo;
+    }
+
+    /**
+     * Replace the raw turn number in "TURN X for Player" messages with the game round.
+     */
+    private String fixTurnMessage(String message) {
+        if (message == null || roundTracker == null) {
+            return message;
+        }
+        Matcher m = TURN_MSG_PATTERN.matcher(message);
+        if (m.find()) {
+            return "TURN " + roundTracker.getGameRound() + message.substring(m.end());
+        }
+        return message;
     }
 
     @Override
@@ -43,7 +82,7 @@ public class CombinedChatPanel extends ChatPanelBasic {
         if (shouldFilterMessage(message)) {
             return;
         }
-        super.receiveMessage(username, message, time, turnInfo, messageType, color);
+        super.receiveMessage(username, fixTurnMessage(message), time, fixTurnInfo(turnInfo), messageType, color);
     }
 
     // Patterns for spammy messages to filter out

@@ -78,6 +78,7 @@ public class StreamingGamePanel extends GamePanel {
 
     private final Set<UUID> permissionsRequested = new HashSet<>();
     private UUID streamingGameId;
+    private final RoundTracker roundTracker = new RoundTracker();
     private GameView lastGame;
     private boolean handContainerHidden = false;
 
@@ -142,6 +143,7 @@ public class StreamingGamePanel extends GamePanel {
             // Game log panel (bottom) - filters spammy game messages and routes TALK to top
             combinedChatPanel = new CombinedChatPanel();
             combinedChatPanel.setPlayerChatPanel(playerChatPanel);
+            combinedChatPanel.setRoundTracker(roundTracker);
 
             // Access fields via reflection (matching existing pattern in this class)
             Field gameChatField = GamePanel.class.getDeclaredField("gameChatPanel");
@@ -1454,7 +1456,7 @@ public class StreamingGamePanel extends GamePanel {
         root.addProperty("status", "live");
         root.addProperty("updatedAt", Instant.now().toString());
         root.addProperty("gameId", streamingGameId != null ? streamingGameId.toString() : "");
-        root.addProperty("turn", game.getTurn());
+        root.addProperty("turn", roundTracker.update(game));
         root.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
         root.addProperty("step", game.getStep() != null ? game.getStep().name() : "");
         root.addProperty("activePlayer", safe(game.getActivePlayerName()));
