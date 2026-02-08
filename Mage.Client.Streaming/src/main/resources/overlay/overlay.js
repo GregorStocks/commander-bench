@@ -25,7 +25,7 @@
     status: "mock",
     updatedAt: new Date().toISOString(),
     gameId: "mock-game",
-    turn: 7,
+    turn: 3,
     phase: "MAIN",
     step: "POSTCOMBAT_MAIN",
     activePlayer: "alpha",

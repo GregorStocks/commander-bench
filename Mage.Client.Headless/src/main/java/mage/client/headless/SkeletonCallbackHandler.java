@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -60,6 +61,8 @@ public class SkeletonCallbackHandler {
     private static final Pattern REGEX_RED = Pattern.compile("\\x7b.{0,2}R.{0,2}\\x7d");
     private static final Pattern REGEX_GREEN = Pattern.compile("\\x7b.{0,2}G.{0,2}\\x7d");
     private static final Pattern REGEX_COLORLESS = Pattern.compile("\\x7b.{0,2}C.{0,2}\\x7d");
+    // Pattern to match "TURN <number>" at the start of game log messages
+    private static final Pattern TURN_MSG_PATTERN = Pattern.compile("^TURN \\d+");
 
     private final SkeletonMageClient client;
     private Session session;
@@ -75,6 +78,7 @@ public class SkeletonCallbackHandler {
     private final StringBuilder gameLog = new StringBuilder();
     private volatile UUID currentGameId = null;
     private volatile GameView lastGameView = null;
+    private final RoundTracker roundTracker = new RoundTracker();
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
     private final Set<UUID> failedManaCasts = new HashSet<>(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
@@ -297,7 +301,7 @@ public class SkeletonCallbackHandler {
 
         // Add phase context so the LLM knows when to cast aggressively
         if (lastGameView != null) {
-            result.put("turn", lastGameView.getTurn());
+            result.put("turn", roundTracker.update(lastGameView));
             if (lastGameView.getPhase() != null) {
                 result.put("phase", lastGameView.getPhase().toString());
             }
@@ -1312,7 +1316,7 @@ public class SkeletonCallbackHandler {
         }
 
         state.put("available", true);
-        state.put("turn", gameView.getTurn());
+        state.put("turn", roundTracker.update(gameView));
 
         // Phase info
         if (gameView.getPhase() != null) {
@@ -1763,6 +1767,11 @@ public class SkeletonCallbackHandler {
                 }
             }
             if (logEntry != null && !logEntry.isEmpty()) {
+                // Fix "TURN X" messages to show game round instead of raw turn count
+                Matcher turnMatcher = TURN_MSG_PATTERN.matcher(logEntry);
+                if (turnMatcher.find()) {
+                    logEntry = "TURN " + roundTracker.getGameRound() + logEntry.substring(turnMatcher.end());
+                }
                 synchronized (gameLog) {
                     if (gameLog.length() > 0) {
                         gameLog.append("\n");

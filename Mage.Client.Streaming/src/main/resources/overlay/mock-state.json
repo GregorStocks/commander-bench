@@ -2,7 +2,7 @@
   "status": "mock",
   "updatedAt": "2026-02-07T00:00:00Z",
   "gameId": "mock-game",
-  "turn": 3,
+  "turn": 2,
   "phase": "MAIN",
   "step": "PRECOMBAT_MAIN",
   "activePlayer": "player-1",
