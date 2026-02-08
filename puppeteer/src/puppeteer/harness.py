@@ -383,10 +383,11 @@ def start_chatterbox_client(
         "PYTHONUNBUFFERED": "1",
     }
 
-    # Pass API key from parent environment (never in config files)
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    # Pass the provider-specific API key based on player's base_url
+    key_env = _required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
+    api_key = os.environ.get(key_env, "")
     if api_key:
-        env["OPENROUTER_API_KEY"] = api_key
+        env[key_env] = api_key
 
     args = [
         sys.executable,
@@ -435,10 +436,11 @@ def start_pilot_client(
         "PYTHONUNBUFFERED": "1",
     }
 
-    # Pass API key from parent environment (never in config files)
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    # Pass the provider-specific API key based on player's base_url
+    key_env = _required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
+    api_key = os.environ.get(key_env, "")
     if api_key:
-        env["OPENROUTER_API_KEY"] = api_key
+        env[key_env] = api_key
 
     args = [
         sys.executable,
