@@ -1,0 +1,10 @@
+{
+  "title": "Stale harness processes not cleaned up between runs",
+  "description": "When running make run-dumb multiple times, old Java/Python processes from previous runs can linger and hold ports. Saw old puppeteer processes from days ago still running, and the overlay port auto-incremented to 17889 because 17888 was still bound by a previous run. The harness should either kill previous instances on startup or detect stale processes. The port auto-increment is a good fallback but makes it harder to find the right URL.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer", "harness"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}

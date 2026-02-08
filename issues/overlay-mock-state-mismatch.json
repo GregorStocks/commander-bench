@@ -1,0 +1,10 @@
+{
+  "title": "Overlay mock state only has 2 players, should match 4-player Commander",
+  "description": "The server-side mock-state.json and the JS inline inlineMockState both only define 2 players (player-1, player-2) with minimal card data. Since the primary use case is 4-player Commander, the mock data should be a realistic 4-player game with battlefield permanents, commanders, graveyards etc. so ?mock=1 mode is useful for UI development without a running game.",
+  "status": "open",
+  "priority": 4,
+  "type": "task",
+  "labels": ["streaming-client", "overlay"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}
