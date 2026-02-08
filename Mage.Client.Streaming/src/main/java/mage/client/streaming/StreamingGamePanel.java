@@ -364,6 +364,12 @@ public class StreamingGamePanel extends GamePanel {
         GUISizeHelper.battlefieldCardMaxDimension = new Dimension(100, 143);
         // Lower min: ~20px wide (default is ~52px). Allows aggressive shrinking.
         GUISizeHelper.battlefieldCardMinDimension = new Dimension(20, 29);
+        // Cap hand card size to match battlefield max so hand cards don't dwarf battlefield cards
+        int maxWidth = GUISizeHelper.battlefieldCardMaxDimension.width;
+        if (GUISizeHelper.handCardDimension.width > maxWidth) {
+            int maxHeight = (int) (maxWidth * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+            GUISizeHelper.handCardDimension = new Dimension(maxWidth, maxHeight);
+        }
         // Propagate to the card layout plugin
         Plugins.instance.changeGUISize();
     }
@@ -904,9 +910,10 @@ public class StreamingGamePanel extends GamePanel {
                 continue;
             }
 
-            // Crop the art region and resize for avatar
+            // Crop the art region and resize for avatar (scaled to window)
             BufferedImage artCrop = cropCardArt(cardImage);
-            Rectangle avatarRect = new Rectangle(80, 80);
+            int avatarSize = computeAvatarSize(playArea);
+            Rectangle avatarRect = new Rectangle(avatarSize, avatarSize);
             BufferedImage avatarImage = ImageHelper.getResizedImage(artCrop, avatarRect);
 
             // Update the HoverButton avatar via reflection
@@ -1039,28 +1046,44 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Resize the player panel to be shorter after hiding elements.
+     * Compute the avatar size for streaming mode, scaling to the window.
+     * At 1080p this gives ~98px (close to the original 80px).
+     * At 4K this gives ~196px, making avatars clearly visible.
+     */
+    private int computeAvatarSize(Component component) {
+        // Use the window height if available, fall back to screen height
+        Window window = SwingUtilities.getWindowAncestor(component);
+        int windowHeight = window != null && window.getHeight() > 0
+                ? window.getHeight()
+                : Toolkit.getDefaultToolkit().getScreenSize().height;
+        // Scale: window_height / 11 gives good proportions at all resolutions
+        int avatarSize = windowHeight / 11;
+        return Math.max(80, Math.min(avatarSize, 300));
+    }
+
+    /**
+     * Resize the player panel after hiding elements, scaling to the window size.
      */
     private void resizePlayerPanel(PlayerPanelExt playerPanel) {
         try {
+            int avatarSize = computeAvatarSize(playerPanel);
+            int panelWidth = avatarSize + 14;  // avatar + GroupLayout padding
+            int panelHeight = avatarSize + 40; // avatar + name/library count
+
             // Get the panelBackground which contains the actual content
             Field bgField = PlayerPanelExt.class.getDeclaredField("panelBackground");
             bgField.setAccessible(true);
             JComponent panelBackground = (JComponent) bgField.get(playerPanel);
 
             if (panelBackground != null) {
-                // Reduce height - keep only avatar + name + library count
-                // Original is ~270px, target ~120px (avatar 80 + name 30 + padding)
-                int width = panelBackground.getPreferredSize().width;
-                Dimension newSize = new Dimension(width, 120);
+                Dimension newSize = new Dimension(panelWidth, panelHeight);
                 panelBackground.setPreferredSize(newSize);
                 panelBackground.setMaximumSize(newSize);
                 panelBackground.revalidate();
             }
 
             // Also resize the player panel itself
-            int width = playerPanel.getPreferredSize().width;
-            Dimension newSize = new Dimension(width, 125);
+            Dimension newSize = new Dimension(panelWidth, panelHeight + 5);
             playerPanel.setPreferredSize(newSize);
             playerPanel.setMaximumSize(newSize);
             playerPanel.revalidate();
