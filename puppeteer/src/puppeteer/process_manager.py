@@ -75,10 +75,11 @@ def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
                     try:
                         pid = int(line.strip())
                         proc = psutil.Process(pid)
-                        # Verify this is actually one of our processes
-                        env = proc.environ()
-                        if env.get("XMAGE_AI_HARNESS") == "1":
-                            print(f"Killing orphaned process {pid}")
+                        # Verify by process name (fast, no sysctl hang).
+                        # All harness processes are java, python, or mvn.
+                        name = proc.name().lower()
+                        if any(s in name for s in ("java", "python", "mvn")):
+                            print(f"Killing orphaned process {pid} ({name})")
                             kill_tree(pid)
                             killed_pids.add(pid)
                     except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
