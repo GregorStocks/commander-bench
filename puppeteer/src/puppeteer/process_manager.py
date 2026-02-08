@@ -11,10 +11,6 @@ from pathlib import Path
 import psutil
 
 
-# Default location for PID file (relative to cwd)
-PID_FILE_PATH = Path(".context/ai-harness-logs/harness.pids")
-
-
 def kill_tree(pid: int):
     """Kill a process and all its children."""
     try:
@@ -56,66 +52,6 @@ def kill_tree(pid: int):
         pass
 
 
-def cleanup_orphans(pid_file: Path = PID_FILE_PATH):
-    """Kill any processes left over from a previous harness run.
-
-    Uses two strategies:
-    1. PID-file based: read tracked PIDs and kill verified ones (fast, targeted).
-    2. pgrep fallback: find processes by command-line markers (xmage.* system
-       properties, puppeteer.* module names).  This catches orphans when the
-       PID file was lost (SIGKILL, crash, etc.) or when child Java processes
-       outlived their tracked Python parents.
-    """
-    # Strategy 1: PID-file based cleanup
-    killed_pids: set[int] = set()
-    if pid_file.exists():
-        try:
-            with open(pid_file) as f:
-                for line in f:
-                    try:
-                        pid = int(line.strip())
-                        proc = psutil.Process(pid)
-                        # Verify by process name (fast, no sysctl hang).
-                        # All harness processes are java, python, or mvn.
-                        name = proc.name().lower()
-                        if any(s in name for s in ("java", "python", "mvn")):
-                            print(f"Killing orphaned process {pid} ({name})")
-                            kill_tree(pid)
-                            killed_pids.add(pid)
-                    except (psutil.NoSuchProcess, ValueError, psutil.AccessDenied):
-                        pass
-        except OSError:
-            pass
-        finally:
-            try:
-                pid_file.unlink(missing_ok=True)
-            except OSError:
-                pass
-
-    # Strategy 2: find orphans by command-line markers using pgrep.
-    # We avoid psutil.environ() entirely because it can hang indefinitely
-    # on macOS (even for java/python processes).  Matches:
-    #   - Java processes with -Dxmage.* system properties
-    #   - All puppeteer Python processes (main harness + child scripts)
-    #   - uv wrappers that launched puppeteer
-    skip_pids = killed_pids | {os.getpid(), os.getppid()}
-    try:
-        result = subprocess.run(
-            ["pgrep", "-f", r"xmage[.]|python.*-m puppeteer"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.strip().splitlines():
-            try:
-                pid = int(line.strip())
-                if pid not in skip_pids:
-                    print(f"Killing orphaned process {pid}")
-                    kill_tree(pid)
-            except ValueError:
-                pass
-    except (subprocess.TimeoutExpired, OSError):
-        pass
-
-
 class ProcessManager:
     """Manages subprocess lifecycle with proper cleanup on signals.
 
@@ -123,14 +59,12 @@ class ProcessManager:
     - The parent receives SIGINT, SIGTERM, or SIGHUP
     - The parent exits normally
     - The parent exits due to an unhandled exception
-
     """
 
     def __init__(self):
         self._processes: list[subprocess.Popen] = []
         self._lock = threading.Lock()
         self._cleaned_up = False
-        self._pid_file = PID_FILE_PATH
 
         self._setup_signal_handlers()
         # Register atexit handler for cleanup on normal exit or unhandled exceptions
@@ -149,16 +83,6 @@ class ProcessManager:
         self.cleanup()
         sys.exit(0)
 
-    def _write_pid_file(self):
-        """Write current tracked PIDs to file for orphan cleanup."""
-        try:
-            self._pid_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._pid_file, "w") as f:
-                for proc in self._processes:
-                    f.write(f"{proc.pid}\n")
-        except OSError:
-            pass
-
     def start_process(
         self,
         args: list[str],
@@ -172,10 +96,6 @@ class ProcessManager:
         receive signals when the parent is killed.
         """
         merged_env = os.environ.copy()
-        # Mark all harness-managed processes so cleanup_orphans() can find them
-        # even without a PID file.  This also propagates to grandchild processes
-        # (e.g. Java skeletons spawned by sleepwalker/pilot Python scripts).
-        merged_env["XMAGE_AI_HARNESS"] = "1"
         if env:
             merged_env.update(env)
 
@@ -194,7 +114,6 @@ class ProcessManager:
 
         with self._lock:
             self._processes.append(proc)
-            self._write_pid_file()
 
         return proc
 
@@ -215,9 +134,3 @@ class ProcessManager:
                     self._kill_tree(proc.pid)
 
             self._processes.clear()
-
-            # Remove PID file since we've cleaned up
-            try:
-                self._pid_file.unlink(missing_ok=True)
-            except OSError:
-                pass
