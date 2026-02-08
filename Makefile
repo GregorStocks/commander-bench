@@ -14,10 +14,6 @@ clean:
 lint:
 	uv run python scripts/lint-issues.py
 
-.PHONY: log-clean
-log-clean:
-	rm -rf ~/mage-logs/*
-	@echo "Cleaned mage-logs"
 
 .PHONY: build
 build:
