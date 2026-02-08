@@ -54,19 +54,6 @@ run-llm:
 run-llm4:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
-# Kill orphaned harness processes from previous runs
-.PHONY: kill-orphans
-kill-orphans:
-	@pids=$$(pgrep -f 'xmage[.]|python.*-m puppeteer' 2>/dev/null); \
-	if [ -n "$$pids" ]; then \
-		echo "Killing orphaned harness processes:"; \
-		echo "$$pids" | xargs ps -o pid,lstart,command -p 2>/dev/null; \
-		echo "$$pids" | xargs kill 2>/dev/null; \
-	else \
-		echo "No orphaned harness processes found"; \
-	fi
-	@rm -f .context/ai-harness-logs/harness.pids
-
 # Standalone test server (stays running until Ctrl-C)
 # Optional: make run-staller PORT=18080
 .PHONY: run-staller
