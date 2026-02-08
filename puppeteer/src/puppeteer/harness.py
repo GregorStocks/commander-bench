@@ -11,11 +11,10 @@ from datetime import datetime
 from pathlib import Path
 
 from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
+from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL, required_api_key_env
 from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
-
-DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
 
 _OBSERVER_TABLE_READY = "AI Harness: waiting for"
 
@@ -46,27 +45,13 @@ def _wait_for_observer_table(
     )
 
 
-def _required_api_key_env(base_url: str) -> str:
-    """Infer the expected API key env var from the configured base URL."""
-    host = (base_url or DEFAULT_LLM_BASE_URL).lower()
-    if "openrouter.ai" in host:
-        return "OPENROUTER_API_KEY"
-    if "api.openai.com" in host:
-        return "OPENAI_API_KEY"
-    if "anthropic.com" in host:
-        return "ANTHROPIC_API_KEY"
-    if "googleapis.com" in host or "generativelanguage.googleapis.com" in host:
-        return "GEMINI_API_KEY"
-    return "OPENROUTER_API_KEY"
-
-
 def _missing_llm_api_keys(config: Config) -> list[str]:
     """Return validation errors for LLM players missing required API keys."""
     errors: list[str] = []
     llm_players = [*config.chatterbox_players, *config.pilot_players]
     for player in llm_players:
         base_url = player.base_url or DEFAULT_LLM_BASE_URL
-        key_env = _required_api_key_env(base_url)
+        key_env = required_api_key_env(base_url)
         if not os.environ.get(key_env, "").strip():
             errors.append(
                 f"{player.name} ({base_url}) requires {key_env}"
@@ -384,7 +369,7 @@ def start_chatterbox_client(
     }
 
     # Pass the provider-specific API key based on player's base_url
-    key_env = _required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
+    key_env = required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
     api_key = os.environ.get(key_env, "")
     if api_key:
         env[key_env] = api_key
@@ -437,7 +422,7 @@ def start_pilot_client(
     }
 
     # Pass the provider-specific API key based on player's base_url
-    key_env = _required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
+    key_env = required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
     api_key = os.environ.get(key_env, "")
     if api_key:
         env[key_env] = api_key
