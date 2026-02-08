@@ -1,8 +1,8 @@
 {
   "players": [
-    {"type": "sleepwalker", "name": "Sleepy", "deck": "random"},
-    {"type": "potato", "name": "Spud", "deck": "random"},
     {"type": "cpu", "name": "Mad AI 1", "deck": "random"},
-    {"type": "cpu", "name": "Mad AI 2", "deck": "random"}
+    {"type": "cpu", "name": "Mad AI 2", "deck": "random"},
+    {"type": "cpu", "name": "Mad AI 3", "deck": "random"},
+    {"type": "cpu", "name": "Mad AI 4", "deck": "random"}
   ]
 }
