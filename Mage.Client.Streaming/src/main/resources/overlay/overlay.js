@@ -30,7 +30,26 @@
     step: "POSTCOMBAT_MAIN",
     activePlayer: "alpha",
     priorityPlayer: "beta",
-    stack: [],
+    stack: [
+      {
+        id: "s1",
+        name: "Lightning Bolt",
+        manaCost: "{R}",
+        typeLine: "Instant",
+        rules: "Lightning Bolt deals 3 damage to any target.",
+        imageUrl: "https://api.scryfall.com/cards/named?exact=Lightning%20Bolt&format=image&version=normal",
+        tapped: false,
+      },
+      {
+        id: "s2",
+        name: "Counterspell",
+        manaCost: "{U}{U}",
+        typeLine: "Instant",
+        rules: "Counter target spell.",
+        imageUrl: "https://api.scryfall.com/cards/named?exact=Counterspell&format=image&version=normal",
+        tapped: false,
+      },
+    ],
     layout: {
       sourceWidth: 1920,
       sourceHeight: 1080,
@@ -203,18 +222,19 @@
 
   function renderStack(stack) {
     stackSection.innerHTML = "";
-    if (!stack || stack.length === 0) {
-      stackSection.classList.add("hidden");
-      return;
-    }
+    stackSection.classList.remove("hidden");
 
     const title = document.createElement("div");
     title.className = "stack-title";
-    title.textContent = "Stack";
+    title.textContent = "Stack" + (stack && stack.length > 0 ? "" : " (empty)");
     stackSection.appendChild(title);
 
+    if (!stack || stack.length === 0) {
+      return;
+    }
+
     const row = document.createElement("div");
-    row.className = "cards-row";
+    row.className = "stack-list";
     stackSection.appendChild(row);
 
     stack.forEach((card) => {
@@ -397,13 +417,13 @@
       if (!rendered) {
         disablePositionLayer();
         renderPlayers(state.players || []);
-        renderStack(state.stack || []);
       }
-      return;
+    } else {
+      disablePositionLayer();
+      renderPlayers(state.players || []);
     }
 
-    disablePositionLayer();
-    renderPlayers(state.players || []);
+    // Always render the stack section (works in both positioned and list modes)
     renderStack(state.stack || []);
   }
 

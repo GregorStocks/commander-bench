@@ -207,6 +207,8 @@ public class StreamingGamePanel extends GamePanel {
         replaceAvatarsWithCommanderArt(game);
         // Clean up player panels (hide redundant elements)
         updatePlayerPanelVisibility(game);
+        // Re-layout stack cards vertically (parent lays them out horizontally)
+        relayoutStackVertically();
         pushOverlayState(game, false);
     }
 
@@ -283,9 +285,14 @@ public class StreamingGamePanel extends GamePanel {
                 if (southComponent != null) {
                     southComponent.setVisible(false);
                     helperArea.remove(southComponent);
-                    helperArea.revalidate();
-                    helperArea.repaint();
                 }
+
+                // Extract stackObjects from the hidden hierarchy and re-add it
+                // so the stack is visible in the Swing UI (and captured in video recordings)
+                reparentStackPanel(helperArea);
+
+                helperArea.revalidate();
+                helperArea.repaint();
             }
 
             // Also hide btnSwitchHands
@@ -302,6 +309,132 @@ public class StreamingGamePanel extends GamePanel {
         }
 
         hideBigCardPanel();
+    }
+
+    /**
+     * Extract the stack panel (stackObjects) from the hidden command area
+     * and place it on the right side above the chat/game log panels.
+     *
+     * Layout: splitBattlefieldAndChats RIGHT was splitChatAndLogs.
+     * We wrap it: stack (NORTH) + splitChatAndLogs (CENTER) in a new panel,
+     * then set that as the new RIGHT component.
+     */
+    private void reparentStackPanel(JPanel helperArea) {
+        try {
+            Field stackField = GamePanel.class.getDeclaredField("stackObjects");
+            stackField.setAccessible(true);
+            Cards stackPanel = (Cards) stackField.get(this);
+
+            Field splitBFChatField = GamePanel.class.getDeclaredField("splitBattlefieldAndChats");
+            splitBFChatField.setAccessible(true);
+            JSplitPane splitBFChat = (JSplitPane) splitBFChatField.get(this);
+
+            Field splitChatLogsField = GamePanel.class.getDeclaredField("splitChatAndLogs");
+            splitChatLogsField.setAccessible(true);
+            JSplitPane splitChatLogs = (JSplitPane) splitChatLogsField.get(this);
+
+            if (stackPanel != null && splitBFChat != null && splitChatLogs != null) {
+                // Remove stackPanel from its current (hidden) parent
+                Container oldParent = stackPanel.getParent();
+                if (oldParent != null) {
+                    oldParent.remove(stackPanel);
+                }
+
+                // Enable vertical scrolling (parent disables it for horizontal layout)
+                Field scrollField = Cards.class.getDeclaredField("jScrollPane1");
+                scrollField.setAccessible(true);
+                JScrollPane scrollPane = (JScrollPane) scrollField.get(stackPanel);
+                if (scrollPane != null) {
+                    scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+                    scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+                }
+
+                stackPanel.setVisible(true);
+
+                // Create wrapper: stack on top, chat/logs below
+                JPanel rightWrapper = new JPanel(new BorderLayout());
+                rightWrapper.setOpaque(false);
+                rightWrapper.add(stackPanel, BorderLayout.NORTH);
+                rightWrapper.add(splitChatLogs, BorderLayout.CENTER);
+
+                // Ensure the right panel is wide enough to show a card
+                int minWidth = GUISizeHelper.handCardDimension.width + 30;
+                rightWrapper.setMinimumSize(new Dimension(minWidth, 0));
+
+                splitBFChat.setRightComponent(rightWrapper);
+
+                // Set the divider so the right panel gets ~20% of width
+                // (deferred so the panel has its final size)
+                SwingUtilities.invokeLater(() -> {
+                    int totalWidth = splitBFChat.getWidth();
+                    if (totalWidth > 0) {
+                        splitBFChat.setDividerLocation(totalWidth - Math.max(minWidth, totalWidth / 5));
+                    }
+                });
+            }
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to reparent stack panel", e);
+        }
+    }
+
+    /**
+     * Re-layout stack cards vertically with overlap, instead of the default
+     * horizontal layout. Called after each game update since the parent's
+     * displayStack() resets to horizontal.
+     */
+    private void relayoutStackVertically() {
+        try {
+            Field stackField = GamePanel.class.getDeclaredField("stackObjects");
+            stackField.setAccessible(true);
+            Cards stackCards = (Cards) stackField.get(this);
+            if (stackCards == null) {
+                return;
+            }
+
+            Field cardAreaField = Cards.class.getDeclaredField("cardArea");
+            cardAreaField.setAccessible(true);
+            JPanel cardArea = (JPanel) cardAreaField.get(stackCards);
+            if (cardArea == null) {
+                return;
+            }
+
+            List<MageCard> cardsToLayout = new ArrayList<>();
+            for (Component c : cardArea.getComponents()) {
+                if (c instanceof MageCard) {
+                    cardsToLayout.add((MageCard) c);
+                }
+            }
+
+            // Use the configured card dimension for sizing (even when empty)
+            Dimension cardDim = GUISizeHelper.handCardDimension;
+            int cardWidth = cardDim.width;
+            int cardHeight = cardDim.height;
+            int panelHeight = (int) (cardHeight * 1.5);
+
+            if (cardsToLayout.isEmpty()) {
+                stackCards.setPreferredSize(new Dimension(0, panelHeight));
+                stackCards.revalidate();
+                return;
+            }
+            int overlapGap = (int) (cardHeight * 0.4);
+            int margin = 4;
+
+            int dy = margin;
+            for (MageCard card : cardsToLayout) {
+                card.setCardLocation(margin, dy);
+                dy += overlapGap;
+            }
+            // Last card is fully visible
+            int totalHeight = dy - overlapGap + cardHeight + margin;
+
+            cardArea.setPreferredSize(new Dimension(cardWidth + margin * 2, totalHeight));
+            cardArea.revalidate();
+
+            stackCards.setPreferredSize(new Dimension(0, panelHeight));
+            stackCards.revalidate();
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to re-layout stack vertically", e);
+        }
     }
 
     /**
@@ -348,6 +481,7 @@ public class StreamingGamePanel extends GamePanel {
             splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_HAND_STACK);
             splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_GAME_AND_BIG_CARD);
             splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_CHAT_AND_LOGS);
+            splitters.remove(PreferencesDialog.KEY_GAMEPANEL_DIVIDER_LOCATIONS_BATTLEFIELD_AND_CHATS);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             logger.warn("Failed to remove splitters from restore", e);
         }
@@ -1454,6 +1588,9 @@ public class StreamingGamePanel extends GamePanel {
             }
         }
 
+        // Stack cards (global, not per-player)
+        addStackCardRects(snapshot);
+
         return snapshot;
     }
 
@@ -1486,6 +1623,17 @@ public class StreamingGamePanel extends GamePanel {
             addCardRectsFromMap(snapshot, playerId, zone, cardMap);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             // Best effort only; if this fails, non-positional overlay still works.
+        }
+    }
+
+    private void addStackCardRects(OverlayLayoutSnapshot snapshot) {
+        try {
+            Field stackField = GamePanel.class.getDeclaredField("stackObjects");
+            stackField.setAccessible(true);
+            Cards stackCards = (Cards) stackField.get(this);
+            addCardRectsFromMap(snapshot, null, "stack", stackCards.getMageCardsForUpdate());
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            // Best effort only
         }
     }
 

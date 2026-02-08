@@ -157,6 +157,12 @@ body.video-overlay {
   margin-bottom: 6px;
 }
 
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .position-layer {
   position: absolute;
   inset: 0;
@@ -272,9 +278,18 @@ body.video-overlay {
   inset: 0;
 }
 
-.overlay-app.positioned-mode #playersGrid,
-.overlay-app.positioned-mode #stackSection {
+.overlay-app.positioned-mode #playersGrid {
   display: none !important;
+}
+
+.overlay-app.positioned-mode .stack-section {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: 80vw;
+  background: rgba(14, 22, 26, 0.92);
 }
 
 @media (max-width: 900px) {
