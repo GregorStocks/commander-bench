@@ -1,9 +1,12 @@
 """Main harness orchestration."""
 
 import argparse
+import json
+import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -12,13 +15,70 @@ from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
+DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+
+_OBSERVER_TABLE_READY = "AI Harness: waiting for"
+
+
+def _wait_for_observer_table(
+    log_path: Path, proc: subprocess.Popen, timeout: int = 300
+) -> None:
+    """Block until the observer log indicates the game table is ready.
+
+    The streaming/GUI client logs a line containing ``AI Harness: waiting
+    for … skeleton client(s)`` once it has created the table.  We poll the
+    log file for that marker so headless clients aren't started before the
+    table exists.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(
+                "Observer process exited before creating the game table"
+            )
+        if log_path.exists():
+            text = log_path.read_text()
+            if _OBSERVER_TABLE_READY in text:
+                return
+        time.sleep(2)
+    raise TimeoutError(
+        f"Observer did not create a table within {timeout}s — check {log_path}"
+    )
+
+
+def _required_api_key_env(base_url: str) -> str:
+    """Infer the expected API key env var from the configured base URL."""
+    host = (base_url or DEFAULT_LLM_BASE_URL).lower()
+    if "openrouter.ai" in host:
+        return "OPENROUTER_API_KEY"
+    if "api.openai.com" in host:
+        return "OPENAI_API_KEY"
+    if "anthropic.com" in host:
+        return "ANTHROPIC_API_KEY"
+    if "googleapis.com" in host or "generativelanguage.googleapis.com" in host:
+        return "GEMINI_API_KEY"
+    return "OPENROUTER_API_KEY"
+
+
+def _missing_llm_api_keys(config: Config) -> list[str]:
+    """Return validation errors for LLM players missing required API keys."""
+    errors: list[str] = []
+    llm_players = [*config.chatterbox_players, *config.pilot_players]
+    for player in llm_players:
+        base_url = player.base_url or DEFAULT_LLM_BASE_URL
+        key_env = _required_api_key_env(base_url)
+        if not os.environ.get(key_env, "").strip():
+            errors.append(
+                f"{player.name} ({base_url}) requires {key_env}"
+            )
+    return errors
+
 
 def bring_to_foreground_macos() -> None:
     """Bring the Java app to foreground on macOS using AppleScript."""
     if sys.platform != "darwin":
         return
 
-    import time
     time.sleep(2)  # Wait for window to appear
 
     subprocess.run(
@@ -33,11 +93,6 @@ def bring_to_foreground_macos() -> None:
 def parse_args() -> Config:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="XMage AI Harness")
-    parser.add_argument(
-        "--skip-compile",
-        action="store_true",
-        help="Skip Maven compilation",
-    )
     parser.add_argument(
         "--config",
         type=Path,
@@ -81,7 +136,6 @@ def parse_args() -> Config:
         record_output = Path(args.record)
 
     config = Config(
-        skip_compile=args.skip_compile,
         config_file=args.config,
         streaming=args.streaming,
         record=bool(args.record),
@@ -483,6 +537,16 @@ def main() -> int:
     pm = ProcessManager()
 
     try:
+        # Load player config as early as possible so invalid LLM setup fails fast.
+        config.load_skeleton_config()
+        missing_llm_keys = _missing_llm_api_keys(config)
+        if missing_llm_keys:
+            print("ERROR: LLM players configured without required API keys:")
+            for missing in missing_llm_keys:
+                print(f"  - {missing}")
+            print("Set the required key(s) or use a non-LLM config (e.g. make run-dumb).")
+            return 2
+
         # Set timestamp
         config.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -492,18 +556,39 @@ def main() -> int:
             config.streaming = True
 
         # Create log directory structure:
-        #   .context/ai-harness-logs/          (top-level, persists across runs)
-        #   .context/ai-harness-logs/game_TS/  (per-game directory)
+        #   ~/mage-logs/                       (top-level, persists across workspaces)
+        #   ~/mage-logs/game_TS/               (per-game directory)
         log_dir = (project_root / config.log_dir).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
         game_dir = log_dir / f"game_{config.timestamp}"
         game_dir.mkdir(parents=True, exist_ok=True)
 
+        # Write provenance manifest
+        def _git(cmd: str) -> str:
+            try:
+                return subprocess.check_output(
+                    f"git {cmd}", shell=True, cwd=project_root,
+                    stderr=subprocess.DEVNULL, text=True,
+                ).strip()
+            except Exception:
+                return ""
+
+        manifest = {
+            "timestamp": config.timestamp,
+            "branch": _git("rev-parse --abbrev-ref HEAD"),
+            "commit": _git("rev-parse HEAD"),
+            "commit_log": _git("log --oneline -10").splitlines(),
+            "command": sys.argv,
+            "config_file": str(config.config_file) if config.config_file else None,
+        }
+        (game_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2) + "\n"
+        )
+
         # Compile if needed
-        if not config.skip_compile:
-            if not compile_project(project_root, streaming=config.streaming):
-                print("ERROR: Compilation failed")
-                return 1
+        if not compile_project(project_root, streaming=config.streaming):
+            print("ERROR: Compilation failed")
+            return 1
 
         if config.streaming:
             print("Refreshing streaming resources...")
@@ -565,16 +650,13 @@ def main() -> int:
 
         print("Server is ready!")
 
-        # Load skeleton player config (passed to GUI client via environment variable)
-        config.load_skeleton_config()
+        # Player config was already loaded above (passed to observer/GUI via environment variable)
         if config.config_file:
             print(f"Using config: {config.config_file}")
             # Copy config into game directory for reference
             shutil.copy2(config.config_file, game_dir / "config.json")
 
         config.resolve_random_decks(project_root)
-
-        import time
 
         # Choose which observer client to start (streaming or regular GUI)
         if config.streaming:
@@ -603,7 +685,11 @@ def main() -> int:
         bring_to_foreground_macos()
 
         if headless_count > 0:
-            time.sleep(config.skeleton_delay)
+            # Wait for observer to create the table before starting headless
+            # clients.  The observer logs a distinctive line once the table is
+            # ready to accept joins.  Polling for that line avoids a fixed
+            # delay that races against variable DB-init times.
+            _wait_for_observer_table(observer_log, observer_proc, timeout=300)
 
             # Start sleepwalker clients (MCP-based, Python controls skeleton)
             for player in config.sleepwalker_players:

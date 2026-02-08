@@ -14,10 +14,6 @@ clean:
 lint:
 	uv run python scripts/lint-issues.py
 
-.PHONY: log-clean
-log-clean:
-	rm -rf .context/ai-harness-logs/*
-	@echo "Cleaned ai-harness logs"
 
 .PHONY: build
 build:
@@ -41,7 +37,6 @@ package:
 install: clean build package
 
 # Default: streaming with recording enabled
-# Pass ARGS for additional options: make run-dumb ARGS="--skip-compile"
 # Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
 # Overlay controls: make run-dumb ARGS="--overlay-port 18080"
 # Disable overlay: make run-dumb ARGS="--no-overlay"
@@ -53,6 +48,11 @@ run-dumb:
 .PHONY: run-llm
 run-llm:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
+
+# 4-LLM mode: 4 different LLM pilots battle each other (consumes API tokens)
+.PHONY: run-llm4
+run-llm4:
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
 # Standalone test server (stays running until Ctrl-C)
 # Optional: make run-staller PORT=18080

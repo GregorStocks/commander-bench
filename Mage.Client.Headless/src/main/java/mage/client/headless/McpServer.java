@@ -224,6 +224,26 @@ public class McpServer {
         waitActionTool.put("inputSchema", waitActionSchema);
         tools.add(waitActionTool);
 
+        // pass_priority
+        Map<String, Object> passPriorityTool = new HashMap<>();
+        passPriorityTool.put("name", "pass_priority");
+        passPriorityTool.put("description",
+                "Auto-pass priority until you can actually do something. Skips empty priorities where " +
+                "you have no playable cards, and returns when: (1) you have cards you can play, or " +
+                "(2) a non-priority decision is needed (mulligan, target selection, etc.). " +
+                "Call this after making your play or passing to skip ahead efficiently.");
+        Map<String, Object> passPrioritySchema = new HashMap<>();
+        passPrioritySchema.put("type", "object");
+        Map<String, Object> passPriorityProps = new HashMap<>();
+        Map<String, Object> passPriorityTimeoutProp = new HashMap<>();
+        passPriorityTimeoutProp.put("type", "integer");
+        passPriorityTimeoutProp.put("description", "Max milliseconds to wait (default 30000)");
+        passPriorityProps.put("timeout_ms", passPriorityTimeoutProp);
+        passPrioritySchema.put("properties", passPriorityProps);
+        passPrioritySchema.put("additionalProperties", false);
+        passPriorityTool.put("inputSchema", passPrioritySchema);
+        tools.add(passPriorityTool);
+
         // auto_pass_until_event
         Map<String, Object> autoPassTool = new HashMap<>();
         autoPassTool.put("name", "auto_pass_until_event");
@@ -287,7 +307,9 @@ public class McpServer {
         getChoicesTool.put("description",
                 "Get detailed information about the current pending action including all available choices " +
                 "with human-readable descriptions. Call this before choose_action to see what options are available. " +
-                "Returns response_type (boolean/index/amount/pile/multi_amount) and choices array for indexed types.");
+                "Returns response_type: 'select' (playable cards to pick by index, or pass with answer=false), " +
+                "'boolean' (yes/no), 'index' (target/ability/choice), 'amount', 'pile', or 'multi_amount'. " +
+                "For mulligan decisions, includes your_hand with card details.");
         Map<String, Object> getChoicesSchema = new HashMap<>();
         getChoicesSchema.put("type", "object");
         getChoicesSchema.put("properties", new HashMap<>());
@@ -300,19 +322,21 @@ public class McpServer {
         chooseActionTool.put("name", "choose_action");
         chooseActionTool.put("description",
                 "Respond to the current pending action with a specific choice. Call get_action_choices first " +
-                "to see available options. Provide exactly one of: index (for target/ability/choice selections), " +
-                "answer (boolean for yes/no and mana), amount (integer for amount requests), " +
-                "amounts (array of integers for multi-amount), pile (1 or 2 for pile choices).");
+                "to see available options. For GAME_SELECT with playable cards (response_type=select): " +
+                "use 'index' to play a card, or 'answer: false' to pass priority. " +
+                "For GAME_PLAY_MANA, 'index' can be a mana source or a mana type from pool. " +
+                "For other types: index (target/ability/choice), answer (boolean for yes/no), " +
+                "amount (integer), amounts (array of integers), pile (1 or 2).");
         Map<String, Object> chooseActionSchema = new HashMap<>();
         chooseActionSchema.put("type", "object");
         Map<String, Object> chooseActionProps = new HashMap<>();
         Map<String, Object> indexProp = new HashMap<>();
         indexProp.put("type", "integer");
-        indexProp.put("description", "Choice index from get_action_choices (for target, ability, choice actions)");
+        indexProp.put("description", "Choice index from get_action_choices (for target/ability/choice and mana source/pool choices)");
         chooseActionProps.put("index", indexProp);
         Map<String, Object> answerProp = new HashMap<>();
         answerProp.put("type", "boolean");
-        answerProp.put("description", "Yes/No response (for ask, select, mana actions). Also false to cancel target selection.");
+        answerProp.put("description", "Yes/No response (for ask/select). Also false to cancel target/mana selection.");
         chooseActionProps.put("answer", answerProp);
         Map<String, Object> amountProp = new HashMap<>();
         amountProp.put("type", "integer");
@@ -375,6 +399,11 @@ public class McpServer {
             case "wait_for_action":
                 int timeoutMs = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 15000;
                 toolResult = callbackHandler.waitForAction(timeoutMs);
+                break;
+
+            case "pass_priority":
+                int passPriorityTimeout = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 30000;
+                toolResult = callbackHandler.passPriority(passPriorityTimeout);
                 break;
 
             case "auto_pass_until_event":

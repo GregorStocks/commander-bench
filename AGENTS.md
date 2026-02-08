@@ -1,3 +1,12 @@
+## Git
+
+Local `master` is often behind. Always use `origin/master` as the source of truth for rebasing and diffing:
+
+```bash
+git fetch origin
+git rebase origin/master
+```
+
 ## Code Isolation Philosophy
 
 Don't touch Java outside of `Mage.Client.Streaming` and `Mage.Client.Headless`. This means avoiding changes to `Mage.Client`, `Mage.Server*`, `Mage.Common`, `Mage`, `Mage.Sets`, etc. This keeps us in sync with upstream XMage.
@@ -26,9 +35,6 @@ Use Makefile targets instead of running uv commands directly:
 ```bash
 # Start streaming observer with recording (compiles first)
 make run-dumb
-
-# Skip compilation (faster iteration)
-make run-dumb ARGS="--skip-compile"
 
 # Record to specific file
 make run-dumb OUTPUT=/path/to/video.mov

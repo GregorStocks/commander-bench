@@ -15,6 +15,8 @@ from openai import AsyncOpenAI
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 MAX_TOKENS = 256
+LLM_REQUEST_TIMEOUT_SECS = 45
+MAX_CONSECUTIVE_TIMEOUTS = 3
 
 # Per-1M-token prices (input, output) for cost estimation.
 # Matched by longest model name prefix.
@@ -29,6 +31,20 @@ MODEL_PRICES: dict[str, tuple[float, float]] = {
     "openai/gpt-4o": (2.50, 10.00),
 }
 DEFAULT_PRICE = (1.00, 3.00)  # fallback per 1M tokens
+
+
+def _required_api_key_env(base_url: str) -> str:
+    """Infer the expected API key env var from the configured base URL."""
+    host = (base_url or DEFAULT_BASE_URL).lower()
+    if "openrouter.ai" in host:
+        return "OPENROUTER_API_KEY"
+    if "api.openai.com" in host:
+        return "OPENAI_API_KEY"
+    if "anthropic.com" in host:
+        return "ANTHROPIC_API_KEY"
+    if "googleapis.com" in host or "generativelanguage.googleapis.com" in host:
+        return "GEMINI_API_KEY"
+    return "OPENROUTER_API_KEY"
 
 
 def _get_model_price(model: str) -> tuple[float, float]:
@@ -110,16 +126,21 @@ async def run_llm_loop(
     calls_since_chat = 0
     input_price, output_price = _get_model_price(model)
     cumulative_cost = 0.0
+    consecutive_timeouts = 0
 
     while True:
         try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                max_tokens=MAX_TOKENS,
+            response = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    max_tokens=MAX_TOKENS,
+                ),
+                timeout=LLM_REQUEST_TIMEOUT_SECS,
             )
+            consecutive_timeouts = 0
             choice = response.choices[0]
 
             # Track token usage and cost
@@ -199,7 +220,25 @@ async def run_llm_loop(
                     + messages[-15:]
                 )
 
+        except asyncio.TimeoutError:
+            consecutive_timeouts += 1
+            print(f"[chatterbox] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            try:
+                await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
+            except Exception:
+                await asyncio.sleep(5)
+
+            if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
+                print("[chatterbox] Repeated LLM timeouts, resetting conversation context")
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Continue playing. Call auto_pass_until_event to wait for game events."},
+                ]
+                calls_since_chat = 0
+                consecutive_timeouts = 0
+
         except Exception as e:
+            consecutive_timeouts = 0
             error_str = str(e)
             print(f"[chatterbox] LLM error: {e}")
 
@@ -243,14 +282,12 @@ async def run_chatterbox(
     print(f"[chatterbox] Model: {model}")
     print(f"[chatterbox] Base URL: {base_url}")
 
-    if not api_key:
-        print("[chatterbox] ERROR: No API key provided. Set OPENROUTER_API_KEY environment variable.")
-        return
-
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
         api_key=api_key,
         base_url=base_url,
+        timeout=LLM_REQUEST_TIMEOUT_SECS + 5,
+        max_retries=1,
     )
 
     # Build JVM args for the skeleton (same as sleepwalker)
@@ -323,8 +360,13 @@ def main() -> int:
         elif project_root.name == "puppeteer":
             project_root = project_root.parent
 
-    # API key: CLI arg > env var
-    api_key = args.api_key or os.environ.get("OPENROUTER_API_KEY", "")
+    # API key: CLI arg > provider-specific env var based on base URL.
+    required_key_env = _required_api_key_env(args.base_url)
+    api_key = args.api_key or os.environ.get(required_key_env, "")
+    if not api_key.strip():
+        print(f"[chatterbox] ERROR: Missing API key for {args.base_url}")
+        print(f"[chatterbox] Set {required_key_env} or pass --api-key.")
+        return 2
 
     print(f"[chatterbox] Project root: {project_root}")
 
