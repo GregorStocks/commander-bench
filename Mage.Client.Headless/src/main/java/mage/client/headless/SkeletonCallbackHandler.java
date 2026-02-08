@@ -280,6 +280,18 @@ public class SkeletonCallbackHandler {
             boolean isMyTurn = client.getUsername().equals(lastGameView.getActivePlayerName());
             boolean isMainPhase = lastGameView.getPhase() != null && lastGameView.getPhase().isMain();
             result.put("is_my_main_phase", isMyTurn && isMainPhase);
+
+            // Add player summary so LLM knows opponent names
+            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+            List<Map<String, Object>> players = new ArrayList<>();
+            for (PlayerView player : lastGameView.getPlayers()) {
+                Map<String, Object> playerInfo = new HashMap<>();
+                playerInfo.put("name", player.getName());
+                playerInfo.put("life", player.getLife());
+                playerInfo.put("is_you", player.getPlayerId().equals(myPlayerId));
+                players.add(playerInfo);
+            }
+            result.put("players", players);
         }
 
         ClientCallbackMethod method = action.getMethod();
