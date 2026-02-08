@@ -1707,20 +1707,26 @@ public class SkeletonCallbackHandler {
         Object data = callback.getData();
         if (data instanceof ChatMessage) {
             ChatMessage chatMsg = (ChatMessage) data;
-            // Only log GAME type messages to the game log
+            String logEntry = null;
             if (chatMsg.getMessageType() == ChatMessage.MessageType.GAME) {
-                String logEntry = chatMsg.getMessage();
-                if (logEntry != null && !logEntry.isEmpty()) {
-                    synchronized (gameLog) {
-                        if (gameLog.length() > 0) {
-                            gameLog.append("\n");
-                        }
-                        gameLog.append(logEntry);
+                logEntry = chatMsg.getMessage();
+            } else if (chatMsg.getMessageType() == ChatMessage.MessageType.TALK) {
+                // Include player chat so LLM pilots can see each other's messages
+                String user = chatMsg.getUsername();
+                String msg = chatMsg.getMessage();
+                if (user != null && msg != null && !msg.isEmpty()) {
+                    logEntry = "[Chat] " + user + ": " + msg;
+                }
+            }
+            if (logEntry != null && !logEntry.isEmpty()) {
+                synchronized (gameLog) {
+                    if (gameLog.length() > 0) {
+                        gameLog.append("\n");
                     }
-                    // Wake up anyone waiting for game events (e.g., auto_pass_until_event)
-                    synchronized (actionLock) {
-                        actionLock.notifyAll();
-                    }
+                    gameLog.append(logEntry);
+                }
+                synchronized (actionLock) {
+                    actionLock.notifyAll();
                 }
             }
             logger.debug("[" + client.getUsername() + "] Chat: " + chatMsg.getMessage());

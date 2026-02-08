@@ -315,9 +315,14 @@ async def run_pilot_loop(
             error_str = str(e)
             print(f"[pilot] LLM error: {e}")
 
-            # Credit exhaustion - fall back to auto-pass mode permanently
-            if "402" in error_str:
-                print("[pilot] Credits exhausted, switching to auto-pass mode")
+            # Permanent failures - fall back to auto-pass mode forever
+            if "402" in error_str or "404" in error_str:
+                reason = "Credits exhausted" if "402" in error_str else "Model not found"
+                print(f"[pilot] {reason}, switching to auto-pass mode")
+                try:
+                    await execute_tool(session, "send_chat_message", {"message": f"{reason}... going on autopilot. GG!"})
+                except Exception:
+                    pass
                 while True:
                     try:
                         await execute_tool(session, "auto_pass_until_event", {})

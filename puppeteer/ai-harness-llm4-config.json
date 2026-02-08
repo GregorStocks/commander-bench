@@ -1,8 +1,8 @@
 {
   "players": [
-    {"type": "pilot", "name": "Gemini", "deck": "random", "model": "google/gemini-2.0-flash-001"},
-    {"type": "pilot", "name": "GPT-mini", "deck": "random", "model": "openai/gpt-4o-mini"},
-    {"type": "pilot", "name": "Claude", "deck": "random", "model": "anthropic/claude-3.5-haiku"},
-    {"type": "pilot", "name": "Grok", "deck": "random", "model": "x-ai/grok-2-1212"}
+    {"type": "pilot", "name": "Gemini2Flash", "deck": "random", "model": "google/gemini-2.0-flash-001"},
+    {"type": "pilot", "name": "GPT-4o-mini", "deck": "random", "model": "openai/gpt-4o-mini"},
+    {"type": "pilot", "name": "Claude3Haiku", "deck": "random", "model": "anthropic/claude-3-haiku"},
+    {"type": "pilot", "name": "Grok41Fast", "deck": "random", "model": "x-ai/grok-4.1-fast"}
   ]
 }
