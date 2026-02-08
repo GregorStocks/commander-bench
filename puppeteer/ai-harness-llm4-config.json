@@ -1,0 +1,8 @@
+{
+  "players": [
+    {"type": "pilot", "name": "Gemini2Flash", "deck": "random", "model": "google/gemini-2.0-flash-001"},
+    {"type": "pilot", "name": "GPT-4o-mini", "deck": "random", "model": "openai/gpt-4o-mini"},
+    {"type": "pilot", "name": "Claude3Haiku", "deck": "random", "model": "anthropic/claude-3-haiku"},
+    {"type": "pilot", "name": "Grok41Fast", "deck": "random", "model": "x-ai/grok-4.1-fast"}
+  ]
+}

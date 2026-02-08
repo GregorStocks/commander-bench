@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,34 @@ from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
 DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+
+_OBSERVER_TABLE_READY = "AI Harness: waiting for"
+
+
+def _wait_for_observer_table(
+    log_path: Path, proc: subprocess.Popen, timeout: int = 300
+) -> None:
+    """Block until the observer log indicates the game table is ready.
+
+    The streaming/GUI client logs a line containing ``AI Harness: waiting
+    for … skeleton client(s)`` once it has created the table.  We poll the
+    log file for that marker so headless clients aren't started before the
+    table exists.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(
+                "Observer process exited before creating the game table"
+            )
+        if log_path.exists():
+            text = log_path.read_text()
+            if _OBSERVER_TABLE_READY in text:
+                return
+        time.sleep(2)
+    raise TimeoutError(
+        f"Observer did not create a table within {timeout}s — check {log_path}"
+    )
 
 
 def _required_api_key_env(base_url: str) -> str:
@@ -50,7 +79,6 @@ def bring_to_foreground_macos() -> None:
     if sys.platform != "darwin":
         return
 
-    import time
     time.sleep(2)  # Wait for window to appear
 
     subprocess.run(
@@ -555,8 +583,6 @@ def main() -> int:
 
         config.resolve_random_decks(project_root)
 
-        import time
-
         # Choose which observer client to start (streaming or regular GUI)
         if config.streaming:
             print("Starting streaming observer client...")
@@ -583,7 +609,11 @@ def main() -> int:
         bring_to_foreground_macos()
 
         if headless_count > 0:
-            time.sleep(config.skeleton_delay)
+            # Wait for observer to create the table before starting headless
+            # clients.  The observer logs a distinctive line once the table is
+            # ready to accept joins.  Polling for that line avoids a fixed
+            # delay that races against variable DB-init times.
+            _wait_for_observer_table(observer_log, observer_proc, timeout=300)
 
             # Start sleepwalker clients (MCP-based, Python controls skeleton)
             for player in config.sleepwalker_players:

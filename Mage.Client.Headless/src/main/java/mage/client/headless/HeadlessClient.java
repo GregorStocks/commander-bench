@@ -65,6 +65,15 @@ public class HeadlessClient {
             logger.info("Starting in SLEEPWALKER mode (MCP server on stdio)");
         }
 
+        // Log class file timestamp to verify build freshness
+        try {
+            java.net.URL classUrl = HeadlessClient.class.getResource("HeadlessClient.class");
+            if (classUrl != null && "file".equals(classUrl.getProtocol())) {
+                long mtime = new java.io.File(classUrl.toURI()).lastModified();
+                logger.info("Build: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(mtime)));
+            }
+        } catch (Exception ignored) {}
+
         logger.info("Starting headless client: " + username + "@" + server + ":" + port + " [" + personality + "]");
 
         SkeletonMageClient client = new SkeletonMageClient(username);

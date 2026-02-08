@@ -46,3 +46,8 @@ run-dumb:
 .PHONY: run-llm
 run-llm:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
+
+# 4-LLM mode: 4 different LLM pilots battle each other (consumes API tokens)
+.PHONY: run-llm4
+run-llm4:
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)

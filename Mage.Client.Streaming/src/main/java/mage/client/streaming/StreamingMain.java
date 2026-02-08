@@ -39,6 +39,13 @@ public class StreamingMain {
         // Same setup as MageFrame.main()
         System.setProperty("java.util.Arrays.useLegacyMergeSort", "true");
         LOGGER.info("Starting MAGE STREAMING CLIENT");
+        try {
+            java.net.URL classUrl = StreamingMain.class.getResource("StreamingMain.class");
+            if (classUrl != null && "file".equals(classUrl.getProtocol())) {
+                long mtime = new java.io.File(classUrl.toURI()).lastModified();
+                LOGGER.info("Build: " + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(mtime)));
+            }
+        } catch (Exception ignored) {}
         LOGGER.info("Java version: " + System.getProperty("java.version"));
         LOGGER.info("Logging level: " + LOGGER.getEffectiveLevel());
         LOGGER.info("Default charset: " + Charset.defaultCharset());
