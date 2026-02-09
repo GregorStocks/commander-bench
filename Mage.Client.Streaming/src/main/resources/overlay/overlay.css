@@ -177,7 +177,7 @@ body.video-overlay {
   color: #dff7fb;
   border-radius: 4px;
   font-size: 10px;
-  line-height: 1;
+  line-height: 1.15;
   padding: 2px 3px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -195,6 +195,15 @@ body.video-overlay {
 .position-card.small {
   font-size: 0;
   padding: 0;
+}
+
+.position-card.wrap-name {
+  white-space: normal;
+  word-break: break-word;
+  text-overflow: clip;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .hidden {

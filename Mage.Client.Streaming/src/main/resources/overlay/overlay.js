@@ -329,6 +329,11 @@
     return out;
   }
 
+  function computeCardFontSize(width, height) {
+    if (width < 42 || height < 16) return 0;
+    return Math.max(6, Math.min(11, Math.round(width / 9.5)));
+  }
+
   function renderPositionLayer(state) {
     if (!positionLayer) {
       return false;
@@ -377,10 +382,17 @@
 
       const hotspot = document.createElement("div");
       hotspot.className = "position-card" + (entry.card.tapped ? " tapped" : "");
-      if (width < 42 || height < 16) {
+      var fontSize = computeCardFontSize(width, height);
+      if (fontSize === 0) {
         hotspot.classList.add("small");
       } else {
+        hotspot.style.fontSize = fontSize + "px";
         hotspot.textContent = entry.card.name || "";
+        var linesAvailable = Math.floor((height - 4) / (fontSize * 1.15));
+        if (width < 80 && linesAvailable >= 2) {
+          hotspot.classList.add("wrap-name");
+          hotspot.style.webkitLineClamp = Math.min(linesAvailable, 3);
+        }
       }
 
       hotspot.style.left = x + "px";
