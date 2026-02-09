@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes twelve tools:
+ * Exposes eleven tools:
  * - is_action_on_me: Check if action is pending
  * - take_action: Execute default action
  * - wait_for_action: Block until action is pending (or timeout)
