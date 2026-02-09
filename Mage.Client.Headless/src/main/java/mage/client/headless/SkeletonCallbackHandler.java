@@ -175,7 +175,6 @@ public class SkeletonCallbackHandler {
         PendingAction action = pendingAction;
         if (action != null) {
             info.put("action_pending", true);
-            info.put("game_id", action.getGameId().toString());
             info.put("action_type", action.getMethod().name());
             info.put("message", action.getMessage());
         } else {
@@ -333,31 +332,40 @@ public class SkeletonCallbackHandler {
         result.put("action_type", action.getMethod().name());
         result.put("message", action.getMessage());
 
-        // Add phase context so the LLM knows when to cast aggressively
+        // Add compact phase context and player summary
         if (lastGameView != null) {
-            result.put("turn", roundTracker.update(lastGameView));
-            if (lastGameView.getPhase() != null) {
-                result.put("phase", lastGameView.getPhase().toString());
-            }
-            if (lastGameView.getStep() != null) {
-                result.put("step", lastGameView.getStep().toString());
-            }
-            result.put("active_player", lastGameView.getActivePlayerName());
+            int turn = roundTracker.update(lastGameView);
             boolean isMyTurn = client.getUsername().equals(lastGameView.getActivePlayerName());
             boolean isMainPhase = lastGameView.getPhase() != null && lastGameView.getPhase().isMain();
-            result.put("is_my_main_phase", isMyTurn && isMainPhase);
 
-            // Add player summary so LLM knows opponent names
-            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
-            List<Map<String, Object>> players = new ArrayList<>();
-            for (PlayerView player : lastGameView.getPlayers()) {
-                Map<String, Object> playerInfo = new HashMap<>();
-                playerInfo.put("name", player.getName());
-                playerInfo.put("life", player.getLife());
-                playerInfo.put("is_you", player.getPlayerId().equals(myPlayerId));
-                players.add(playerInfo);
+            StringBuilder ctx = new StringBuilder();
+            ctx.append("T").append(turn);
+            if (lastGameView.getPhase() != null) {
+                ctx.append(" ").append(lastGameView.getPhase());
             }
-            result.put("players", players);
+            if (lastGameView.getStep() != null) {
+                ctx.append("/").append(lastGameView.getStep());
+            }
+            ctx.append(" (").append(lastGameView.getActivePlayerName()).append(")");
+            if (isMyTurn && isMainPhase) {
+                ctx.append(" YOUR_MAIN");
+            }
+            result.put("context", ctx.toString());
+
+            // Compact player summary: "You(40), Opp1(38), Opp2(40)"
+            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+            StringBuilder playerSummary = new StringBuilder();
+            for (PlayerView player : lastGameView.getPlayers()) {
+                if (playerSummary.length() > 0) playerSummary.append(", ");
+                playerSummary.append(player.getName());
+                if (player.getPlayerId().equals(myPlayerId)) {
+                    playerSummary.append("(you,");
+                } else {
+                    playerSummary.append("(");
+                }
+                playerSummary.append(player.getLife()).append("hp)");
+            }
+            result.put("players", playerSummary.toString());
         }
 
         ClientCallbackMethod method = action.getMethod();
@@ -366,7 +374,6 @@ public class SkeletonCallbackHandler {
         switch (method) {
             case GAME_ASK: {
                 result.put("response_type", "boolean");
-                result.put("hint", "true = Yes, false = No");
                 lastChoices = null;
 
                 // For mulligan decisions, include hand contents so LLM can evaluate
@@ -500,12 +507,10 @@ public class SkeletonCallbackHandler {
 
                 if (!choiceList.isEmpty()) {
                     result.put("response_type", "select");
-                    result.put("hint", "Pick a card by index to play it, or answer: false to pass priority");
                     result.put("choices", choiceList);
                     lastChoices = indexToUuid;
                 } else {
                     result.put("response_type", "boolean");
-                    result.put("hint", "No playable cards. Answer false to pass priority.");
                     lastChoices = null;
                 }
                 break;
@@ -516,7 +521,6 @@ public class SkeletonCallbackHandler {
                 // Auto-tap couldn't find a source — show available mana sources to the LLM
                 GameClientMessage manaMsg = (GameClientMessage) data;
                 result.put("response_type", "select");
-                result.put("hint", "Choose a mana source to activate or a mana type from pool, or answer: false to cancel the spell.");
 
                 PlayableObjectsList manaPlayable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;
                 List<Map<String, Object>> manaChoiceList = new ArrayList<>();
@@ -763,7 +767,6 @@ public class SkeletonCallbackHandler {
         Object data = action.getData();
 
         result.put("success", true);
-        result.put("action_type", method.name());
 
         try {
             switch (method) {
@@ -1200,7 +1203,6 @@ public class SkeletonCallbackHandler {
                         Map<String, Object> result = new HashMap<>();
                         result.put("event_occurred", true);
                         result.put("new_log", changes);
-                        result.put("new_chars", changes.length());
                         result.put("actions_taken", actionsHandled);
                         return result;
                     }
@@ -1213,7 +1215,6 @@ public class SkeletonCallbackHandler {
                 Map<String, Object> result = new HashMap<>();
                 result.put("event_occurred", true);
                 result.put("new_log", getGameLogSince(startLogLength));
-                result.put("new_chars", currentLogLength - startLogLength);
                 result.put("actions_taken", actionsHandled);
                 return result;
             }
@@ -1240,7 +1241,6 @@ public class SkeletonCallbackHandler {
 
         result.put("event_occurred", !fullLog.isEmpty());
         result.put("new_log", fullLog);
-        result.put("new_chars", fullLog.length());
         result.put("actions_taken", actionsHandled);
         return result;
     }
@@ -1447,22 +1447,6 @@ public class SkeletonCallbackHandler {
                     permInfo.put("name", perm.getDisplayName());
                     permInfo.put("tapped", perm.isTapped());
 
-                    // Type line
-                    StringBuilder types = new StringBuilder();
-                    if (perm.getSuperTypes() != null) {
-                        for (Object st : perm.getSuperTypes()) {
-                            if (types.length() > 0) types.append(" ");
-                            types.append(st);
-                        }
-                    }
-                    if (perm.getCardTypes() != null) {
-                        for (Object ct : perm.getCardTypes()) {
-                            if (types.length() > 0) types.append(" ");
-                            types.append(ct);
-                        }
-                    }
-                    permInfo.put("types", types.toString());
-
                     // P/T for creatures
                     if (perm.isCreature()) {
                         permInfo.put("power", perm.getPower());
@@ -1488,10 +1472,28 @@ public class SkeletonCallbackHandler {
                         permInfo.put("summoning_sickness", true);
                     }
 
+                    // State-deviation flags: info the LLM can't infer from card name alone
+                    if (perm.isToken()) {
+                        permInfo.put("token", true);
+                        // Include rules for tokens since get_oracle_text can't look them up
+                        List<String> rules = perm.getRules();
+                        if (rules != null && !rules.isEmpty()) {
+                            permInfo.put("rules", rules);
+                        }
+                    }
+                    if (perm.isCopy()) {
+                        permInfo.put("copy", true);
+                    }
+                    if (perm.isMorphed() || perm.isManifested()) {
+                        permInfo.put("face_down", true);
+                    }
+
                     battlefield.add(permInfo);
                 }
             }
-            playerInfo.put("battlefield", battlefield);
+            if (!battlefield.isEmpty()) {
+                playerInfo.put("battlefield", battlefield);
+            }
 
             // Graveyard
             List<String> graveyard = new ArrayList<>();
@@ -1500,7 +1502,9 @@ public class SkeletonCallbackHandler {
                     graveyard.add(card.getDisplayName());
                 }
             }
-            playerInfo.put("graveyard", graveyard);
+            if (!graveyard.isEmpty()) {
+                playerInfo.put("graveyard", graveyard);
+            }
 
             // Player counters (poison, etc.)
             if (player.getCounters() != null && !player.getCounters().isEmpty()) {
@@ -1569,21 +1573,37 @@ public class SkeletonCallbackHandler {
         return result;
     }
 
-    public Map<String, Object> getOracleText(String cardName, String objectId) {
+    public Map<String, Object> getOracleText(String cardName, String objectId, String[] cardNames) {
         Map<String, Object> result = new HashMap<>();
 
         boolean hasCardName = cardName != null && !cardName.isEmpty();
         boolean hasObjectId = objectId != null && !objectId.isEmpty();
+        boolean hasCardNames = cardNames != null && cardNames.length > 0;
 
-        // Validate mutually exclusive parameters
-        if (hasCardName && hasObjectId) {
+        // Validate: exactly one parameter type should be provided
+        int providedCount = (hasCardName ? 1 : 0) + (hasObjectId ? 1 : 0) + (hasCardNames ? 1 : 0);
+        if (providedCount != 1) {
             result.put("success", false);
-            result.put("error", "Provide either card_name or object_id, not both");
+            result.put("error", "Provide exactly one of: card_name, object_id, or card_names");
             return result;
         }
-        if (!hasCardName && !hasObjectId) {
-            result.put("success", false);
-            result.put("error", "Either card_name or object_id must be provided");
+
+        // Batch lookup by card names
+        if (hasCardNames) {
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (String name : cardNames) {
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("name", name);
+                CardInfo cardInfo = CardRepository.instance.findCard(name);
+                if (cardInfo != null) {
+                    entry.put("rules", cardInfo.getRules());
+                } else {
+                    entry.put("error", "not found");
+                }
+                results.add(entry);
+            }
+            result.put("success", true);
+            result.put("cards", results);
             return result;
         }
 
@@ -1594,10 +1614,8 @@ public class SkeletonCallbackHandler {
                 CardView cardView = findCardViewById(uuid);
                 if (cardView != null) {
                     result.put("success", true);
-                    result.put("source", "game");
                     result.put("name", cardView.getDisplayName());
                     result.put("rules", cardView.getRules());
-                    result.put("object_id", objectId);
                     return result;
                 } else {
                     result.put("success", false);
@@ -1615,11 +1633,8 @@ public class SkeletonCallbackHandler {
         CardInfo cardInfo = CardRepository.instance.findCard(cardName);
         if (cardInfo != null) {
             result.put("success", true);
-            result.put("source", "database");
             result.put("name", cardInfo.getName());
             result.put("rules", cardInfo.getRules());
-            result.put("set_code", cardInfo.getSetCode());
-            result.put("card_number", cardInfo.getCardNumber());
             return result;
         } else {
             result.put("success", false);

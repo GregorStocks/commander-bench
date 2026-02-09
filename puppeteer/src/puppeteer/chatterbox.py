@@ -153,9 +153,9 @@ async def run_llm_loop(
                     elif fn.name == "auto_pass_until_event":
                         result_data = json.loads(result_text)
                         actions = result_data.get("actions_taken", 0)
-                        new_chars = result_data.get("new_chars", 0)
+                        new_log = result_data.get("new_log", "")
                         event = result_data.get("event_occurred", False)
-                        _log(f"[chatterbox] Auto-pass: {actions} actions, {new_chars} new chars, event={event}")
+                        _log(f"[chatterbox] Auto-pass: {actions} actions, {len(new_log)} new chars, event={event}")
 
                     messages.append({
                         "role": "tool",
