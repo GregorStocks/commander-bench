@@ -877,13 +877,14 @@ public class SkeletonCallbackHandler {
                 case GAME_SELECT:
                     // Support both index (play a card) and answer (pass priority)
                     if (index != null) {
-                        if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                        List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                        if (choices == null || index < 0 || index >= choices.size()) {
                             result.put("success", false);
                             result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                             pendingAction = action;
                             return result;
                         }
-                        session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
+                        session.sendPlayerUUID(gameId, (UUID) choices.get(index));
                         result.put("action_taken", "play_card_" + index);
                     } else if (answer != null) {
                         session.sendPlayerBoolean(gameId, answer);
@@ -900,13 +901,14 @@ public class SkeletonCallbackHandler {
                 case GAME_PLAY_XMANA:
                     // index = tap a mana source OR spend a mana type from pool, answer=false = cancel
                     if (index != null) {
-                        if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                        List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                        if (choices == null || index < 0 || index >= choices.size()) {
                             result.put("success", false);
                             result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                             pendingAction = action;
                             return result;
                         }
-                        Object manaChoice = lastChoices.get(index);
+                        Object manaChoice = choices.get(index);
                         if (manaChoice instanceof UUID) {
                             session.sendPlayerUUID(gameId, (UUID) manaChoice);
                             result.put("action_taken", "tapped_mana_" + index);
@@ -967,13 +969,14 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                    List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                    if (choices == null || index < 0 || index >= choices.size()) {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
+                    session.sendPlayerUUID(gameId, (UUID) choices.get(index));
                     result.put("action_taken", "selected_target_" + index);
                     break;
 
@@ -984,13 +987,14 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                    choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                    if (choices == null || index < 0 || index >= choices.size()) {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerUUID(gameId, (UUID) lastChoices.get(index));
+                    session.sendPlayerUUID(gameId, (UUID) choices.get(index));
                     result.put("action_taken", "selected_ability_" + index);
                     break;
 
@@ -1001,13 +1005,14 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    if (lastChoices == null || index < 0 || index >= lastChoices.size()) {
+                    choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                    if (choices == null || index < 0 || index >= choices.size()) {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerString(gameId, (String) lastChoices.get(index));
+                    session.sendPlayerString(gameId, (String) choices.get(index));
                     result.put("action_taken", "selected_choice_" + index);
                     break;
 
