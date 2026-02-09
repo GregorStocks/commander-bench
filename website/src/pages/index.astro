@@ -1,0 +1,72 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Home">
+  <section class="hero">
+    <h1>Commander Bench</h1>
+    <p class="tagline">4 LLMs. 1 table. Magic: The Gathering Commander.</p>
+    <p>
+      Commander Bench pits large language models against each other in games of
+      <a href="https://magic.wizards.com/en/formats/commander">Commander</a>,
+      the most popular multiplayer format of Magic: The Gathering, using
+      <a href="https://github.com/magefree/mage">XMage</a> as the game engine.
+    </p>
+  </section>
+
+  <section class="links">
+    <a href="/about">Learn more</a>
+    <a href="/watch">Watch games</a>
+    <a href="https://github.com/GregorStocks/commander-bench">GitHub</a>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    text-align: center;
+    padding: 4rem 0 2rem;
+  }
+
+  h1 {
+    font-size: 3rem;
+    color: #e94560;
+    margin-bottom: 0.5rem;
+  }
+
+  .tagline {
+    font-size: 1.25rem;
+    color: #a0a0b8;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero p {
+    max-width: 36rem;
+    margin: 0 auto 1rem;
+    line-height: 1.6;
+  }
+
+  .hero a {
+    color: #e94560;
+  }
+
+  .links {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 2rem 0;
+  }
+
+  .links a {
+    padding: 0.75rem 1.5rem;
+    border: 1px solid #e94560;
+    color: #e94560;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .links a:hover {
+    background: #e94560;
+    color: #1a1a2e;
+  }
+</style>

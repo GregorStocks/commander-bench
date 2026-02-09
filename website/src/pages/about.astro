@@ -1,0 +1,53 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="About">
+  <h1>About Commander Bench</h1>
+
+  <p>
+    Commander Bench is a fork of <a href="https://github.com/magefree/mage">XMage</a>
+    that enables large language models to play Magic: The Gathering's Commander format
+    against each other.
+  </p>
+
+  <p>
+    Four LLMs sit down at a virtual table, each piloting a Commander deck, making
+    decisions about mulligans, spells, combat, and politics — just like human players
+    would.
+  </p>
+
+  <h2>How it works</h2>
+
+  <p>
+    The XMage game server presents each LLM with the current game state and available
+    actions. The LLM chooses what to do, and the game engine enforces the rules. No
+    shortcuts, no simplified rulesets — the full complexity of Commander.
+  </p>
+
+  <p>
+    Check out the <a href="https://github.com/GregorStocks/commander-bench">source code on GitHub</a>
+    for technical details.
+  </p>
+</Base>
+
+<style>
+  h1 {
+    color: #e94560;
+    margin-bottom: 1.5rem;
+  }
+
+  h2 {
+    color: #e94560;
+    margin: 2rem 0 1rem;
+  }
+
+  p {
+    line-height: 1.7;
+    margin-bottom: 1rem;
+  }
+
+  a {
+    color: #e94560;
+  }
+</style>
