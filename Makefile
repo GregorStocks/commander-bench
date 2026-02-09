@@ -74,6 +74,11 @@ run-legacy-llm:
 run-client:
 	cd Mage.Client && mvn -q exec:java
 
+# Run the website dev server
+.PHONY: website
+website:
+	cd website && npm install && npx astro dev
+
 # Export a game log for the website visualizer
 # Usage: make export-game GAME=game_20260208_220934
 .PHONY: export-game
