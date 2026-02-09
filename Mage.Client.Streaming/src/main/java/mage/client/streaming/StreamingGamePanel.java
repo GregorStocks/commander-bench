@@ -186,6 +186,7 @@ public class StreamingGamePanel extends GamePanel {
         adjustBattlefieldCardSizes();
         super.init(messageId, game, callGameUpdateAfterInit);
         this.lastGame = game;
+        roundTracker.update(game);
         // Hide the central hand container (we show hands in play areas instead)
         hideHandContainer();
         requestHandPermissions(game);
@@ -202,6 +203,7 @@ public class StreamingGamePanel extends GamePanel {
         super.updateGame(messageId, game);
         restoreDeadPlayerPanelSizes();
         this.lastGame = game;
+        roundTracker.update(game);
         // Schedule auto-dismissal of any popup dialogs created by the parent
         schedulePopupDismissal();
         // Hide the central hand container (we show hands in play areas instead)
@@ -1442,7 +1444,7 @@ public class StreamingGamePanel extends GamePanel {
         }
         // Build a compact key for deduplication
         StringBuilder keyBuilder = new StringBuilder();
-        keyBuilder.append(roundTracker.update(game)).append("|");
+        keyBuilder.append(roundTracker.getGameRound()).append("|");
         keyBuilder.append(game.getPhase()).append("|");
         keyBuilder.append(game.getStep()).append("|");
         for (PlayerView p : game.getPlayers()) {
@@ -1671,7 +1673,7 @@ public class StreamingGamePanel extends GamePanel {
         root.addProperty("status", "live");
         root.addProperty("updatedAt", Instant.now().toString());
         root.addProperty("gameId", streamingGameId != null ? streamingGameId.toString() : "");
-        root.addProperty("turn", roundTracker.update(game));
+        root.addProperty("turn", roundTracker.getGameRound());
         root.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
         root.addProperty("step", game.getStep() != null ? game.getStep().name() : "");
         root.addProperty("activePlayer", safe(game.getActivePlayerName()));

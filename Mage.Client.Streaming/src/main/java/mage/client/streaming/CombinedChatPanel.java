@@ -80,7 +80,7 @@ public class CombinedChatPanel extends ChatPanelBasic {
             if (playerChatPanel != null) {
                 playerChatPanel.receiveMessage(username, message, time, turnInfo, messageType, color);
             }
-            if (gamePanel != null) {
+            if (gamePanel != null && message != null && !message.isEmpty()) {
                 gamePanel.logChatEvent("player_chat", message, username);
             }
             return;

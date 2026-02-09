@@ -505,7 +505,7 @@ async def run_pilot(
     finally:
         if game_log:
             game_log.emit("game_end",
-                          total_cost_usd=round(0.0, 6))  # final cost written by loop
+                          total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
             game_log.close()
 
 
