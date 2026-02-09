@@ -285,6 +285,67 @@ const { slug } = Astro.params;
     font-style: italic;
   }
 
+  /* Battlefield card thumbnails */
+  .cards-grid {
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .card-thumb {
+    position: relative;
+    width: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(150, 195, 205, 0.2);
+    transition: border-color 0.15s;
+    cursor: default;
+    flex-shrink: 0;
+  }
+
+  .card-thumb:hover {
+    border-color: #e94560;
+    z-index: 1;
+  }
+
+  .card-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 3px;
+  }
+
+  .card-thumb.tapped {
+    transform: rotate(90deg);
+    margin: 12px 12px;
+  }
+
+  .card-thumb-pt {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #a8d9a5;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 1.2;
+  }
+
+  .card-thumb-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 146 / 204;
+    background: rgba(44, 64, 72, 0.8);
+    color: #e0e0e0;
+    font-size: 0.5rem;
+    text-align: center;
+    padding: 4px;
+    word-break: break-word;
+  }
+
   /* Section titles */
   .section-title {
     font-size: 0.75rem;
@@ -502,7 +563,42 @@ const { slug } = Astro.params;
       return chip;
     }
 
-    function makeZone(title, cards, cardImages, countOverride) {
+    function makeCardThumbnail(cardName, cardObj, cardImages, isTapped) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "card-thumb" + (isTapped ? " tapped" : "");
+
+      const img = document.createElement("img");
+      img.src = scryfallUrl(cardName, cardImages, "small");
+      img.alt = cardName;
+      img.loading = "lazy";
+      img.draggable = false;
+
+      img.addEventListener("error", function () {
+        img.style.display = "none";
+        const fallback = document.createElement("span");
+        fallback.className = "card-thumb-fallback";
+        fallback.textContent = cardName;
+        wrapper.appendChild(fallback);
+      });
+
+      wrapper.appendChild(img);
+
+      if (cardObj && (cardObj.power || cardObj.toughness)) {
+        const pt = document.createElement("span");
+        pt.className = "card-thumb-pt";
+        pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+        wrapper.appendChild(pt);
+      }
+
+      wrapper.addEventListener("mouseenter", function () {
+        showPreview(cardName, cardObj, cardImages);
+      });
+      wrapper.addEventListener("mouseleave", hidePreview);
+
+      return wrapper;
+    }
+
+    function makeZone(title, cards, cardImages, countOverride, useThumbnails) {
       const zone = document.createElement("div");
       zone.className = "zone";
 
@@ -513,7 +609,7 @@ const { slug } = Astro.params;
       zone.appendChild(titleEl);
 
       const row = document.createElement("div");
-      row.className = "cards-row";
+      row.className = useThumbnails ? "cards-row cards-grid" : "cards-row";
       zone.appendChild(row);
 
       if (!cards || cards.length === 0) {
@@ -539,7 +635,11 @@ const { slug } = Astro.params;
           obj = card;
           tapped = !!card.tapped;
         }
-        row.appendChild(makeCardChip(name, obj, cardImages, tapped));
+        if (useThumbnails) {
+          row.appendChild(makeCardThumbnail(name, obj, cardImages, tapped));
+        } else {
+          row.appendChild(makeCardChip(name, obj, cardImages, tapped));
+        }
       });
 
       return zone;
@@ -593,7 +693,7 @@ const { slug } = Astro.params;
 
         // Zones
         card.appendChild(makeZone("Commander", player.commanders, game.cardImages));
-        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages));
+        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages, null, true));
         card.appendChild(makeZone("Hand", player.hand, game.cardImages, player.hand_count));
         card.appendChild(makeZone("Graveyard", player.graveyard, game.cardImages));
         if (player.exile && player.exile.length > 0) {
