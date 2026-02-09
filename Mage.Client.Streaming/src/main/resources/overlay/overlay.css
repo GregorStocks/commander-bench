@@ -189,6 +189,7 @@ body.video-overlay {
 .position-card.tapped {
   border-style: dashed;
   opacity: 0.8;
+  transform: rotate(90deg);
 }
 
 .position-card.small {
