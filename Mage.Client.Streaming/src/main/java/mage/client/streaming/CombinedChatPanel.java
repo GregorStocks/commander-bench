@@ -16,6 +16,7 @@ public class CombinedChatPanel extends ChatPanelBasic {
 
     private ChatPanelBasic playerChatPanel;
     private RoundTracker roundTracker;
+    private StreamingGamePanel gamePanel;
 
     public CombinedChatPanel() {
         super();
@@ -30,6 +31,10 @@ public class CombinedChatPanel extends ChatPanelBasic {
 
     public void setRoundTracker(RoundTracker tracker) {
         this.roundTracker = tracker;
+    }
+
+    public void setGamePanel(StreamingGamePanel panel) {
+        this.gamePanel = panel;
     }
 
     // Pattern to match "T<number>" at the start of turnInfo (e.g. "T5" or "T5.1")
@@ -75,7 +80,15 @@ public class CombinedChatPanel extends ChatPanelBasic {
             if (playerChatPanel != null) {
                 playerChatPanel.receiveMessage(username, message, time, turnInfo, messageType, color);
             }
+            if (gamePanel != null && message != null && !message.isEmpty()) {
+                gamePanel.logChatEvent("player_chat", message, username);
+            }
             return;
+        }
+
+        // Log to JSONL (all messages, before spam filtering)
+        if (gamePanel != null && message != null && !message.isEmpty()) {
+            gamePanel.logChatEvent("game_action", message, null);
         }
 
         // Game log messages stay here, with spam filtering

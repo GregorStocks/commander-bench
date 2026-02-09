@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
 
+from puppeteer.game_log import GameLogWriter
 from puppeteer.llm_cost import (
     DEFAULT_BASE_URL,
     get_model_price,
@@ -136,6 +138,7 @@ async def run_pilot_loop(
     username: str = "",
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
+    game_log: GameLogWriter | None = None,
 ) -> None:
     """Run the LLM-driven game-playing loop."""
     messages = [
@@ -178,12 +181,31 @@ async def run_pilot_loop(
             choice = response.choices[0]
 
             # Track token usage and cost
+            call_cost = 0.0
             if response.usage and model_price is not None:
                 input_cost = (response.usage.prompt_tokens or 0) * model_price[0] / 1_000_000
                 output_cost = (response.usage.completion_tokens or 0) * model_price[1] / 1_000_000
-                cumulative_cost += input_cost + output_cost
+                call_cost = input_cost + output_cost
+                cumulative_cost += call_cost
                 if game_dir:
                     write_cost_file(game_dir, username, cumulative_cost)
+
+            # Log LLM response to JSONL
+            if game_log:
+                llm_event = {"reasoning": choice.message.content or ""}
+                if choice.message.tool_calls:
+                    llm_event["tool_calls"] = [
+                        {"name": tc.function.name, "arguments": tc.function.arguments}
+                        for tc in choice.message.tool_calls
+                    ]
+                if response.usage:
+                    llm_event["usage"] = {
+                        "prompt_tokens": response.usage.prompt_tokens or 0,
+                        "completion_tokens": response.usage.completion_tokens or 0,
+                    }
+                llm_event["cost_usd"] = round(call_cost, 6)
+                llm_event["cumulative_cost_usd"] = round(cumulative_cost, 6)
+                game_log.emit("llm_response", **llm_event)
 
             turns_without_progress += 1
 
@@ -191,6 +213,8 @@ async def run_pilot_loop(
             # until something interesting happens (new turn, new cards, etc.)
             if turns_without_progress >= MAX_TURNS_WITHOUT_PROGRESS:
                 _log_error(game_dir, username, f"[pilot] Stalled: {turns_without_progress} turns without progress, auto-passing until next event")
+                if game_log:
+                    game_log.emit("stall", turns_without_progress=turns_without_progress)
                 try:
                     await execute_tool(session, "send_chat_message", {"message": "Brain freeze! Auto-passing until next turn..."})
                 except Exception:
@@ -242,7 +266,18 @@ async def run_pilot_loop(
                     args = json.loads(fn.arguments) if fn.arguments else {}
                     _log(f"[pilot] Tool: {fn.name}({json.dumps(args, separators=(',', ':'))})")
 
+                    tool_start = time.monotonic()
                     result_text = await execute_tool(session, fn.name, args)
+                    tool_latency_ms = int((time.monotonic() - tool_start) * 1000)
+
+                    # Log tool call to JSONL
+                    if game_log:
+                        game_log.emit("tool_call",
+                                      call_id=tool_call.id,
+                                      tool=fn.name,
+                                      arguments=args,
+                                      result=result_text[:2000],
+                                      latency_ms=tool_latency_ms)
 
                     # Log interesting results
                     if fn.name == "choose_action":
@@ -294,6 +329,8 @@ async def run_pilot_loop(
                     _log_error(game_dir, username, f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]")
                     if empty_responses >= 10:
                         _log_error(game_dir, username, "[pilot] LLM appears degraded (no tools or text), switching to auto-pass mode")
+                        if game_log:
+                            game_log.emit("auto_pilot_mode", reason="LLM degraded (10+ empty responses)")
                         try:
                             await execute_tool(session, "send_chat_message", {"message": "My brain is fried... going on autopilot for the rest of this game. GG!"})
                         except Exception:
@@ -314,6 +351,8 @@ async def run_pilot_loop(
             # a generous limit to avoid constant trimming that degrades LLM reasoning.
             if len(messages) > 120:
                 _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~82 messages")
+                if game_log:
+                    game_log.emit("context_trim", messages_before=len(messages), messages_after=82)
                 messages = (
                     [messages[0]]
                     + [{"role": "user", "content": "Continue playing. Use pass_priority to skip ahead, then get_action_choices before choose_action. All cards listed are playable right now. Play cards with index=N, pass with answer=false."}]
@@ -323,6 +362,8 @@ async def run_pilot_loop(
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
             _log_error(game_dir, username, f"[pilot] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            if game_log:
+                game_log.emit("llm_error", error_type="timeout", error_message=f"Timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
             try:
                 await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
             except Exception:
@@ -330,6 +371,8 @@ async def run_pilot_loop(
 
             if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
                 _log("[pilot] Repeated LLM timeouts, resetting conversation context")
+                if game_log:
+                    game_log.emit("context_reset", reason="repeated_timeouts")
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "Continue playing. Call wait_for_action."},
@@ -340,11 +383,15 @@ async def run_pilot_loop(
             consecutive_timeouts = 0
             error_str = str(e)
             _log_error(game_dir, username, f"[pilot] LLM error: {e}")
+            if game_log:
+                game_log.emit("llm_error", error_type=type(e).__name__, error_message=error_str[:500])
 
             # Permanent failures - fall back to auto-pass mode forever
             if "402" in error_str or "404" in error_str:
                 reason = "Credits exhausted" if "402" in error_str else "Model not found"
                 _log_error(game_dir, username, f"[pilot] {reason}, switching to auto-pass mode")
+                if game_log:
+                    game_log.emit("auto_pilot_mode", reason=reason)
                 try:
                     await execute_tool(session, "send_chat_message", {"message": f"{reason}... going on autopilot. GG!"})
                 except Exception:
@@ -418,6 +465,7 @@ async def run_pilot(
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
     if game_dir:
         mvn_args.append(f"-Dxmage.headless.errorlog={game_dir / f'{username}_errors.log'}")
+        mvn_args.append(f"-Dxmage.headless.skeletonlog={game_dir / f'{username}_skeleton.jsonl'}")
     mvn_args.append("exec:java")
 
     server_params = StdioServerParameters(
@@ -429,18 +477,36 @@ async def run_pilot(
 
     _log("[pilot] Spawning skeleton client...")
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            result = await session.initialize()
-            _log(f"[pilot] MCP initialized: {result.serverInfo}")
+    game_log = None
+    if game_dir:
+        game_log = GameLogWriter(game_dir, username)
 
-            tools_result = await session.list_tools()
-            openai_tools = mcp_tools_to_openai(tools_result.tools)
-            _log(f"[pilot] Available tools: {[t['function']['name'] for t in openai_tools]}")
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                result = await session.initialize()
+                _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
-            _log("[pilot] Starting game-playing loop...")
-            await run_pilot_loop(session, llm_client, model, system_prompt, openai_tools,
-                                username=username, game_dir=game_dir, prices=prices)
+                tools_result = await session.list_tools()
+                openai_tools = mcp_tools_to_openai(tools_result.tools)
+                tool_names = [t['function']['name'] for t in openai_tools]
+                _log(f"[pilot] Available tools: {tool_names}")
+
+                if game_log:
+                    game_log.emit("game_start",
+                                  model=model,
+                                  system_prompt=system_prompt[:500],
+                                  available_tools=tool_names,
+                                  deck_path=str(deck_path) if deck_path else None)
+
+                _log("[pilot] Starting game-playing loop...")
+                await run_pilot_loop(session, llm_client, model, system_prompt, openai_tools,
+                                    username=username, game_dir=game_dir, prices=prices, game_log=game_log)
+    finally:
+        if game_log:
+            game_log.emit("game_end",
+                          total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
+            game_log.close()
 
 
 def main() -> int:

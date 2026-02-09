@@ -109,6 +109,10 @@ public class HeadlessClient {
         if (errorLogPath != null && !errorLogPath.isEmpty()) {
             callbackHandler.setErrorLogPath(errorLogPath);
         }
+        String skeletonLogPath = System.getProperty("xmage.headless.skeletonlog");
+        if (skeletonLogPath != null && !skeletonLogPath.isEmpty()) {
+            callbackHandler.setSkeletonLogPath(skeletonLogPath);
+        }
 
         Connection connection = new Connection();
         connection.setHost(server);
