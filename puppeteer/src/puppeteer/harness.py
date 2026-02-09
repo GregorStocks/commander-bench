@@ -274,6 +274,7 @@ def start_gui_client(
 
     jvm_args = " ".join([
         config.jvm_opens,
+        config.jvm_rendering,
         "-Dxmage.aiHarness.autoConnect=true",
         "-Dxmage.aiHarness.autoStart=true",
         "-Dxmage.aiHarness.disableWhatsNew=true",
@@ -516,6 +517,7 @@ def start_streaming_client(
 
     jvm_args_list = [
         config.jvm_opens,
+        config.jvm_rendering,
         "-Dxmage.aiHarness.autoConnect=true",
         "-Dxmage.aiHarness.autoStart=true",
         "-Dxmage.aiHarness.disableWhatsNew=true",

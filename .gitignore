@@ -17,6 +17,7 @@ syntax: glob
 # Mage.Client
 Mage.Client/plugins/images
 Mage.Client/plugins/plugin.data
+Mage.Client/plugins/*.jar
 # TODO: must save serverlist.txt to temporary files, not root folder
 Mage.Client/serverlist.txt
 
