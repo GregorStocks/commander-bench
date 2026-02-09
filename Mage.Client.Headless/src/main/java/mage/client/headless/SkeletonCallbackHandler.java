@@ -59,6 +59,7 @@ public class SkeletonCallbackHandler {
 
     private static final Logger logger = Logger.getLogger(SkeletonCallbackHandler.class);
     private static final int DEFAULT_ACTION_DELAY_MS = 500;
+    private static final int MAX_GAME_LOG_CHARS = 5 * 1024 * 1024; // 5MB cap on in-memory game log buffer
 
     // Regex patterns to detect colored mana symbols inside braces, including hybrid/phyrexian variants.
     // Same approach as ManaUtil.java — \x7b = {, \x7d = }, .{0,2} allows up to 2 chars on each side.
@@ -84,6 +85,7 @@ public class SkeletonCallbackHandler {
     private volatile PendingAction pendingAction = null;
     private final Object actionLock = new Object(); // For wait_for_action blocking
     private final StringBuilder gameLog = new StringBuilder();
+    private int gameLogTrimmedChars = 0; // tracks chars trimmed from front so offset-based access stays valid
     private volatile UUID currentGameId = null;
     private volatile GameView lastGameView = null;
     private final RoundTracker roundTracker = new RoundTracker();
@@ -246,6 +248,7 @@ public class SkeletonCallbackHandler {
         lastChoices = null;
         synchronized (gameLog) {
             gameLog.setLength(0);
+            gameLogTrimmedChars = 0;
         }
     }
 
@@ -416,6 +419,7 @@ public class SkeletonCallbackHandler {
     public Map<String, Object> getActionChoices() {
         Map<String, Object> result = new HashMap<>();
         PendingAction action = pendingAction;
+        GameView gameView = lastGameView; // snapshot volatile to prevent TOCTOU race
 
         if (action == null) {
             result.put("action_pending", false);
@@ -427,20 +431,20 @@ public class SkeletonCallbackHandler {
         result.put("message", action.getMessage());
 
         // Add compact phase context and player summary
-        if (lastGameView != null) {
-            int turn = roundTracker.update(lastGameView);
-            boolean isMyTurn = client.getUsername().equals(lastGameView.getActivePlayerName());
-            boolean isMainPhase = lastGameView.getPhase() != null && lastGameView.getPhase().isMain();
+        if (gameView != null) {
+            int turn = roundTracker.update(gameView);
+            boolean isMyTurn = client.getUsername().equals(gameView.getActivePlayerName());
+            boolean isMainPhase = gameView.getPhase() != null && gameView.getPhase().isMain();
 
             StringBuilder ctx = new StringBuilder();
             ctx.append("T").append(turn);
-            if (lastGameView.getPhase() != null) {
-                ctx.append(" ").append(lastGameView.getPhase());
+            if (gameView.getPhase() != null) {
+                ctx.append(" ").append(gameView.getPhase());
             }
-            if (lastGameView.getStep() != null) {
-                ctx.append("/").append(lastGameView.getStep());
+            if (gameView.getStep() != null) {
+                ctx.append("/").append(gameView.getStep());
             }
-            ctx.append(" (").append(lastGameView.getActivePlayerName()).append(")");
+            ctx.append(" (").append(gameView.getActivePlayerName()).append(")");
             if (isMyTurn && isMainPhase) {
                 ctx.append(" YOUR_MAIN");
             }
@@ -450,7 +454,7 @@ public class SkeletonCallbackHandler {
             UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
             UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
             StringBuilder playerSummary = new StringBuilder();
-            for (PlayerView player : lastGameView.getPlayers()) {
+            for (PlayerView player : gameView.getPlayers()) {
                 if (playerSummary.length() > 0) playerSummary.append(", ");
                 playerSummary.append(player.getName());
                 if (player.getPlayerId().equals(myPlayerId)) {
@@ -473,8 +477,8 @@ public class SkeletonCallbackHandler {
 
                 // For mulligan decisions, include hand contents so LLM can evaluate
                 String askMsg = action.getMessage();
-                if (askMsg != null && askMsg.toLowerCase().contains("mulligan") && lastGameView != null) {
-                    CardsView hand = lastGameView.getMyHand();
+                if (askMsg != null && askMsg.toLowerCase().contains("mulligan") && gameView != null) {
+                    CardsView hand = gameView.getMyHand();
                     if (hand != null && !hand.isEmpty()) {
                         List<Map<String, Object>> handCards = new ArrayList<>();
                         for (CardView card : hand.values()) {
@@ -509,14 +513,14 @@ public class SkeletonCallbackHandler {
 
             case GAME_SELECT: {
                 // Check for playable cards in the current game view
-                PlayableObjectsList playable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;
+                PlayableObjectsList playable = gameView != null ? gameView.getCanPlayObjects() : null;
                 List<Map<String, Object>> choiceList = new ArrayList<>();
                 List<Object> indexToUuid = new ArrayList<>();
 
                 if (playable != null && !playable.isEmpty()) {
                     // Clear failed casts on turn change
-                    if (lastGameView != null) {
-                        int turn = lastGameView.getTurn();
+                    if (gameView != null) {
+                        int turn = gameView.getTurn();
                         if (turn != lastTurnNumber) {
                             lastTurnNumber = turn;
                             failedManaCasts.clear();
@@ -550,8 +554,8 @@ public class SkeletonCallbackHandler {
                         if (cardView == null) {
                             // not found in hand/stack, check battlefield directly
                             isOnBattlefield = true;
-                        } else if (lastGameView.getMyHand().get(objectId) == null
-                                   && lastGameView.getStack().get(objectId) == null) {
+                        } else if (gameView.getMyHand().get(objectId) == null
+                                   && gameView.getStack().get(objectId) == null) {
                             isOnBattlefield = true;
                         }
 
@@ -617,7 +621,7 @@ public class SkeletonCallbackHandler {
                 GameClientMessage manaMsg = (GameClientMessage) data;
                 result.put("response_type", "select");
 
-                PlayableObjectsList manaPlayable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;
+                PlayableObjectsList manaPlayable = gameView != null ? gameView.getCanPlayObjects() : null;
                 List<Map<String, Object>> manaChoiceList = new ArrayList<>();
                 List<Object> manaIndexToChoice = new ArrayList<>();
                 UUID payingForId = extractPayingForId(manaMsg.getMessage());
@@ -656,10 +660,10 @@ public class SkeletonCallbackHandler {
                     }
                 }
 
-                List<ManaType> poolChoices = getPoolManaChoices(lastGameView, manaMsg.getMessage());
+                List<ManaType> poolChoices = getPoolManaChoices(gameView, manaMsg.getMessage());
                 if (!poolChoices.isEmpty()) {
                     int idx = manaChoiceList.size();
-                    ManaPoolView manaPool = getMyManaPoolView(lastGameView);
+                    ManaPoolView manaPool = getMyManaPoolView(gameView);
                     for (ManaType manaType : poolChoices) {
                         Map<String, Object> choiceEntry = new HashMap<>();
                         choiceEntry.put("index", idx);
@@ -1130,7 +1134,7 @@ public class SkeletonCallbackHandler {
 
     public int getGameLogLength() {
         synchronized (gameLog) {
-            return gameLog.length();
+            return gameLog.length() + gameLogTrimmedChars;
         }
     }
 
@@ -1468,8 +1472,12 @@ public class SkeletonCallbackHandler {
 
     private String getGameLogSince(int offset) {
         synchronized (gameLog) {
-            if (offset >= gameLog.length()) return "";
-            return gameLog.substring(offset);
+            int adjustedOffset = offset - gameLogTrimmedChars;
+            if (adjustedOffset >= gameLog.length()) return "";
+            // If the caller's reference point was trimmed away, return from the
+            // start of the current buffer (oldest surviving entry).
+            if (adjustedOffset < 0) adjustedOffset = 0;
+            return gameLog.substring(adjustedOffset);
         }
     }
 
@@ -2004,6 +2012,19 @@ public class SkeletonCallbackHandler {
                         gameLog.append("\n");
                     }
                     gameLog.append(logEntry);
+                    // Cap buffer size to prevent unbounded heap growth in long games
+                    if (gameLog.length() > MAX_GAME_LOG_CHARS) {
+                        int excess = gameLog.length() - MAX_GAME_LOG_CHARS;
+                        // Trim from front at a newline boundary to avoid cutting mid-line
+                        int trimTo = gameLog.indexOf("\n", excess);
+                        if (trimTo > 0) {
+                            trimTo++; // include the newline itself
+                        } else {
+                            trimTo = excess;
+                        }
+                        gameLog.delete(0, trimTo);
+                        gameLogTrimmedChars += trimTo;
+                    }
                 }
                 synchronized (actionLock) {
                     actionLock.notifyAll();

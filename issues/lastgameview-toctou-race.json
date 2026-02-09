@@ -1,7 +1,7 @@
 {
   "title": "TOCTOU race on volatile lastGameView in SkeletonCallbackHandler",
   "description": "SkeletonCallbackHandler.java has a volatile GameView field `lastGameView` (line 88) with compound check-then-use patterns:\n\n- Line 429: `if (lastGameView != null)` followed by multiple accesses to `lastGameView.getPhase()`, `lastGameView.getStep()`, etc. (lines 430-442, 451) without snapshotting\n- Line 510: `PlayableObjectsList playable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;`\n- Lines 516-517: similar ternary pattern accessing `lastGameView.getTurn()` after null check\n\nNote: Line 180 already correctly snapshots with `GameView gv = lastGameView;` — the other sites should follow the same pattern.\n\nBetween the null check and subsequent method calls, another thread could set `lastGameView` to null, causing NullPointerException.\n\nFix: snapshot `lastGameView` into a local variable before each compound operation.",
-  "status": "open",
+  "status": "resolved",
   "priority": 3,
   "type": "bug",
   "labels": [
