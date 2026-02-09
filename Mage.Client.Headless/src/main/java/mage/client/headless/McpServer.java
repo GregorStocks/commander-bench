@@ -102,6 +102,7 @@ public class McpServer {
             Object result = handleRequest(method, params);
             sendResponse(id, result, null);
         } catch (Exception e) {
+            callbackHandler.logError("MCP request failed (" + method + "): " + e.getMessage());
             sendError(id, -32603, e.getMessage());
         }
     }

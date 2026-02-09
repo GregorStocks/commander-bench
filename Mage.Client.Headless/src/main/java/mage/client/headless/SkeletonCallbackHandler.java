@@ -28,7 +28,12 @@ import mage.players.PlayableObjectsList;
 import mage.players.PlayableObjectStats;
 import mage.util.MultiAmountMessage;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.io.Serializable;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
@@ -85,9 +90,31 @@ public class SkeletonCallbackHandler {
     private final Set<UUID> failedManaCasts = new HashSet<>(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
+    private volatile String errorLogPath = null; // Path to write errors to (set via system property)
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
         this.client = client;
+    }
+
+    public void setErrorLogPath(String path) {
+        this.errorLogPath = path;
+    }
+
+    /**
+     * Append an error line to the error log file (if configured).
+     * Also logs via log4j as usual.
+     */
+    void logError(String msg) {
+        logger.error(msg);
+        String path = errorLogPath;
+        if (path != null) {
+            try (PrintWriter pw = new PrintWriter(new FileWriter(path, true))) {
+                pw.println("[" + LocalTime.now().format(TIME_FMT) + "] [mcp] " + msg);
+            } catch (IOException e) {
+                logger.warn("Failed to write to error log: " + e.getMessage());
+            }
+        }
     }
 
     public void setSession(Session session) {
@@ -553,8 +580,9 @@ public class SkeletonCallbackHandler {
             case GAME_TARGET: {
                 GameClientMessage msg = (GameClientMessage) data;
                 result.put("response_type", "index");
-                result.put("required", msg.isFlag());
-                result.put("can_cancel", true);
+                boolean required = msg.isFlag();
+                result.put("required", required);
+                result.put("can_cancel", !required);
 
                 Set<UUID> targets = findValidTargets(msg);
                 List<Map<String, Object>> choiceList = new ArrayList<>();
@@ -820,15 +848,26 @@ public class SkeletonCallbackHandler {
                     break;
 
                 case GAME_TARGET:
-                    // Support cancelling with answer=false
+                    // Support cancelling with answer=false (only for optional targets)
                     if (answer != null && !answer) {
+                        GameClientMessage targetMsg = (GameClientMessage) data;
+                        if (targetMsg.isFlag()) {
+                            // Required target — cannot cancel, must pick one
+                            result.put("success", false);
+                            result.put("error", "This target selection is required. You must choose one of the available options by index.");
+                            pendingAction = action;
+                            return result;
+                        }
                         session.sendPlayerBoolean(gameId, false);
                         result.put("action_taken", "cancelled");
                         break;
                     }
                     if (index == null) {
+                        GameClientMessage targetMsg2 = (GameClientMessage) data;
                         result.put("success", false);
-                        result.put("error", "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
+                        result.put("error", targetMsg2.isFlag()
+                            ? "Integer 'index' required for this mandatory target selection"
+                            : "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
                         pendingAction = action;
                         return result;
                     }
@@ -924,6 +963,9 @@ public class SkeletonCallbackHandler {
             }
         } finally {
             lastChoices = null;
+            if (Boolean.FALSE.equals(result.get("success"))) {
+                logError("choose_action failed: " + result.get("error"));
+            }
         }
 
         return result;
@@ -941,6 +983,20 @@ public class SkeletonCallbackHandler {
         CardView cv = findCardViewById(targetId);
         if (cv != null) {
             return buildCardDescription(cv);
+        }
+        // Check if the target is a player
+        GameView gameView = lastGameView;
+        if (gameView != null) {
+            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+            for (PlayerView player : gameView.getPlayers()) {
+                if (player.getPlayerId().equals(targetId)) {
+                    String desc = player.getName();
+                    if (player.getPlayerId().equals(myPlayerId)) {
+                        desc += " (you)";
+                    }
+                    return desc;
+                }
+            }
         }
         return "Unknown (" + targetId.toString().substring(0, 8) + ")";
     }
