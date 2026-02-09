@@ -54,6 +54,11 @@ run-llm:
 run-llm4:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
+# Generate mcp-tools.json with MCP tool definitions
+.PHONY: mcp-tools
+mcp-tools:
+	cd Mage.Client.Headless && mvn -q exec:exec -Dexec.executable=java '-Dexec.args=-cp %classpath mage.client.headless.McpServer' > ../mcp-tools.json
+
 # Launch the desktop client (for image downloads, deck building, etc.)
 .PHONY: run-client
 run-client:

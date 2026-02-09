@@ -146,7 +146,11 @@ public class McpServer {
         return result;
     }
 
-    private Map<String, Object> handleToolsList(JsonObject params) {
+    /**
+     * Returns the static list of MCP tool definitions.
+     * Can be called without a server instance (used by main() for JSON export).
+     */
+    public static List<Map<String, Object>> getToolDefinitions() {
         List<Map<String, Object>> tools = new ArrayList<>();
 
         // is_action_on_me
@@ -378,8 +382,12 @@ public class McpServer {
         chooseActionTool.put("inputSchema", chooseActionSchema);
         tools.add(chooseActionTool);
 
+        return tools;
+    }
+
+    private Map<String, Object> handleToolsList(JsonObject params) {
         Map<String, Object> result = new HashMap<>();
-        result.put("tools", tools);
+        result.put("tools", getToolDefinitions());
         return result;
     }
 
@@ -502,5 +510,14 @@ public class McpServer {
         error.put("code", code);
         error.put("message", message);
         sendResponse(id, null, error);
+    }
+
+    /**
+     * Print MCP tool definitions as JSON to stdout.
+     * Used by `make mcp-tools` to generate mcp-tools.json.
+     */
+    public static void main(String[] args) {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        System.out.println(gson.toJson(getToolDefinitions()));
     }
 }
