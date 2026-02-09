@@ -1730,7 +1730,7 @@ public class TablesPanel extends javax.swing.JPanel {
             options.setMatchTimeLimit(timeLimitEnv != null ? MatchTimeLimit.valueOf(timeLimitEnv) : MatchTimeLimit.NONE);
             String bufferTimeEnv = System.getenv("XMAGE_AI_HARNESS_MATCH_BUFFER_TIME");
             options.setMatchBufferTime(bufferTimeEnv != null ? MatchBufferTime.valueOf(bufferTimeEnv) : MatchBufferTime.NONE);
-            options.setFreeMulligans(2);
+            options.setFreeMulligans(gameTypeStr.toLowerCase().contains("commander") ? 2 : 0);
             options.setSkillLevel(SkillLevel.CASUAL);
             options.setRollbackTurnsAllowed(true);
             options.setQuitRatio(100);
