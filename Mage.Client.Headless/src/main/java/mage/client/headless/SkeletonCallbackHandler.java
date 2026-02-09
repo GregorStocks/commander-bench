@@ -88,7 +88,7 @@ public class SkeletonCallbackHandler {
     private volatile GameView lastGameView = null;
     private final RoundTracker roundTracker = new RoundTracker();
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
-    private final Set<UUID> failedManaCasts = new HashSet<>(); // Spells that failed mana payment (avoid retry loops)
+    private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
