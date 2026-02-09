@@ -32,7 +32,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Serializable;
-import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import org.apache.log4j.Logger;
 
@@ -92,7 +93,8 @@ public class SkeletonCallbackHandler {
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
         this.client = client;
@@ -115,7 +117,7 @@ public class SkeletonCallbackHandler {
         String path = errorLogPath;
         if (path != null) {
             try (PrintWriter pw = new PrintWriter(new FileWriter(path, true))) {
-                pw.println("[" + LocalTime.now().format(TIME_FMT) + "] [mcp] " + msg);
+                pw.println("[" + ZonedDateTime.now(LOG_TZ).format(TIME_FMT) + "] [mcp] " + msg);
             } catch (IOException e) {
                 logger.warn("Failed to write to error log: " + e.getMessage());
             }
@@ -133,7 +135,7 @@ public class SkeletonCallbackHandler {
         }
         try (PrintWriter pw = new PrintWriter(new FileWriter(path, true))) {
             StringBuilder sb = new StringBuilder();
-            sb.append("{\"ts\":\"").append(LocalTime.now().format(TIME_FMT)).append("\"");
+            sb.append("{\"ts\":\"").append(ZonedDateTime.now(LOG_TZ).format(TIME_FMT)).append("\"");
             sb.append(",\"method\":\"").append(method.name()).append("\"");
             if (summary != null && !summary.isEmpty()) {
                 // Escape JSON string

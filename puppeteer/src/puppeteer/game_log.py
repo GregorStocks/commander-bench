@@ -3,11 +3,13 @@
 import json
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 
 class GameLogWriter:
     """Appends JSONL events to {player}_llm.jsonl."""
+    _TZ = ZoneInfo("America/Los_Angeles")
 
     def __init__(self, game_dir: Path, player_name: str):
         self._path = game_dir / f"{player_name}_llm.jsonl"
@@ -18,9 +20,7 @@ class GameLogWriter:
 
     def emit(self, event_type: str, **fields):
         self._seq += 1
-        ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-        if ts.endswith("+00:00"):
-            ts = ts[:-6] + "Z"
+        ts = datetime.now(self._TZ).isoformat(timespec="milliseconds")
         if "cumulative_cost_usd" in fields:
             try:
                 self._last_cumulative_cost_usd = float(fields["cumulative_cost_usd"])

@@ -58,7 +58,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -124,6 +126,8 @@ public class StreamingGamePanel extends GamePanel {
     private PrintWriter gameEventWriter;
     private int gameEventSeq = 0;
     private String lastSnapshotKey = "";  // For deduplication
+    private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
+    private static final DateTimeFormatter LOG_TS_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
@@ -1422,7 +1426,7 @@ public class StreamingGamePanel extends GamePanel {
             return;
         }
         gameEventSeq++;
-        data.addProperty("ts", Instant.now().toString());
+        data.addProperty("ts", ZonedDateTime.now(LOG_TZ).format(LOG_TS_FMT));
         data.addProperty("seq", gameEventSeq);
         data.addProperty("type", type);
         gameEventWriter.println(data.toString());
@@ -1671,7 +1675,7 @@ public class StreamingGamePanel extends GamePanel {
 
         JsonObject root = new JsonObject();
         root.addProperty("status", "live");
-        root.addProperty("updatedAt", Instant.now().toString());
+        root.addProperty("updatedAt", ZonedDateTime.now(LOG_TZ).format(LOG_TS_FMT));
         root.addProperty("gameId", streamingGameId != null ? streamingGameId.toString() : "");
         root.addProperty("turn", roundTracker.getGameRound());
         root.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
