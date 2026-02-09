@@ -1716,11 +1716,13 @@ public class TablesPanel extends javax.swing.JPanel {
             int botCount = config.getBotCount();
             List<DeckCardLists> aiDecks = pickAiHarnessDecks(botCount, testDeck);
 
-            MatchOptions options = new MatchOptions("Commander AI Harness", "Commander Free For All", numPlayers > 2);
+            String gameTypeStr = config.getGameType() != null ? config.getGameType() : "Commander Free For All";
+            String deckTypeStr = config.getDeckType() != null ? config.getDeckType() : "Variant Magic - Freeform Commander";
+            MatchOptions options = new MatchOptions("AI Harness", gameTypeStr, numPlayers > 2);
             for (AiHarnessConfig.PlayerConfig player : config.getPlayers()) {
                 options.getPlayerTypes().add(player.getPlayerType());
             }
-            options.setDeckType("Variant Magic - Freeform Commander");
+            options.setDeckType(deckTypeStr);
             options.setAttackOption(MultiplayerAttackOption.MULTIPLE);
             options.setRange(RangeOfInfluence.ONE);
             options.setWinsNeeded(2);
