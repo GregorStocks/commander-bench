@@ -13,7 +13,7 @@ Pick and solve exactly **one** issue, then create a PR.
    for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r '[.priority, .title] | @tsv' "$f")"; done | sort -t: -k2 -n
    ```
 3. Pick **one** issue, preferring higher-priority (lower number) issues first (see criteria below)
-4. **Confirm with the user** — state which issue you picked and why, then wait for approval before proceeding. This lets the user redirect you if another agent is already working on that issue.
+4. **STOP and confirm with the user before doing anything else** — state which issue you picked and why, then **end your turn and wait for approval**. Do NOT explore code, read implementation files, or start planning until the user confirms. Multiple agents run in parallel, so the user needs to redirect you if someone else already claimed that issue.
 5. Implement the fix
 6. Update tests to expect the correct behavior
 7. Run `make lint` to verify
