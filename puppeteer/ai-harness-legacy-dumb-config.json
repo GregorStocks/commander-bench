@@ -2,7 +2,7 @@
   "gameType": "Two Player Duel",
   "deckType": "Constructed - Legacy",
   "players": [
-    {"type": "potato", "name": "Potato1", "deck": "random"},
-    {"type": "potato", "name": "Potato2", "deck": "random"}
+    {"type": "cpu", "name": "Mage 1", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck"},
+    {"type": "cpu", "name": "Mage 2", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck"}
   ]
 }

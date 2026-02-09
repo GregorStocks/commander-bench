@@ -59,15 +59,15 @@ run-llm4:
 mcp-tools:
 	cd Mage.Client.Headless && mvn -q exec:exec -Dexec.executable=java '-Dexec.args=-cp %classpath mage.client.headless.McpServer' > ../mcp-tools.json
 
-# 1v1 Legacy: potato players, no API keys needed
+# 1v1 Legacy: CPU players, no API keys needed
 .PHONY: run-legacy-dumb
 run-legacy-dumb:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-dumb-config.json $(ARGS)
 
 # 1v1 Legacy: Gemini vs Claude (consumes API tokens)
-.PHONY: run-legacy
-run-legacy:
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-1v1-config.json $(ARGS)
+.PHONY: run-legacy-llm
+run-legacy-llm:
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-llm-config.json $(ARGS)
 
 # Launch the desktop client (for image downloads, deck building, etc.)
 .PHONY: run-client
