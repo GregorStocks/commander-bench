@@ -1,5 +1,7 @@
 package mage.client.headless;
 
+import mage.cards.decks.DeckCardInfo;
+import mage.cards.decks.DeckCardLists;
 import mage.cards.repository.CardInfo;
 import mage.cards.repository.CardRepository;
 import mage.choices.Choice;
@@ -82,6 +84,7 @@ public class SkeletonCallbackHandler {
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
     private final Set<UUID> failedManaCasts = new HashSet<>(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
+    private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
         this.client = client;
@@ -108,6 +111,10 @@ public class SkeletonCallbackHandler {
     public void setKeepAliveAfterGame(boolean keepAliveAfterGame) {
         this.keepAliveAfterGame = keepAliveAfterGame;
         logger.info("[" + client.getUsername() + "] keepAliveAfterGame=" + keepAliveAfterGame);
+    }
+
+    public void setDeckList(DeckCardLists deckList) {
+        this.deckList = deckList;
     }
 
     public void reset() {
@@ -1477,6 +1484,33 @@ public class SkeletonCallbackHandler {
         state.put("stack", stack);
 
         return state;
+    }
+
+    public Map<String, Object> getMyDecklist() {
+        Map<String, Object> result = new HashMap<>();
+        DeckCardLists deck = this.deckList;
+        if (deck == null) {
+            result.put("error", "No deck loaded");
+            return result;
+        }
+
+        StringBuilder cards = new StringBuilder();
+        for (DeckCardInfo card : deck.getCards()) {
+            if (cards.length() > 0) cards.append("\n");
+            cards.append(card.getAmount()).append("x ").append(card.getCardName());
+        }
+        result.put("cards", cards.toString());
+
+        if (!deck.getSideboard().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (DeckCardInfo card : deck.getSideboard()) {
+                if (sb.length() > 0) sb.append("\n");
+                sb.append(card.getAmount()).append("x ").append(card.getCardName());
+            }
+            result.put("sideboard", sb.toString());
+        }
+
+        return result;
     }
 
     public Map<String, Object> getOracleText(String cardName, String objectId) {

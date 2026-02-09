@@ -150,7 +150,11 @@ public class HeadlessClient {
             System.exit(1);
         }
 
-        UUID tableId = tryJoinTable(session, roomId, username);
+        String deckPath = getArg(args, "--deck", System.getProperty("xmage.headless.deck"));
+        DeckCardLists deck = loadDeck(deckPath);
+        callbackHandler.setDeckList(deck);
+
+        UUID tableId = tryJoinTable(session, roomId, username, deck);
         if (tableId == null) {
             logger.error("Failed to join any table within timeout");
             session.connectStop(false, false);
@@ -215,9 +219,7 @@ public class HeadlessClient {
         logger.info("Done.");
     }
 
-    private static UUID tryJoinTable(Session session, UUID roomId, String username) {
-        String deckPath = System.getProperty("xmage.headless.deck");
-        DeckCardLists deck = loadDeck(deckPath);
+    private static UUID tryJoinTable(Session session, UUID roomId, String username, DeckCardLists deck) {
         long startTime = System.currentTimeMillis();
 
         while (System.currentTimeMillis() - startTime < TABLE_POLL_TIMEOUT_MS) {

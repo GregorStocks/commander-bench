@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes ten tools:
+ * Exposes twelve tools:
  * - is_action_on_me: Check if action is pending
  * - take_action: Execute default action
  * - wait_for_action: Block until action is pending (or timeout)
@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * - auto_pass_until_event: Auto-pass and wait for game state changes
  * - get_action_choices: Get detailed choices for pending action
  * - choose_action: Respond with a specific choice
+ * - get_my_decklist: Get original decklist
  */
 public class McpServer {
 
@@ -385,6 +386,17 @@ public class McpServer {
         chooseActionTool.put("inputSchema", chooseActionSchema);
         tools.add(chooseActionTool);
 
+        // get_my_decklist
+        Map<String, Object> getDecklistTool = new HashMap<>();
+        getDecklistTool.put("name", "get_my_decklist");
+        getDecklistTool.put("description", "Get your original decklist (card names and quantities).");
+        Map<String, Object> getDecklistSchema = new HashMap<>();
+        getDecklistSchema.put("type", "object");
+        getDecklistSchema.put("properties", new HashMap<>());
+        getDecklistSchema.put("additionalProperties", false);
+        getDecklistTool.put("inputSchema", getDecklistSchema);
+        tools.add(getDecklistTool);
+
         return tools;
     }
 
@@ -471,6 +483,10 @@ public class McpServer {
                 }
                 Integer choicePile = arguments.has("pile") ? arguments.get("pile").getAsInt() : null;
                 toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile);
+                break;
+
+            case "get_my_decklist":
+                toolResult = callbackHandler.getMyDecklist();
                 break;
 
             default:

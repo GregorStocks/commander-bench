@@ -140,7 +140,7 @@
           "type": "integer"
         },
         "answer": {
-          "description": "Yes/No response (for ask/select). Also false to cancel target/mana selection.",
+          "description": "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. For mulligan: true \u003d YES MULLIGAN (discard hand, draw new cards), false \u003d NO KEEP (keep this hand). For GAME_SELECT: false \u003d pass priority (done playing cards this phase). Also false to cancel target/mana selection.",
           "type": "boolean"
         },
         "amounts": {
@@ -162,5 +162,14 @@
     },
     "name": "choose_action",
     "description": "Respond to the current pending action with a specific choice. Call get_action_choices first to see available options. For GAME_SELECT (response_type\u003dselect): \u0027index\u0027 to play a card, or \u0027answer: false\u0027 to pass priority. For GAME_PLAY_MANA: \u0027index\u0027 to tap a mana source or spend pool mana, \u0027answer: false\u0027 to cancel. For GAME_TARGET: \u0027index\u0027 to select target, \u0027answer: false\u0027 to cancel. For GAME_ASK: \u0027answer\u0027 true/false. For GAME_CHOOSE_ABILITY/CHOICE: \u0027index\u0027. For GAME_GET_AMOUNT: \u0027amount\u0027. For GAME_GET_MULTI_AMOUNT: \u0027amounts\u0027 array. For GAME_CHOOSE_PILE: \u0027pile\u0027 (1 or 2)."
+  },
+  {
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object",
+      "properties": {}
+    },
+    "name": "get_my_decklist",
+    "description": "Get your original decklist (card names and quantities)."
   }
 ]
