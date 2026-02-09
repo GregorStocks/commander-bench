@@ -1,0 +1,10 @@
+{
+  "title": "Brainstorm new MCP features to add",
+  "description": "Collect ideas for new MCP tools or improvements. Starting list:\n- get_my_decklist (done)\n- get_exile_zone (exile cards not currently exposed per-player)\n- get_mana_pool (current available mana)\n- get_combat_state (attackers/blockers during combat)\n- get_card_count_summary (compact overview: cards in each zone)\n- search_library (if tutoring effects need it)\n- explain_stack (natural language description of stack resolution order)",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": ["architecture"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}
