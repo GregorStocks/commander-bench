@@ -637,6 +637,27 @@ def start_streaming_client(
     )
 
 
+def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
+    """Prompt user to export game data for the website visualizer."""
+    try:
+        answer = input("Export game for website? [Y/n]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if answer in ("n", "no"):
+        return
+    try:
+        # Import inline to avoid circular deps and keep it optional
+        sys.path.insert(0, str(project_root / "scripts"))
+        from export_game import export_game
+        website_games_dir = project_root / "website" / "public" / "games"
+        output_path = export_game(game_dir, website_games_dir)
+        size_kb = output_path.stat().st_size // 1024
+        print(f"  Exported for website: {output_path} ({size_kb} KB)")
+    except Exception as e:
+        print(f"  Warning: website export failed: {e}")
+
+
 def main() -> int:
     """Main harness orchestration."""
     config = parse_args()
@@ -855,6 +876,7 @@ def main() -> int:
         except Exception as e:
             print(f"  Warning: failed to merge game log: {e}")
         _print_game_summary(game_dir)
+        _maybe_export_for_website(game_dir, project_root)
 
         return 0
     finally:

@@ -1,0 +1,110 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base title="Games">
+  <h1>Games</h1>
+  <p class="subtitle">Replay past Commander Bench games.</p>
+  <div id="games-list">
+    <p class="loading">Loading games...</p>
+  </div>
+</Base>
+
+<style>
+  h1 {
+    color: #e94560;
+    margin-bottom: 0.5rem;
+  }
+
+  .subtitle {
+    color: #a0a0b8;
+    margin-bottom: 2rem;
+  }
+
+  .loading {
+    color: #a0a0b8;
+  }
+
+  .game-card {
+    display: block;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    text-decoration: none;
+    color: #e0e0e0;
+    transition: border-color 0.2s;
+  }
+
+  .game-card:hover {
+    border-color: #e94560;
+  }
+
+  .game-title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+
+  .game-meta {
+    font-size: 0.85rem;
+    color: #a0a0b8;
+  }
+
+  .game-winner {
+    color: #a8d9a5;
+  }
+
+  .no-games {
+    color: #a0a0b8;
+    font-style: italic;
+  }
+</style>
+
+<script>
+  fetch("/games/index.json")
+    .then(function (r) {
+      if (!r.ok) throw new Error("No games found");
+      return r.json();
+    })
+    .then(function (games) {
+      const list = document.getElementById("games-list");
+      list.innerHTML = "";
+
+      if (!games || games.length === 0) {
+        list.innerHTML = '<p class="no-games">No games exported yet.</p>';
+        return;
+      }
+
+      games.forEach(function (game) {
+        const a = document.createElement("a");
+        a.href = "/games/" + game.id;
+        a.className = "game-card";
+
+        const commanders = (game.players || [])
+          .map(function (p) { return p.commander || p.name; })
+          .join(" vs ");
+
+        const title = document.createElement("div");
+        title.className = "game-title";
+        title.textContent = commanders;
+        a.appendChild(title);
+
+        const meta = document.createElement("div");
+        meta.className = "game-meta";
+        const parts = [];
+        parts.push(game.totalTurns + " turns");
+        if (game.winner) {
+          parts.push("Winner: " + game.winner);
+        }
+        meta.textContent = parts.join(" | ");
+        a.appendChild(meta);
+
+        list.appendChild(a);
+      });
+    })
+    .catch(function () {
+      const list = document.getElementById("games-list");
+      list.innerHTML = '<p class="no-games">No games exported yet.</p>';
+    });
+</script>
