@@ -75,6 +75,29 @@ def bring_to_foreground_macos() -> None:
     )
 
 
+def _write_error_log(game_dir: Path) -> None:
+    """Combine per-player error logs into a unified errors.log.
+
+    Each player (pilot/chatterbox) writes errors to {name}_errors.log
+    in real-time. This just concatenates them into one file.
+    """
+    error_lines: list[str] = []
+    for log_file in sorted(game_dir.glob("*_errors.log")):
+        try:
+            for line in log_file.read_text().splitlines():
+                if line.strip():
+                    error_lines.append(f"[{log_file.stem}] {line}")
+        except OSError:
+            pass
+
+    error_log = game_dir / "errors.log"
+    if error_lines:
+        error_log.write_text("\n".join(error_lines) + "\n")
+        print(f"  Errors: {len(error_lines)} (see {error_log})")
+    else:
+        error_log.write_text("No errors detected.\n")
+
+
 def _print_game_summary(game_dir: Path) -> None:
     """Print a summary of game results and costs after the game ends."""
     print("\n" + "=" * 60)
@@ -777,6 +800,7 @@ def main() -> int:
         # Wait for observer client to exit
         observer_proc.wait()
 
+        _write_error_log(game_dir)
         _print_game_summary(game_dir)
 
         return 0

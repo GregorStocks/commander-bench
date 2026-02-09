@@ -105,6 +105,10 @@ public class HeadlessClient {
         actionDelayMs = Integer.getInteger("xmage.headless.actionDelayMs", actionDelayMs);
         callbackHandler.setActionDelayMs(actionDelayMs);
         callbackHandler.setKeepAliveAfterGame(isStaller);
+        String errorLogPath = System.getProperty("xmage.headless.errorlog");
+        if (errorLogPath != null && !errorLogPath.isEmpty()) {
+            callbackHandler.setErrorLogPath(errorLogPath);
+        }
 
         Connection connection = new Connection();
         connection.setHost(server);

@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
@@ -24,6 +25,23 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
+
+def _log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}")
+
+
+def _log_error(game_dir: Path | None, username: str, msg: str) -> None:
+    """Append an error line to {username}_errors.log in the game directory."""
+    _log(msg)
+    if game_dir:
+        ts = datetime.now().strftime("%H:%M:%S")
+        try:
+            with open(game_dir / f"{username}_errors.log", "a") as f:
+                f.write(f"[{ts}] {msg}\n")
+        except OSError:
+            pass
+
 
 # Tools the pilot is allowed to use (excludes auto_pass_until_event to prevent
 # accidentally skipping all decisions, and excludes is_action_on_me since
@@ -128,6 +146,8 @@ async def run_pilot_loop(
     cumulative_cost = 0.0
     empty_responses = 0  # consecutive LLM responses with no reasoning text
     consecutive_timeouts = 0
+    turns_without_progress = 0  # LLM turns without a successful game action
+    MAX_TURNS_WITHOUT_PROGRESS = 8
 
     while True:
         # Check for auto-passable actions before calling LLM
@@ -138,7 +158,7 @@ async def run_pilot_loop(
                 auto, args = should_auto_pass(status)
                 if auto:
                     await execute_tool(session, "choose_action", args)
-                    print(f"[pilot] Auto-passed: {status.get('action_type')}")
+                    _log(f"[pilot] Auto-passed: {status.get('action_type')}")
                     continue
         except Exception:
             pass
@@ -165,13 +185,38 @@ async def run_pilot_loop(
                 if game_dir:
                     write_cost_file(game_dir, username, cumulative_cost)
 
+            turns_without_progress += 1
+
+            # If the LLM is spinning without advancing game state, auto-pass
+            # until something interesting happens (new turn, new cards, etc.)
+            if turns_without_progress >= MAX_TURNS_WITHOUT_PROGRESS:
+                _log_error(game_dir, username, f"[pilot] Stalled: {turns_without_progress} turns without progress, auto-passing until next event")
+                try:
+                    await execute_tool(session, "send_chat_message", {"message": "Brain freeze! Auto-passing until next turn..."})
+                except Exception:
+                    pass
+                try:
+                    result_text = await execute_tool(session, "auto_pass_until_event", {})
+                    result_data = json.loads(result_text)
+                    actions = result_data.get("actions_taken", 0)
+                    _log(f"[pilot] Auto-passed {actions} actions until next event")
+                except Exception as e:
+                    _log(f"[pilot] Auto-pass failed: {e}")
+                turns_without_progress = 0
+                # Reset conversation so the LLM gets a fresh start
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "A new turn has started. Call wait_for_action to see what's happening."},
+                ]
+                continue
+
             # If the LLM produced tool calls, process them
             if choice.message.tool_calls:
                 # Tool calls present = LLM is functioning, reset degradation counter.
                 # Gemini often omits reasoning text for obvious actions (like passing) -
                 # that's normal, not degradation.
                 if choice.message.content:
-                    print(f"[pilot] Thinking: {choice.message.content}")
+                    _log(f"[pilot] Thinking: {choice.message.content}")
                 empty_responses = 0
                 # Build a clean assistant message dict for cross-provider
                 # compatibility.  The raw ChatCompletionMessage includes extra
@@ -195,7 +240,7 @@ async def run_pilot_loop(
                 for tool_call in choice.message.tool_calls:
                     fn = tool_call.function
                     args = json.loads(fn.arguments) if fn.arguments else {}
-                    print(f"[pilot] Tool: {fn.name}({json.dumps(args, separators=(',', ':'))})")
+                    _log(f"[pilot] Tool: {fn.name}({json.dumps(args, separators=(',', ':'))})")
 
                     result_text = await execute_tool(session, fn.name, args)
 
@@ -205,18 +250,19 @@ async def run_pilot_loop(
                         action_taken = result_data.get("action_taken", "")
                         success = result_data.get("success", False)
                         if success:
-                            print(f"[pilot] Action: {action_taken}")
+                            _log(f"[pilot] Action: {action_taken}")
+                            turns_without_progress = 0
                         else:
-                            print(f"[pilot] Action failed: {result_data.get('error', '')}")
+                            _log_error(game_dir, username, f"[pilot] Action failed: {result_data.get('error', '')}")
                     elif fn.name == "get_action_choices":
                         result_data = json.loads(result_text)
                         action_type = result_data.get("action_type", "")
                         msg = result_data.get("message", "")
                         choices = result_data.get("choices", [])
                         if choices:
-                            print(f"[pilot] Choices for {action_type}: {len(choices)} options")
+                            _log(f"[pilot] Choices for {action_type}: {len(choices)} options")
                         else:
-                            print(f"[pilot] Action: {action_type} - {msg[:100]}")
+                            _log(f"[pilot] Action: {action_type} - {msg[:100]}")
                     elif fn.name == "wait_for_action":
                         result_data = json.loads(result_text)
                         if result_data.get("action_pending"):
@@ -224,7 +270,7 @@ async def run_pilot_loop(
                             auto, auto_args = should_auto_pass(result_data)
                             if auto:
                                 await execute_tool(session, "choose_action", auto_args)
-                                print(f"[pilot] Auto-passed: {result_data.get('action_type')}")
+                                _log(f"[pilot] Auto-passed: {result_data.get('action_type')}")
                                 # Replace the tool result with an indication to keep waiting
                                 result_text = json.dumps({
                                     "action_pending": False,
@@ -240,14 +286,14 @@ async def run_pilot_loop(
                 # LLM stopped calling tools - prompt it to continue
                 content = (choice.message.content or "").strip()
                 if content:
-                    print(f"[pilot] Thinking: {content[:500]}")
+                    _log(f"[pilot] Thinking: {content[:500]}")
                     messages.append({"role": "assistant", "content": content})
                     empty_responses = 0
                 else:
                     empty_responses += 1
-                    print(f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]")
+                    _log_error(game_dir, username, f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]")
                     if empty_responses >= 10:
-                        print("[pilot] LLM appears degraded (no tools or text), switching to auto-pass mode")
+                        _log_error(game_dir, username, "[pilot] LLM appears degraded (no tools or text), switching to auto-pass mode")
                         try:
                             await execute_tool(session, "send_chat_message", {"message": "My brain is fried... going on autopilot for the rest of this game. GG!"})
                         except Exception:
@@ -256,7 +302,7 @@ async def run_pilot_loop(
                             try:
                                 await execute_tool(session, "auto_pass_until_event", {})
                             except Exception as pass_err:
-                                print(f"[pilot] Auto-pass error: {pass_err}")
+                                _log_error(game_dir, username, f"[pilot] Auto-pass error: {pass_err}")
                                 await asyncio.sleep(5)
                 messages.append({
                     "role": "user",
@@ -267,7 +313,7 @@ async def run_pilot_loop(
             # The game loop is tool-call-heavy (3+ messages per action), so we need
             # a generous limit to avoid constant trimming that degrades LLM reasoning.
             if len(messages) > 120:
-                print(f"[pilot] Trimming context: {len(messages)} -> ~82 messages")
+                _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~82 messages")
                 messages = (
                     [messages[0]]
                     + [{"role": "user", "content": "Continue playing. Use pass_priority to skip ahead, then get_action_choices before choose_action. All cards listed are playable right now. Play cards with index=N, pass with answer=false."}]
@@ -276,14 +322,14 @@ async def run_pilot_loop(
 
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
-            print(f"[pilot] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            _log_error(game_dir, username, f"[pilot] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
             try:
                 await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
             except Exception:
                 await asyncio.sleep(5)
 
             if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
-                print("[pilot] Repeated LLM timeouts, resetting conversation context")
+                _log("[pilot] Repeated LLM timeouts, resetting conversation context")
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "Continue playing. Call wait_for_action."},
@@ -293,12 +339,12 @@ async def run_pilot_loop(
         except Exception as e:
             consecutive_timeouts = 0
             error_str = str(e)
-            print(f"[pilot] LLM error: {e}")
+            _log_error(game_dir, username, f"[pilot] LLM error: {e}")
 
             # Permanent failures - fall back to auto-pass mode forever
             if "402" in error_str or "404" in error_str:
                 reason = "Credits exhausted" if "402" in error_str else "Model not found"
-                print(f"[pilot] {reason}, switching to auto-pass mode")
+                _log_error(game_dir, username, f"[pilot] {reason}, switching to auto-pass mode")
                 try:
                     await execute_tool(session, "send_chat_message", {"message": f"{reason}... going on autopilot. GG!"})
                 except Exception:
@@ -307,7 +353,7 @@ async def run_pilot_loop(
                     try:
                         await execute_tool(session, "auto_pass_until_event", {})
                     except Exception as pass_err:
-                        print(f"[pilot] Pass-only error: {pass_err}")
+                        _log_error(game_dir, username, f"[pilot] Pass-only error: {pass_err}")
                         await asyncio.sleep(5)
 
             # Transient error - keep actions flowing while waiting to retry
@@ -337,9 +383,9 @@ async def run_pilot(
     prices: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Run the pilot client."""
-    print(f"[pilot] Starting for {username}@{server}:{port}")
-    print(f"[pilot] Model: {model}")
-    print(f"[pilot] Base URL: {base_url}")
+    _log(f"[pilot] Starting for {username}@{server}:{port}")
+    _log(f"[pilot] Model: {model}")
+    _log(f"[pilot] Base URL: {base_url}")
 
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
@@ -370,6 +416,8 @@ async def run_pilot(
     mvn_args = ["-q"]
     if deck_path:
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
+    if game_dir:
+        mvn_args.append(f"-Dxmage.headless.errorlog={game_dir / f'{username}_errors.log'}")
     mvn_args.append("exec:java")
 
     server_params = StdioServerParameters(
@@ -379,18 +427,18 @@ async def run_pilot(
         env=env,
     )
 
-    print("[pilot] Spawning skeleton client...")
+    _log("[pilot] Spawning skeleton client...")
 
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             result = await session.initialize()
-            print(f"[pilot] MCP initialized: {result.serverInfo}")
+            _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
             tools_result = await session.list_tools()
             openai_tools = mcp_tools_to_openai(tools_result.tools)
-            print(f"[pilot] Available tools: {[t['function']['name'] for t in openai_tools]}")
+            _log(f"[pilot] Available tools: {[t['function']['name'] for t in openai_tools]}")
 
-            print("[pilot] Starting game-playing loop...")
+            _log("[pilot] Starting game-playing loop...")
             await run_pilot_loop(session, llm_client, model, system_prompt, openai_tools,
                                 username=username, game_dir=game_dir, prices=prices)
 
@@ -424,12 +472,12 @@ def main() -> int:
     required_key_env = required_api_key_env(args.base_url)
     api_key = args.api_key or os.environ.get(required_key_env, "")
     if not api_key.strip():
-        print(f"[pilot] ERROR: Missing API key for {args.base_url}")
-        print(f"[pilot] Set {required_key_env} or pass --api-key.")
+        _log(f"[pilot] ERROR: Missing API key for {args.base_url}")
+        _log(f"[pilot] Set {required_key_env} or pass --api-key.")
         return 2
 
     prices = load_prices()
-    print(f"[pilot] Project root: {project_root}")
+    _log(f"[pilot] Project root: {project_root}")
 
     try:
         asyncio.run(run_pilot(

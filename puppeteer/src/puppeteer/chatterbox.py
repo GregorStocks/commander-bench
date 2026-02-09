@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
@@ -24,6 +25,23 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 256
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
+
+
+def _log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}")
+
+
+def _log_error(game_dir: Path | None, username: str, msg: str) -> None:
+    """Append an error line to {username}_errors.log in the game directory."""
+    _log(msg)
+    if game_dir:
+        ts = datetime.now().strftime("%H:%M:%S")
+        try:
+            with open(game_dir / f"{username}_errors.log", "a") as f:
+                f.write(f"[{ts}] {msg}\n")
+        except OSError:
+            pass
 
 
 DEFAULT_SYSTEM_PROMPT = """\
@@ -119,7 +137,7 @@ async def run_llm_loop(
                 for tool_call in choice.message.tool_calls:
                     fn = tool_call.function
                     args = json.loads(fn.arguments) if fn.arguments else {}
-                    print(f"[chatterbox] Tool: {fn.name}({json.dumps(args, separators=(',', ':'))})")
+                    _log(f"[chatterbox] Tool: {fn.name}({json.dumps(args, separators=(',', ':'))})")
 
                     result_text = await execute_tool(session, fn.name, args)
 
@@ -129,15 +147,15 @@ async def run_llm_loop(
                         msg = args.get("message", "")
                         result_data = json.loads(result_text)
                         if result_data.get("success"):
-                            print(f"[chatterbox] Chat sent: {msg}")
+                            _log(f"[chatterbox] Chat sent: {msg}")
                         else:
-                            print(f"[chatterbox] Chat failed: {result_text}")
+                            _log_error(game_dir, username, f"[chatterbox] Chat failed: {result_text}")
                     elif fn.name == "auto_pass_until_event":
                         result_data = json.loads(result_text)
                         actions = result_data.get("actions_taken", 0)
                         new_chars = result_data.get("new_chars", 0)
                         event = result_data.get("event_occurred", False)
-                        print(f"[chatterbox] Auto-pass: {actions} actions, {new_chars} new chars, event={event}")
+                        _log(f"[chatterbox] Auto-pass: {actions} actions, {new_chars} new chars, event={event}")
 
                     messages.append({
                         "role": "tool",
@@ -155,7 +173,7 @@ async def run_llm_loop(
                 # chokes on the empty "parts" field in the next request).
                 content = (choice.message.content or "").strip()
                 if content:
-                    print(f"[chatterbox] LLM text: {content[:200]}")
+                    _log(f"[chatterbox] LLM text: {content[:200]}")
                     messages.append({"role": "assistant", "content": content})
                 messages.append({
                     "role": "user",
@@ -182,14 +200,14 @@ async def run_llm_loop(
 
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
-            print(f"[chatterbox] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            _log_error(game_dir, username, f"[chatterbox] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
             try:
                 await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
             except Exception:
                 await asyncio.sleep(5)
 
             if consecutive_timeouts >= MAX_CONSECUTIVE_TIMEOUTS:
-                print("[chatterbox] Repeated LLM timeouts, resetting conversation context")
+                _log("[chatterbox] Repeated LLM timeouts, resetting conversation context")
                 messages = [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "Continue playing. Call auto_pass_until_event to wait for game events."},
@@ -200,16 +218,16 @@ async def run_llm_loop(
         except Exception as e:
             consecutive_timeouts = 0
             error_str = str(e)
-            print(f"[chatterbox] LLM error: {e}")
+            _log_error(game_dir, username, f"[chatterbox] LLM error: {e}")
 
             # Credit exhaustion - fall back to pass-only mode permanently
             if "402" in error_str:
-                print("[chatterbox] Credits exhausted, switching to pass-only mode")
+                _log_error(game_dir, username, "[chatterbox] Credits exhausted, switching to pass-only mode")
                 while True:
                     try:
                         await execute_tool(session, "auto_pass_until_event", {})
                     except Exception as pass_err:
-                        print(f"[chatterbox] Pass-only error: {pass_err}")
+                        _log_error(game_dir, username, f"[chatterbox] Pass-only error: {pass_err}")
                         await asyncio.sleep(5)
 
             # Transient error - keep actions flowing while waiting to retry
@@ -239,9 +257,9 @@ async def run_chatterbox(
     prices: dict[str, tuple[float, float]] | None = None,
 ) -> None:
     """Run the chatterbox client."""
-    print(f"[chatterbox] Starting for {username}@{server}:{port}")
-    print(f"[chatterbox] Model: {model}")
-    print(f"[chatterbox] Base URL: {base_url}")
+    _log(f"[chatterbox] Starting for {username}@{server}:{port}")
+    _log(f"[chatterbox] Model: {model}")
+    _log(f"[chatterbox] Base URL: {base_url}")
 
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
@@ -271,6 +289,8 @@ async def run_chatterbox(
     mvn_args = ["-q"]
     if deck_path:
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
+    if game_dir:
+        mvn_args.append(f"-Dxmage.headless.errorlog={game_dir / f'{username}_errors.log'}")
     mvn_args.append("exec:java")
 
     server_params = StdioServerParameters(
@@ -280,18 +300,18 @@ async def run_chatterbox(
         env=env,
     )
 
-    print("[chatterbox] Spawning skeleton client...")
+    _log("[chatterbox] Spawning skeleton client...")
 
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             result = await session.initialize()
-            print(f"[chatterbox] MCP initialized: {result.serverInfo}")
+            _log(f"[chatterbox] MCP initialized: {result.serverInfo}")
 
             tools_result = await session.list_tools()
             openai_tools = mcp_tools_to_openai(tools_result.tools)
-            print(f"[chatterbox] Available tools: {[t.name for t in tools_result.tools]}")
+            _log(f"[chatterbox] Available tools: {[t.name for t in tools_result.tools]}")
 
-            print("[chatterbox] Starting LLM loop...")
+            _log("[chatterbox] Starting LLM loop...")
             await run_llm_loop(session, llm_client, model, system_prompt, openai_tools,
                                username=username, game_dir=game_dir, prices=prices)
 
@@ -325,12 +345,12 @@ def main() -> int:
     required_key_env = required_api_key_env(args.base_url)
     api_key = args.api_key or os.environ.get(required_key_env, "")
     if not api_key.strip():
-        print(f"[chatterbox] ERROR: Missing API key for {args.base_url}")
-        print(f"[chatterbox] Set {required_key_env} or pass --api-key.")
+        _log(f"[chatterbox] ERROR: Missing API key for {args.base_url}")
+        _log(f"[chatterbox] Set {required_key_env} or pass --api-key.")
         return 2
 
     prices = load_prices()
-    print(f"[chatterbox] Project root: {project_root}")
+    _log(f"[chatterbox] Project root: {project_root}")
 
     try:
         asyncio.run(run_chatterbox(

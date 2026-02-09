@@ -70,6 +70,10 @@ make run-dumb ARGS="--config myconfig.json"
 
 Recordings are saved to `~/commander-bench-logs/` by default.
 
+## Logging
+
+Game logs go to `~/commander-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
+
 ## Issues
 
 Issues are tracked as JSON files in `issues/`. See `doc/issues.md` for format and queries.
