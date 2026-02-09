@@ -272,6 +272,7 @@ public class SkeletonCallbackHandler {
         } else {
             info.put("action_pending", false);
         }
+        info.put("game_over", activeGames.isEmpty());
         return info;
     }
 
@@ -1296,6 +1297,7 @@ public class SkeletonCallbackHandler {
                         result.put("event_occurred", true);
                         result.put("new_log", changes);
                         result.put("actions_taken", actionsHandled);
+                        result.put("game_over", activeGames.isEmpty());
                         return result;
                     }
                 }
@@ -1308,6 +1310,7 @@ public class SkeletonCallbackHandler {
                 result.put("event_occurred", true);
                 result.put("new_log", getGameLogSince(startLogLength));
                 result.put("actions_taken", actionsHandled);
+                result.put("game_over", activeGames.isEmpty());
                 return result;
             }
 
@@ -1334,6 +1337,7 @@ public class SkeletonCallbackHandler {
         result.put("event_occurred", !fullLog.isEmpty());
         result.put("new_log", fullLog);
         result.put("actions_taken", actionsHandled);
+        result.put("game_over", activeGames.isEmpty());
         return result;
     }
 
