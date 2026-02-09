@@ -185,7 +185,8 @@ public class SkeletonCallbackHandler {
         sb.append("T").append(roundTracker.getGameRound());
         if (gv.getPhase() != null) sb.append(" ").append(gv.getPhase());
         sb.append(" | ");
-        UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+        UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
+        UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
         for (PlayerView p : gv.getPlayers()) {
             boolean isMe = p.getPlayerId().equals(myPlayerId);
             sb.append(p.getName());
@@ -446,7 +447,8 @@ public class SkeletonCallbackHandler {
             result.put("context", ctx.toString());
 
             // Compact player summary: "You(40), Opp1(38), Opp2(40)"
-            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+            UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
+            UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
             StringBuilder playerSummary = new StringBuilder();
             for (PlayerView player : lastGameView.getPlayers()) {
                 if (playerSummary.length() > 0) playerSummary.append(", ");
@@ -1088,7 +1090,8 @@ public class SkeletonCallbackHandler {
         // Check if the target is a player
         GameView gameView = lastGameView;
         if (gameView != null) {
-            UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+            UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
+            UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
             for (PlayerView player : gameView.getPlayers()) {
                 if (player.getPlayerId().equals(targetId)) {
                     String desc = player.getName();
@@ -1495,7 +1498,8 @@ public class SkeletonCallbackHandler {
 
         // Players
         List<Map<String, Object>> players = new ArrayList<>();
-        UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+        UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
+        UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
 
         for (PlayerView player : gameView.getPlayers()) {
             Map<String, Object> playerInfo = new HashMap<>();
