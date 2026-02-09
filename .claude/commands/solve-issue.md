@@ -13,12 +13,13 @@ Pick and solve exactly **one** issue, then create a PR.
    for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r '[.priority, .title] | @tsv' "$f")"; done | sort -t: -k2 -n
    ```
 3. Pick **one** issue, preferring higher-priority (lower number) issues first (see criteria below)
-4. Implement the fix
-5. Update tests to expect the correct behavior
-6. Run `make lint` to verify
-7. Delete the issue file (e.g., `rm issues/the-issue-name.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
-8. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
-9. Create a PR, then stop - leave remaining issues for the next Claude
+4. **Confirm with the user** — state which issue you picked and why, then wait for approval before proceeding. This lets the user redirect you if another agent is already working on that issue.
+5. Implement the fix
+6. Update tests to expect the correct behavior
+7. Run `make lint` to verify
+8. Delete the issue file (e.g., `rm issues/the-issue-name.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
+9. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
+10. Create a PR, then stop - leave remaining issues for the next Claude
 
 ## Is It Worth Fixing?
 
