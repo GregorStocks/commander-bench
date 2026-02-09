@@ -1,0 +1,8 @@
+{
+  "gameType": "Two Player Duel",
+  "deckType": "Constructed - Legacy",
+  "players": [
+    {"type": "potato", "name": "Potato1", "deck": "random"},
+    {"type": "potato", "name": "Potato2", "deck": "random"}
+  ]
+}
