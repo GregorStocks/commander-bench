@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
+from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL, required_api_key_env
 from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
@@ -96,6 +97,52 @@ def _write_error_log(game_dir: Path) -> None:
         print(f"  Errors: {len(error_lines)} (see {error_log})")
     else:
         error_log.write_text("No errors detected.\n")
+
+
+def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None:
+    """Write game_meta.json with player configs, decklists, format, and git info."""
+    def _git(cmd: str) -> str:
+        try:
+            return subprocess.check_output(
+                f"git {cmd}", shell=True, cwd=project_root,
+                stderr=subprocess.DEVNULL, text=True,
+            ).strip()
+        except Exception:
+            return ""
+
+    players = []
+    all_players = [
+        *((p, "pilot") for p in config.pilot_players),
+        *((p, "chatterbox") for p in config.chatterbox_players),
+        *((p, "sleepwalker") for p in config.sleepwalker_players),
+        *((p, "potato") for p in config.potato_players),
+        *((p, "staller") for p in config.staller_players),
+        *((p, "cpu") for p in config.cpu_players),
+    ]
+    for player, ptype in all_players:
+        entry = {"name": player.name, "type": ptype}
+        if player.deck:
+            entry["deck_path"] = player.deck
+            deck_file = project_root / player.deck
+            if deck_file.exists():
+                entry["decklist"] = read_decklist(deck_file)
+        if hasattr(player, "model") and player.model:
+            entry["model"] = player.model
+        if hasattr(player, "system_prompt") and player.system_prompt:
+            entry["system_prompt"] = player.system_prompt
+        players.append(entry)
+
+    meta = {
+        "timestamp": config.timestamp,
+        "game_type": config.game_type,
+        "deck_type": config.deck_type,
+        "players": players,
+        "git_branch": _git("rev-parse --abbrev-ref HEAD"),
+        "git_commit": _git("rev-parse --short HEAD"),
+    }
+    (game_dir / "game_meta.json").write_text(
+        json.dumps(meta, indent=2) + "\n"
+    )
 
 
 def _print_game_summary(game_dir: Path) -> None:
@@ -717,6 +764,7 @@ def main() -> int:
             shutil.copy2(config.config_file, game_dir / "config.json")
 
         config.resolve_random_decks(project_root)
+        _write_game_meta(game_dir, config, project_root)
 
         # Choose which observer client to start (streaming or regular GUI)
         if config.streaming:
@@ -801,6 +849,11 @@ def main() -> int:
         observer_proc.wait()
 
         _write_error_log(game_dir)
+        try:
+            merge_game_log(game_dir)
+            print(f"  Merged game log: {game_dir / 'game.jsonl'}")
+        except Exception as e:
+            print(f"  Warning: failed to merge game log: {e}")
         _print_game_summary(game_dir)
 
         return 0

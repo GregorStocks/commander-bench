@@ -12,6 +12,53 @@ All game logs live in `~/commander-bench-logs/game_YYYYMMDD_HHMMSS/`.
 | `{name}_errors.log` | Python `_log_error()` + Java `logError()` | Errors only (written in real-time from both sides) |
 | `{name}_cost.txt` | `llm_cost.py` | Cumulative LLM API cost in USD |
 
+## Structured game log (JSONL)
+
+Machine-readable JSONL files for post-game analysis. Each line is a compact JSON object with `ts`, `seq`, `type`, and event-specific fields.
+
+| File | Source | Contents |
+|---|---|---|
+| `game_meta.json` | `harness.py` at game start | Decklists, models, system prompts, format, git info |
+| `game_events.jsonl` | Observer (`StreamingGamePanel`) | Game actions, player chat, state snapshots (all hands visible), game over |
+| `{name}_llm.jsonl` | `pilot.py` per player | LLM reasoning, tool calls + results, costs, errors, stalls, context trims |
+| `{name}_skeleton.jsonl` | `SkeletonCallbackHandler` per player | Raw callback dump — every callback the skeleton sees (data hoarding) |
+| `game.jsonl` | `harness.py` post-game merge | Unified log: `game_events.jsonl` + all `*_llm.jsonl` sorted by timestamp |
+
+### Event types in game_events.jsonl
+
+- `game_action` — game log message (e.g. "Gemini plays Mountain")
+- `player_chat` — player chat message with `from` field
+- `state_snapshot` — full game state: turn, phase, step, all players (life, hand cards, battlefield, graveyard, commanders, counters), stack
+- `game_over` — game end message
+
+### Event types in {name}_llm.jsonl
+
+- `game_start` — model, system prompt, available tools, deck path
+- `llm_response` — reasoning text, tool calls, token usage, cost, cumulative cost
+- `tool_call` — tool name, arguments, result (truncated to 2000 chars), latency
+- `context_trim` — messages before/after count
+- `context_reset` — reason (e.g. "repeated_timeouts")
+- `llm_error` — error type and message
+- `stall` — turns without progress count
+- `auto_pilot_mode` — reason for switching to auto-pass
+- `game_end` — final cost
+
+### Querying with jq
+
+```bash
+# All game actions
+jq 'select(.type=="game_action")' game.jsonl
+
+# LLM reasoning interleaved with game events
+jq 'select(.type=="llm_response" or .type=="game_action")' game.jsonl
+
+# State snapshots with all hands
+jq 'select(.type=="state_snapshot") | .players[] | {name, life, hand}' game.jsonl
+
+# Total LLM cost
+jq 'select(.type=="game_end") | {player, total_cost_usd}' game.jsonl
+```
+
 ## Aggregated files
 
 | File | Created by | Contents |
