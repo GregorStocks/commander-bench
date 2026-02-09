@@ -112,6 +112,10 @@ class Config:
     match_time_limit: str = ""
     match_buffer_time: str = ""
 
+    # Game format settings (passed to XMage via config JSON)
+    game_type: str = ""  # e.g. "Two Player Duel", "Commander Free For All"
+    deck_type: str = ""  # e.g. "Constructed - Legacy", "Variant Magic - Freeform Commander"
+
     # Runtime state (set during execution)
     port: int = 0
     timestamp: str = ""
@@ -149,6 +153,8 @@ class Config:
             data = json.load(f)
             self.match_time_limit = data.get("matchTimeLimit", "")
             self.match_buffer_time = data.get("matchBufferTime", "")
+            self.game_type = data.get("gameType", "")
+            self.deck_type = data.get("deckType", "")
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
                 name = player.get("name", f"player-{i}")
@@ -226,7 +232,12 @@ class Config:
             players.append(d)
         if not players:
             return ""
-        return json.dumps({"players": players}, separators=(',', ':'))
+        result: dict = {"players": players}
+        if self.game_type:
+            result["gameType"] = self.game_type
+        if self.deck_type:
+            result["deckType"] = self.deck_type
+        return json.dumps(result, separators=(',', ':'))
 
     def resolve_random_decks(self, project_root: Path) -> None:
         """Replace any deck="random" with a randomly chosen Commander .dck file."""

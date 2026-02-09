@@ -360,7 +360,10 @@ public class McpServer {
         chooseActionProps.put("index", indexProp);
         Map<String, Object> answerProp = new HashMap<>();
         answerProp.put("type", "boolean");
-        answerProp.put("description", "Yes/No response (for ask/select). Also false to cancel target/mana selection.");
+        answerProp.put("description", "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. " +
+                "For mulligan: true = YES MULLIGAN (discard hand, draw new cards), false = NO KEEP (keep this hand). " +
+                "For GAME_SELECT: false = pass priority (done playing cards this phase). " +
+                "Also false to cancel target/mana selection.");
         chooseActionProps.put("answer", answerProp);
         Map<String, Object> amountProp = new HashMap<>();
         amountProp.put("type", "integer");

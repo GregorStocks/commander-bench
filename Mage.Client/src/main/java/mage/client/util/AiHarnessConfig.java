@@ -41,6 +41,8 @@ public class AiHarnessConfig {
     };
 
     private List<PlayerConfig> players = new ArrayList<>();
+    private String gameType;   // e.g. "Two Player Duel", "Commander Free For All"
+    private String deckType;   // e.g. "Constructed - Legacy", "Variant Magic - Freeform Commander"
 
     public List<PlayerConfig> getPlayers() {
         return players;
@@ -48,6 +50,14 @@ public class AiHarnessConfig {
 
     public void setPlayers(List<PlayerConfig> players) {
         this.players = players;
+    }
+
+    public String getGameType() {
+        return gameType;
+    }
+
+    public String getDeckType() {
+        return deckType;
     }
 
     public int getBotCount() {

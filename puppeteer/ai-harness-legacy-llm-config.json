@@ -1,0 +1,10 @@
+{
+  "gameType": "Two Player Duel",
+  "deckType": "Constructed - Legacy",
+  "matchTimeLimit": "MIN__20",
+  "matchBufferTime": "SEC__10",
+  "players": [
+    {"type": "pilot", "name": "Gemini", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck", "model": "google/gemini-2.5-flash"},
+    {"type": "pilot", "name": "Claude", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck", "model": "anthropic/claude-sonnet-4-5"}
+  ]
+}
