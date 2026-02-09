@@ -1,0 +1,721 @@
+---
+import Base from '../../layouts/Base.astro';
+import fs from 'node:fs';
+import path from 'node:path';
+
+export function getStaticPaths() {
+  const gamesDir = path.join(process.cwd(), 'public', 'games');
+  const indexPath = path.join(gamesDir, 'index.json');
+  if (!fs.existsSync(indexPath)) {
+    return [];
+  }
+  const games = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+  return games.map((g: { id: string }) => ({ params: { slug: g.id } }));
+}
+
+const { slug } = Astro.params;
+---
+
+<Base title="Game Replay" wide>
+  <div id="visualizer">
+    <div id="loading">Loading game data...</div>
+    <div id="error" class="hidden"></div>
+
+    <div id="game-ui" class="hidden">
+      <!-- Header -->
+      <div id="game-header">
+        <div id="game-title"></div>
+        <div id="turn-info"></div>
+      </div>
+
+      <!-- Transport controls -->
+      <div id="transport">
+        <div class="transport-buttons">
+          <button id="btn-start" title="First snapshot">|&lt;</button>
+          <button id="btn-prev" title="Previous (Left arrow)">&lt;</button>
+          <button id="btn-next" title="Next (Right arrow)">&gt;</button>
+          <button id="btn-end" title="Last snapshot">&gt;|</button>
+          <button id="btn-auto" title="Auto-play">Play</button>
+        </div>
+        <input type="range" id="slider" min="0" max="0" value="0" />
+        <div id="snapshot-counter"></div>
+      </div>
+
+      <!-- Board: 2x2 player grid -->
+      <div id="players-grid"></div>
+
+      <!-- Stack -->
+      <div id="stack-section" class="hidden">
+        <div class="section-title">Stack</div>
+        <div id="stack-cards" class="cards-row"></div>
+      </div>
+
+      <!-- Action log -->
+      <div id="action-log">
+        <div class="section-title">Actions</div>
+        <div id="action-list"></div>
+      </div>
+
+      <!-- Card preview (hover) -->
+      <div id="card-preview" class="hidden">
+        <img id="preview-image" alt="" />
+        <div class="card-meta">
+          <div id="preview-name" class="card-name"></div>
+          <div id="preview-type" class="card-type"></div>
+          <div id="preview-stats" class="card-stats"></div>
+          <pre id="preview-rules" class="card-rules"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<style>
+  #visualizer {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  #loading, #error {
+    text-align: center;
+    padding: 4rem 0;
+    color: #a0a0b8;
+  }
+
+  #error {
+    color: #e94560;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+
+  /* Header */
+  #game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  #game-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e94560;
+  }
+
+  #turn-info {
+    font-size: 0.85rem;
+    color: #a0a0b8;
+    text-align: right;
+  }
+
+  /* Transport */
+  #transport {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  .transport-buttons {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .transport-buttons button {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    border-radius: 4px;
+    padding: 0.35rem 0.6rem;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.85rem;
+    transition: background 0.15s;
+  }
+
+  .transport-buttons button:hover {
+    background: #1a4a8a;
+  }
+
+  .transport-buttons button.active {
+    background: #e94560;
+    border-color: #e94560;
+    color: #fff;
+  }
+
+  #slider {
+    flex: 1;
+    min-width: 100px;
+    accent-color: #e94560;
+  }
+
+  #snapshot-counter {
+    font-size: 0.8rem;
+    color: #a0a0b8;
+    white-space: nowrap;
+    min-width: 6rem;
+    text-align: right;
+  }
+
+  /* Players grid */
+  #players-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  @media (max-width: 800px) {
+    #players-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .player-card {
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    background: #16213e;
+    overflow: hidden;
+  }
+
+  .player-card.eliminated {
+    opacity: 0.5;
+  }
+
+  .player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .player-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #e0e0e0;
+  }
+
+  .player-name.active-player {
+    color: #e94560;
+  }
+
+  .player-life {
+    font-size: 0.85rem;
+    color: #a0a0b8;
+  }
+
+  .player-counters {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    padding: 0.15rem 0.75rem;
+  }
+
+  /* Zones */
+  .zone {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  }
+
+  .zone:last-child {
+    border-bottom: 0;
+  }
+
+  .zone-title {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #a0a0b8;
+    margin-bottom: 0.3rem;
+  }
+
+  .cards-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .card-chip {
+    border: 1px solid rgba(150, 195, 205, 0.2);
+    background: rgba(44, 64, 72, 0.8);
+    color: #e0e0e0;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    cursor: default;
+    white-space: nowrap;
+    transition: border-color 0.15s;
+  }
+
+  .card-chip:hover {
+    border-color: #e94560;
+  }
+
+  .card-chip.tapped {
+    opacity: 0.6;
+    font-style: italic;
+  }
+
+  .card-chip.tapped::before {
+    content: "⟳ ";
+    font-style: normal;
+  }
+
+  .card-chip .pt {
+    color: #a8d9a5;
+    margin-left: 2px;
+  }
+
+  .zone-empty {
+    font-size: 0.7rem;
+    color: #555;
+    font-style: italic;
+  }
+
+  /* Section titles */
+  .section-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #a0a0b8;
+    margin-bottom: 0.4rem;
+  }
+
+  /* Stack */
+  #stack-section {
+    padding: 0.75rem 1rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  /* Action log */
+  #action-log {
+    padding: 0.75rem 1rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  #action-list {
+    max-height: 12rem;
+    overflow-y: auto;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .action-line {
+    padding: 0.15rem 0;
+    color: #c0c0d0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .action-line:last-child {
+    border-bottom: 0;
+  }
+
+  /* Card preview */
+  #card-preview {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    width: min(420px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    background: rgba(22, 33, 62, 0.97);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+  }
+
+  #card-preview img {
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .card-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .card-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .card-type {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    margin-bottom: 4px;
+  }
+
+  .card-stats {
+    font-size: 0.75rem;
+    color: #a8d9a5;
+    margin-bottom: 6px;
+  }
+
+  .card-rules {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: #c0c0d0;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  @media (max-width: 600px) {
+    #card-preview {
+      grid-template-columns: 100px 1fr;
+    }
+  }
+</style>
+
+<script>
+  (function () {
+    const slug = window.location.pathname.replace(/^\/games\//, "").replace(/\/$/, "");
+    if (!slug) {
+      showError("No game ID in URL.");
+      return;
+    }
+
+    const loadingEl = document.getElementById("loading");
+    const errorEl = document.getElementById("error");
+    const gameUI = document.getElementById("game-ui");
+
+    // Transport
+    const btnStart = document.getElementById("btn-start");
+    const btnPrev = document.getElementById("btn-prev");
+    const btnNext = document.getElementById("btn-next");
+    const btnEnd = document.getElementById("btn-end");
+    const btnAuto = document.getElementById("btn-auto");
+    const slider = document.getElementById("slider");
+    const counterEl = document.getElementById("snapshot-counter");
+
+    // Display
+    const gameTitleEl = document.getElementById("game-title");
+    const turnInfoEl = document.getElementById("turn-info");
+    const playersGrid = document.getElementById("players-grid");
+    const stackSection = document.getElementById("stack-section");
+    const stackCards = document.getElementById("stack-cards");
+    const actionList = document.getElementById("action-list");
+
+    // Card preview
+    const cardPreview = document.getElementById("card-preview");
+    const previewImage = document.getElementById("preview-image");
+    const previewName = document.getElementById("preview-name");
+    const previewType = document.getElementById("preview-type");
+    const previewStats = document.getElementById("preview-stats");
+    const previewRules = document.getElementById("preview-rules");
+
+    let game = null;
+    let currentIndex = 0;
+    let autoPlayInterval = null;
+
+    function showError(msg) {
+      loadingEl.classList.add("hidden");
+      errorEl.textContent = msg;
+      errorEl.classList.remove("hidden");
+    }
+
+    function scryfallUrl(cardName, cardImages, version) {
+      version = version || "small";
+      if (cardImages[cardName]) {
+        return cardImages[cardName].replace("version=small", "version=" + version);
+      }
+      return (
+        "https://api.scryfall.com/cards/named?exact=" +
+        encodeURIComponent(cardName) +
+        "&format=image&version=" + version
+      );
+    }
+
+    function showPreview(cardName, cardObj, cardImages) {
+      previewName.textContent = cardName;
+
+      // Type line from card data if available
+      previewType.textContent = "";
+      previewStats.textContent = "";
+      previewRules.textContent = "";
+
+      if (cardObj) {
+        if (cardObj.power || cardObj.toughness) {
+          previewStats.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+        }
+        if (cardObj.mana_cost) {
+          previewType.textContent = cardObj.mana_cost;
+        }
+      }
+
+      const imgUrl = scryfallUrl(cardName, cardImages, "normal");
+      previewImage.src = imgUrl;
+      previewImage.alt = cardName;
+      cardPreview.classList.remove("hidden");
+    }
+
+    function hidePreview() {
+      cardPreview.classList.add("hidden");
+    }
+
+    function makeCardChip(cardName, cardObj, cardImages, isTapped) {
+      const chip = document.createElement("span");
+      chip.className = "card-chip" + (isTapped ? " tapped" : "");
+
+      let label = cardName;
+      if (cardObj && (cardObj.power || cardObj.toughness)) {
+        label += " ";
+        const pt = document.createElement("span");
+        pt.className = "pt";
+        pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+        chip.textContent = cardName + " ";
+        chip.appendChild(pt);
+      } else {
+        chip.textContent = cardName;
+      }
+
+      chip.addEventListener("mouseenter", () => showPreview(cardName, cardObj, cardImages));
+      chip.addEventListener("mouseleave", hidePreview);
+      return chip;
+    }
+
+    function makeZone(title, cards, cardImages, countOverride) {
+      const zone = document.createElement("div");
+      zone.className = "zone";
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "zone-title";
+      const count = countOverride != null ? countOverride : (cards ? cards.length : 0);
+      titleEl.textContent = title + " (" + count + ")";
+      zone.appendChild(titleEl);
+
+      const row = document.createElement("div");
+      row.className = "cards-row";
+      zone.appendChild(row);
+
+      if (!cards || cards.length === 0) {
+        if (count > 0) {
+          // Cards exist but are hidden (e.g. hand)
+          const hidden = document.createElement("span");
+          hidden.className = "zone-empty";
+          hidden.textContent = count + " card" + (count !== 1 ? "s" : "");
+          row.appendChild(hidden);
+        }
+        return zone;
+      }
+
+      cards.forEach(function (card) {
+        let name, obj, tapped;
+        if (typeof card === "string") {
+          // Graveyard/commander entries are just strings
+          name = card;
+          obj = null;
+          tapped = false;
+        } else {
+          name = card.name || "Unknown";
+          obj = card;
+          tapped = !!card.tapped;
+        }
+        row.appendChild(makeCardChip(name, obj, cardImages, tapped));
+      });
+
+      return zone;
+    }
+
+    function renderSnapshot(index) {
+      const snap = game.snapshots[index];
+      if (!snap) return;
+
+      // Turn info
+      const phase = snap.phase || "";
+      const step = snap.step || "";
+      const phaseDisplay = step && step !== phase ? phase + " / " + step : phase;
+      turnInfoEl.textContent =
+        "Turn " + snap.turn + "/" + game.totalTurns +
+        " | " + phaseDisplay +
+        " | Active: " + (snap.active_player || "?");
+
+      // Players
+      playersGrid.innerHTML = "";
+      (snap.players || []).forEach(function (player) {
+        const card = document.createElement("article");
+        card.className = "player-card";
+        if (player.has_left) card.classList.add("eliminated");
+
+        // Header
+        const header = document.createElement("div");
+        header.className = "player-header";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "player-name";
+        if (player.is_active) nameEl.classList.add("active-player");
+        nameEl.textContent = player.name || "?";
+        header.appendChild(nameEl);
+
+        const lifeEl = document.createElement("div");
+        lifeEl.className = "player-life";
+        lifeEl.textContent = "Life " + (player.life ?? "?") + " | Lib " + (player.library_count ?? "?");
+        header.appendChild(lifeEl);
+
+        card.appendChild(header);
+
+        // Counters
+        const counters = (player.counters || []).filter(function (c) { return c.count > 0; });
+        if (counters.length > 0) {
+          const countersEl = document.createElement("div");
+          countersEl.className = "player-counters";
+          countersEl.textContent = counters.map(function (c) { return c.name + ": " + c.count; }).join(" | ");
+          card.appendChild(countersEl);
+        }
+
+        // Zones
+        card.appendChild(makeZone("Commander", player.commanders, game.cardImages));
+        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages));
+        card.appendChild(makeZone("Hand", player.hand, game.cardImages, player.hand_count));
+        card.appendChild(makeZone("Graveyard", player.graveyard, game.cardImages));
+        if (player.exile && player.exile.length > 0) {
+          card.appendChild(makeZone("Exile", player.exile, game.cardImages));
+        }
+
+        playersGrid.appendChild(card);
+      });
+
+      // Stack
+      if (snap.stack && snap.stack.length > 0) {
+        stackCards.innerHTML = "";
+        snap.stack.forEach(function (item) {
+          const name = typeof item === "string" ? item : (item.name || "?");
+          stackCards.appendChild(makeCardChip(name, item, game.cardImages, false));
+        });
+        stackSection.classList.remove("hidden");
+      } else {
+        stackSection.classList.add("hidden");
+      }
+
+      // Action log: show actions between previous snapshot seq and current snapshot seq
+      actionList.innerHTML = "";
+      const prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
+      const curSeq = snap.seq;
+      const relevantActions = game.actions.filter(function (a) {
+        return a.seq > prevSeq && a.seq <= curSeq;
+      });
+
+      if (relevantActions.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "action-line";
+        empty.textContent = "(no actions)";
+        actionList.appendChild(empty);
+      } else {
+        relevantActions.forEach(function (action) {
+          const line = document.createElement("div");
+          line.className = "action-line";
+          line.textContent = action.message;
+          actionList.appendChild(line);
+        });
+      }
+
+      // Update transport
+      slider.value = String(index);
+      counterEl.textContent = (index + 1) + " / " + game.snapshots.length;
+    }
+
+    function goTo(index) {
+      currentIndex = Math.max(0, Math.min(index, game.snapshots.length - 1));
+      renderSnapshot(currentIndex);
+    }
+
+    function toggleAutoPlay() {
+      if (autoPlayInterval) {
+        clearInterval(autoPlayInterval);
+        autoPlayInterval = null;
+        btnAuto.textContent = "Play";
+        btnAuto.classList.remove("active");
+      } else {
+        btnAuto.textContent = "Pause";
+        btnAuto.classList.add("active");
+        autoPlayInterval = setInterval(function () {
+          if (currentIndex >= game.snapshots.length - 1) {
+            toggleAutoPlay();
+            return;
+          }
+          goTo(currentIndex + 1);
+        }, 500);
+      }
+    }
+
+    // Load game data
+    fetch("/games/" + slug + ".json")
+      .then(function (r) {
+        if (!r.ok) throw new Error("Game not found (HTTP " + r.status + ")");
+        return r.json();
+      })
+      .then(function (data) {
+        game = data;
+
+        if (!game.snapshots || game.snapshots.length === 0) {
+          showError("No snapshots in game data.");
+          return;
+        }
+
+        // Show UI
+        loadingEl.classList.add("hidden");
+        gameUI.classList.remove("hidden");
+
+        // Title
+        const playerNames = (game.players || []).map(function (p) {
+          return p.commander || p.name;
+        }).join(" vs ");
+        gameTitleEl.textContent = playerNames;
+
+        // Set up transport
+        slider.max = String(game.snapshots.length - 1);
+
+        btnStart.addEventListener("click", function () { goTo(0); });
+        btnPrev.addEventListener("click", function () { goTo(currentIndex - 1); });
+        btnNext.addEventListener("click", function () { goTo(currentIndex + 1); });
+        btnEnd.addEventListener("click", function () { goTo(game.snapshots.length - 1); });
+        btnAuto.addEventListener("click", toggleAutoPlay);
+        slider.addEventListener("input", function () { goTo(Number(slider.value)); });
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "ArrowRight") { e.preventDefault(); goTo(currentIndex + 1); }
+          if (e.key === "ArrowLeft") { e.preventDefault(); goTo(currentIndex - 1); }
+          if (e.key === "Home") { e.preventDefault(); goTo(0); }
+          if (e.key === "End") { e.preventDefault(); goTo(game.snapshots.length - 1); }
+          if (e.key === " ") { e.preventDefault(); toggleAutoPlay(); }
+          if (e.key === "Escape") { hidePreview(); }
+        });
+
+        // Render first snapshot
+        renderSnapshot(0);
+      })
+      .catch(function (err) {
+        showError(err.message || "Failed to load game data.");
+      });
+
+    window.addEventListener("blur", hidePreview);
+  })();
+</script>

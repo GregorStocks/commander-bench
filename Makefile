@@ -74,6 +74,12 @@ run-legacy-llm:
 run-client:
 	cd Mage.Client && mvn -q exec:java
 
+# Export a game log for the website visualizer
+# Usage: make export-game GAME=game_20260208_220934
+.PHONY: export-game
+export-game:
+	python3 scripts/export_game.py $(GAME)
+
 # Standalone test server (stays running until Ctrl-C)
 # Optional: make run-staller PORT=18080
 .PHONY: run-staller

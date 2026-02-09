@@ -1,14 +1,16 @@
 ---
 interface Props {
   title: string;
+  wide?: boolean;
 }
 
-const { title } = Astro.props;
+const { title, wide } = Astro.props;
 const currentPath = Astro.url.pathname;
 
 const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/about', label: 'About' },
+  { href: '/games', label: 'Games' },
   { href: '/history', label: 'History' },
   { href: '/watch', label: 'Watch' },
 ];
@@ -29,14 +31,14 @@ const navLinks = [
       <ul>
         {navLinks.map(link => (
           <li>
-            <a href={link.href} class:list={[{ active: currentPath === link.href }]}>
+            <a href={link.href} class:list={[{ active: currentPath === link.href || (link.href !== '/' && currentPath.startsWith(link.href)) }]}>
               {link.label}
             </a>
           </li>
         ))}
       </ul>
     </nav>
-    <main>
+    <main class:list={[{ wide }]}>
       <slot />
     </main>
     <footer>
@@ -102,6 +104,10 @@ const navLinks = [
     margin: 0 auto;
     padding: 2rem;
     width: 100%;
+  }
+
+  main.wide {
+    max-width: none;
   }
 
   footer {
