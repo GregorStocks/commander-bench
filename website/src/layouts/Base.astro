@@ -1,0 +1,122 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+const currentPath = Astro.url.pathname;
+
+const navLinks = [
+  { href: '/', label: 'Home' },
+  { href: '/about', label: 'About' },
+  { href: '/history', label: 'History' },
+  { href: '/watch', label: 'Watch' },
+];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title} | Commander Bench</title>
+  </head>
+  <body>
+    <nav>
+      <a class="site-title" href="/">Commander Bench</a>
+      <ul>
+        {navLinks.map(link => (
+          <li>
+            <a href={link.href} class:list={[{ active: currentPath === link.href }]}>
+              {link.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>
+        <a href="https://github.com/GregorStocks/commander-bench">GitHub</a>
+      </p>
+    </footer>
+  </body>
+</html>
+
+<style>
+  :global(*, *::before, *::after) {
+    box-sizing: border-box;
+    margin: 0;
+  }
+
+  :global(body) {
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #e0e0e0;
+    background: #1a1a2e;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    padding: 1rem 2rem;
+    background: #16213e;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  .site-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #e94560;
+    text-decoration: none;
+  }
+
+  nav ul {
+    display: flex;
+    list-style: none;
+    gap: 1.5rem;
+    padding: 0;
+  }
+
+  nav a {
+    color: #a0a0b8;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  nav a:hover,
+  nav a.active {
+    color: #e94560;
+  }
+
+  main {
+    flex: 1;
+    max-width: 52rem;
+    margin: 0 auto;
+    padding: 2rem;
+    width: 100%;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+    border-top: 1px solid #0f3460;
+  }
+
+  footer a {
+    color: #a0a0b8;
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    color: #e94560;
+  }
+</style>

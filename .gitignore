@@ -77,3 +77,8 @@ mage-bundle.zip
 __pycache__
 *.pyc
 .venv
+
+# website
+website/node_modules/
+website/dist/
+website/.astro/
