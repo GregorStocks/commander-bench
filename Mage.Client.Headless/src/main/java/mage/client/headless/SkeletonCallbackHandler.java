@@ -91,6 +91,7 @@ public class SkeletonCallbackHandler {
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
+    private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     public SkeletonCallbackHandler(SkeletonMageClient client) {
@@ -99,6 +100,10 @@ public class SkeletonCallbackHandler {
 
     public void setErrorLogPath(String path) {
         this.errorLogPath = path;
+    }
+
+    public void setSkeletonLogPath(String path) {
+        this.skeletonLogPath = path;
     }
 
     /**
@@ -115,6 +120,91 @@ public class SkeletonCallbackHandler {
                 logger.warn("Failed to write to error log: " + e.getMessage());
             }
         }
+    }
+
+    /**
+     * Write a skeleton event to the JSONL dump file (data hoarding).
+     * Each line is a compact JSON object with timestamp, callback method, and relevant data.
+     */
+    private void logSkeletonEvent(ClientCallbackMethod method, String summary) {
+        String path = skeletonLogPath;
+        if (path == null) {
+            return;
+        }
+        try (PrintWriter pw = new PrintWriter(new FileWriter(path, true))) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\"ts\":\"").append(LocalTime.now().format(TIME_FMT)).append("\"");
+            sb.append(",\"method\":\"").append(method.name()).append("\"");
+            if (summary != null && !summary.isEmpty()) {
+                // Escape JSON string
+                sb.append(",\"data\":").append(escapeJsonString(summary));
+            }
+            sb.append("}");
+            pw.println(sb.toString());
+        } catch (IOException e) {
+            logger.debug("Failed to write skeleton log: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Escape a string for JSON embedding. Returns a quoted JSON string.
+     */
+    private static String escapeJsonString(String s) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default:
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        sb.append("\"");
+        return sb.toString();
+    }
+
+    /**
+     * Build a compact one-line summary of game state for skeleton JSONL dump.
+     */
+    private String buildSkeletonStateSummary() {
+        GameView gv = lastGameView;
+        if (gv == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("T").append(roundTracker.getGameRound());
+        if (gv.getPhase() != null) sb.append(" ").append(gv.getPhase());
+        sb.append(" | ");
+        UUID myPlayerId = currentGameId != null ? activeGames.get(currentGameId) : null;
+        for (PlayerView p : gv.getPlayers()) {
+            boolean isMe = p.getPlayerId().equals(myPlayerId);
+            sb.append(p.getName());
+            if (isMe) sb.append("(me)");
+            sb.append(":").append(p.getLife()).append("hp");
+            sb.append(",").append(p.getHandCount()).append("h");
+            sb.append(",").append(p.getBattlefield() != null ? p.getBattlefield().size() : 0).append("bf");
+            sb.append(" | ");
+        }
+        // My hand
+        if (gv.getMyHand() != null && !gv.getMyHand().isEmpty()) {
+            sb.append("Hand:[");
+            boolean first = true;
+            for (CardView card : gv.getMyHand().values()) {
+                if (!first) sb.append(",");
+                sb.append(card.getDisplayName());
+                first = false;
+            }
+            sb.append("]");
+        }
+        return sb.toString();
     }
 
     public void setSession(Session session) {
@@ -1685,6 +1775,23 @@ public class SkeletonCallbackHandler {
             UUID objectId = callback.getObjectId();
             ClientCallbackMethod method = callback.getMethod();
             logger.debug("[" + client.getUsername() + "] Callback received: " + method);
+
+            // Skeleton JSONL dump: log every callback
+            if (skeletonLogPath != null) {
+                String summary = null;
+                if (method == ClientCallbackMethod.GAME_UPDATE || method == ClientCallbackMethod.GAME_UPDATE_AND_INFORM) {
+                    summary = buildSkeletonStateSummary();
+                } else if (method == ClientCallbackMethod.CHATMESSAGE) {
+                    Object chatData = callback.getData();
+                    if (chatData instanceof ChatMessage) {
+                        ChatMessage chatMsg = (ChatMessage) chatData;
+                        summary = chatMsg.getMessageType() + ": " + chatMsg.getMessage();
+                    }
+                } else if (method == ClientCallbackMethod.GAME_OVER) {
+                    summary = "Game over";
+                }
+                logSkeletonEvent(method, summary);
+            }
 
             switch (method) {
                 case START_GAME:

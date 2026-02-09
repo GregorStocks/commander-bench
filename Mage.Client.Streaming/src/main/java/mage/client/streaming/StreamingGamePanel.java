@@ -48,6 +48,9 @@ import com.google.gson.JsonParser;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.net.URLEncoder;
@@ -117,6 +120,11 @@ public class StreamingGamePanel extends GamePanel {
     private static final int OVERLAY_PUSH_INTERVAL_MS = 200;
     private long lastOverlayPushMs = 0L;
 
+    // Game event JSONL logging
+    private PrintWriter gameEventWriter;
+    private int gameEventSeq = 0;
+    private String lastSnapshotKey = "";  // For deduplication
+
     @Override
     public synchronized void watchGame(UUID currentTableId, UUID parentTableId, UUID gameId, MagePane gamePane) {
         this.streamingGameId = gameId;
@@ -144,6 +152,7 @@ public class StreamingGamePanel extends GamePanel {
             combinedChatPanel = new CombinedChatPanel();
             combinedChatPanel.setPlayerChatPanel(playerChatPanel);
             combinedChatPanel.setRoundTracker(roundTracker);
+            combinedChatPanel.setGamePanel(this);
 
             // Access fields via reflection (matching existing pattern in this class)
             Field gameChatField = GamePanel.class.getDeclaredField("gameChatPanel");
@@ -181,9 +190,11 @@ public class StreamingGamePanel extends GamePanel {
         hideHandContainer();
         requestHandPermissions(game);
         initCostPolling();
+        initGameEventLog();
         // Schedule auto-dismissal of any popup dialogs created during init
         schedulePopupDismissal();
         pushOverlayState(game, true);
+        writeStateSnapshotIfChanged(game);
     }
 
     @Override
@@ -212,6 +223,7 @@ public class StreamingGamePanel extends GamePanel {
         updatePlayerPanelVisibility(game);
         // Re-layout stack cards vertically (parent lays them out horizontally)
         relayoutStackVertically();
+        writeStateSnapshotIfChanged(game);
         pushOverlayState(game, false);
     }
 
@@ -223,6 +235,14 @@ public class StreamingGamePanel extends GamePanel {
     public void endMessage(int messageId, GameView gameView, Map<String, Serializable> options, String message) {
         super.endMessage(messageId, gameView, options, message);
         pushOverlayState(gameView, true);
+
+        if (gameEventWriter != null) {
+            JsonObject event = new JsonObject();
+            event.addProperty("message", message != null ? message : "");
+            writeGameEvent("game_over", event);
+            gameEventWriter.close();
+            gameEventWriter = null;
+        }
 
         if (costPollTimer != null) {
             costPollTimer.stop();
@@ -1366,6 +1386,172 @@ public class StreamingGamePanel extends GamePanel {
         // Poll cost files every 2 seconds
         costPollTimer = new Timer(2000, e -> pollCostFiles());
         costPollTimer.start();
+    }
+
+    /**
+     * Initialize the game event JSONL writer if game directory is configured.
+     */
+    private void initGameEventLog() {
+        if (gameEventWriter != null) {
+            return;
+        }
+        // gameDirPath may not be set yet if initCostPolling bailed early
+        if (gameDirPath == null) {
+            String gameDirStr = System.getProperty("xmage.streaming.gameDir");
+            if (gameDirStr != null && !gameDirStr.isEmpty()) {
+                gameDirPath = Paths.get(gameDirStr);
+            }
+        }
+        if (gameDirPath == null) {
+            return;
+        }
+        try {
+            gameEventWriter = new PrintWriter(new FileWriter(gameDirPath.resolve("game_events.jsonl").toString(), true));
+        } catch (IOException e) {
+            logger.warn("Failed to open game_events.jsonl", e);
+        }
+    }
+
+    /**
+     * Write a single JSONL event line to game_events.jsonl.
+     */
+    private void writeGameEvent(String type, JsonObject data) {
+        if (gameEventWriter == null) {
+            return;
+        }
+        gameEventSeq++;
+        data.addProperty("ts", Instant.now().toString());
+        data.addProperty("seq", gameEventSeq);
+        data.addProperty("type", type);
+        gameEventWriter.println(data.toString());
+        gameEventWriter.flush();
+    }
+
+    /**
+     * Write a state_snapshot event if the game state has meaningfully changed
+     * (turn, phase, step, or any player's life/battlefield/hand changed).
+     */
+    private void writeStateSnapshotIfChanged(GameView game) {
+        if (gameEventWriter == null || game == null) {
+            return;
+        }
+        // Skip snapshots until hand permissions are granted (avoids incomplete early snapshots)
+        Map<String, SimpleCardsView> watchedHands = game.getWatchedHands();
+        if (watchedHands == null || watchedHands.isEmpty()) {
+            return;
+        }
+        // Build a compact key for deduplication
+        StringBuilder keyBuilder = new StringBuilder();
+        keyBuilder.append(roundTracker.update(game)).append("|");
+        keyBuilder.append(game.getPhase()).append("|");
+        keyBuilder.append(game.getStep()).append("|");
+        for (PlayerView p : game.getPlayers()) {
+            keyBuilder.append(p.getName()).append(":").append(p.getLife()).append(":")
+                      .append(p.getHandCount()).append(":")
+                      .append(p.getBattlefield() != null ? p.getBattlefield().size() : 0).append(",");
+        }
+        String key = keyBuilder.toString();
+        if (key.equals(lastSnapshotKey)) {
+            return;
+        }
+        lastSnapshotKey = key;
+
+        JsonObject event = new JsonObject();
+        event.addProperty("turn", roundTracker.getGameRound());
+        event.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
+        event.addProperty("step", game.getStep() != null ? game.getStep().name() : "");
+        event.addProperty("active_player", safe(game.getActivePlayerName()));
+        event.addProperty("priority_player", safe(game.getPriorityPlayerName()));
+
+        // Build compact player state (without layout info)
+        JsonArray playersArray = new JsonArray();
+        Map<String, Card> loadedCards = getLoadedCards();
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            JsonObject playerJson = new JsonObject();
+            playerJson.addProperty("name", safe(player.getName()));
+            playerJson.addProperty("life", player.getLife());
+            playerJson.addProperty("library_count", player.getLibraryCount());
+            playerJson.addProperty("hand_count", player.getHandCount());
+            playerJson.addProperty("is_active", player.isActive());
+            playerJson.addProperty("has_left", player.hasLeft());
+            playerJson.add("counters", countersToJson(player));
+
+            // Battlefield - compact (name + tapped only)
+            JsonArray bfArray = new JsonArray();
+            if (player.getBattlefield() != null) {
+                for (PermanentView perm : player.getBattlefield().values()) {
+                    JsonObject permJson = new JsonObject();
+                    permJson.addProperty("name", safe(perm.getDisplayName()));
+                    permJson.addProperty("tapped", perm.isTapped());
+                    if (perm.isCreature()) {
+                        permJson.addProperty("power", safe(perm.getPower()));
+                        permJson.addProperty("toughness", safe(perm.getToughness()));
+                    }
+                    bfArray.add(permJson);
+                }
+            }
+            playerJson.add("battlefield", bfArray);
+
+            // Commanders
+            JsonArray cmdArray = new JsonArray();
+            if (player.getCommandObjectList() != null) {
+                for (CommandObjectView cmd : player.getCommandObjectList()) {
+                    cmdArray.add(safe(cmd.getName()));
+                }
+            }
+            playerJson.add("commanders", cmdArray);
+
+            // Graveyard (names only)
+            JsonArray gyArray = new JsonArray();
+            if (player.getGraveyard() != null) {
+                for (CardView card : player.getGraveyard().values()) {
+                    gyArray.add(safe(card.getDisplayName()));
+                }
+            }
+            playerJson.add("graveyard", gyArray);
+
+            // Hand cards (observer has permission to see all hands)
+            CardsView handCards = getHandCardsForPlayer(player, game, loadedCards);
+            JsonArray handArray = new JsonArray();
+            if (handCards != null) {
+                for (CardView card : handCards.values()) {
+                    JsonObject cardJson = new JsonObject();
+                    cardJson.addProperty("name", safe(card.getDisplayName()));
+                    cardJson.addProperty("mana_cost", safe(card.getManaCostStr()));
+                    handArray.add(cardJson);
+                }
+            }
+            playerJson.add("hand", handArray);
+
+            playersArray.add(playerJson);
+        }
+        event.add("players", playersArray);
+
+        // Stack
+        JsonArray stackArray = new JsonArray();
+        if (game.getStack() != null) {
+            for (CardView card : game.getStack().values()) {
+                JsonObject stackJson = new JsonObject();
+                stackJson.addProperty("name", safe(card.getDisplayName()));
+                stackArray.add(stackJson);
+            }
+        }
+        event.add("stack", stackArray);
+
+        writeGameEvent("state_snapshot", event);
+    }
+
+    /**
+     * Log a game event from the chat panel (game action or player chat).
+     */
+    void logChatEvent(String type, String message, String username) {
+        JsonObject event = new JsonObject();
+        if ("player_chat".equals(type)) {
+            event.addProperty("from", username != null ? username : "");
+        }
+        event.addProperty("message", message != null ? message : "");
+        writeGameEvent(type, event);
     }
 
     /**
