@@ -54,7 +54,7 @@ run-llm:
 run-llm4:
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
-# Launch the standard XMage desktop client (for image downloads, deck building, etc.)
+# Launch the desktop client (for image downloads, deck building, etc.)
 .PHONY: run-client
 run-client:
 	cd Mage.Client && mvn -q exec:java

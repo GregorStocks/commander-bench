@@ -68,7 +68,7 @@ make run-dumb OUTPUT=/path/to/video.mov
 make run-dumb ARGS="--config myconfig.json"
 ```
 
-Recordings are saved to `.context/ai-harness-logs/recording_<timestamp>.mov` by default.
+Recordings are saved to `~/commander-bench-logs/` by default.
 
 ## Issues
 
