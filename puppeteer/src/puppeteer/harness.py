@@ -687,16 +687,6 @@ def main() -> int:
 
         print("Server is ready!")
 
-        # Share the server's card database with the headless client so that
-        # DeckImporter / TxtDeckImporter can resolve card names in .txt decks.
-        # The headless client's custom parser only handles .dck format (with
-        # explicit set codes); .txt files need CardRepository which reads from
-        # the H2 database the server already built.
-        headless_db = project_root / "Mage.Client.Headless" / "db"
-        server_db = project_root / "Mage.Server" / "db"
-        if server_db.exists() and not headless_db.exists():
-            headless_db.symlink_to(server_db)
-
         # Player config was already loaded above (passed to observer/GUI via environment variable)
         if config.config_file:
             print(f"Using config: {config.config_file}")

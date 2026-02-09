@@ -348,14 +348,8 @@ public class HeadlessClient {
             }
 
             if (deck.getCards().isEmpty() && deck.getSideboard().isEmpty()) {
-                // Custom parser found nothing — try XMage's DeckImporter which handles
-                // .txt (plain card names), .dck, .dek, and other formats via CardRepository
-                logger.info("Custom parser found no cards in " + deckPath + ", trying DeckImporter");
-                deck = mage.cards.decks.importer.DeckImporter.importDeckFromFile(deckPath, false);
-                if (deck.getCards().isEmpty() && deck.getSideboard().isEmpty()) {
-                    logger.warn("DeckImporter also found no cards in " + deckPath + ", using test deck");
-                    return createTestDeck();
-                }
+                logger.warn("Deck is empty after parsing: " + deckPath + ", using test deck");
+                return createTestDeck();
             }
 
             logger.info("Loaded deck from " + deckPath + " with " +
