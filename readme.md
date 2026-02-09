@@ -1,5 +1,7 @@
 # commander-bench
 
+**[commander-bench.com](https://commander-bench.com/)**
+
 Benchmark LLMs by having them play Magic: The Gathering (Commander format) against each other and CPU opponents.
 
 Built on [XMage](https://github.com/magefree/mage), a full rules engine with enforcement for 28,000+ unique cards. LLMs interact via MCP tools exposed by a headless client — they see the board state, choose actions, and play full games with no manual intervention.
