@@ -88,8 +88,8 @@ class Config:
     skeleton_delay: int = 5
     log_dir: Path = field(default_factory=lambda: Path.home() / "commander-bench-logs")
     jvm_opens: str = "--add-opens=java.base/java.io=ALL-UNNAMED"
-    # Enable OpenGL pipeline for Java 2D — big speedup for rendering if GPU is available
-    jvm_rendering: str = "-Dsun.java2d.opengl=true"
+    # Enable XRender pipeline for Java 2D — GPU-accelerated rendering on Linux
+    jvm_rendering: str = "-Dsun.java2d.xrender=true"
 
     @property
     def jvm_headless_opts(self) -> str:
