@@ -27,6 +27,8 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
+MAX_AUTO_PASS_ITERATIONS = 500   # ~80+ min at 10s/iteration
+MAX_CONSECUTIVE_ERRORS = 20      # 20 * 5s = ~100s of continuous failure
 
 def _log(msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S")
@@ -335,12 +337,35 @@ async def run_pilot_loop(
                             await execute_tool(session, "send_chat_message", {"message": "My brain is fried... going on autopilot for the rest of this game. GG!"})
                         except Exception:
                             pass
-                        while True:
+                        consecutive_errors = 0
+                        for _ in range(MAX_AUTO_PASS_ITERATIONS):
                             try:
-                                await execute_tool(session, "auto_pass_until_event", {})
+                                result_text = await execute_tool(session, "auto_pass_until_event", {})
+                                try:
+                                    result_data = json.loads(result_text)
+                                except (json.JSONDecodeError, TypeError):
+                                    result_data = {}
+                                if result_data.get("game_over"):
+                                    _log("[pilot] Game over detected, exiting auto-pass loop")
+                                    return
+                                if "error" in result_data:
+                                    consecutive_errors += 1
+                                    _log_error(game_dir, username, f"[pilot] Auto-pass error: {result_data['error']}")
+                                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                                        _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                        return
+                                    await asyncio.sleep(5)
+                                else:
+                                    consecutive_errors = 0
                             except Exception as pass_err:
-                                _log_error(game_dir, username, f"[pilot] Auto-pass error: {pass_err}")
+                                consecutive_errors += 1
+                                _log_error(game_dir, username, f"[pilot] Auto-pass exception: {pass_err}")
+                                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                                    _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                    return
                                 await asyncio.sleep(5)
+                        _log_error(game_dir, username, "[pilot] Auto-pass loop reached max iterations, exiting")
+                        return
                 messages.append({
                     "role": "user",
                     "content": "Continue playing. Call wait_for_action.",
@@ -396,12 +421,35 @@ async def run_pilot_loop(
                     await execute_tool(session, "send_chat_message", {"message": f"{reason}... going on autopilot. GG!"})
                 except Exception:
                     pass
-                while True:
+                consecutive_errors = 0
+                for _ in range(MAX_AUTO_PASS_ITERATIONS):
                     try:
-                        await execute_tool(session, "auto_pass_until_event", {})
+                        result_text = await execute_tool(session, "auto_pass_until_event", {})
+                        try:
+                            result_data = json.loads(result_text)
+                        except (json.JSONDecodeError, TypeError):
+                            result_data = {}
+                        if result_data.get("game_over"):
+                            _log("[pilot] Game over detected, exiting auto-pass loop")
+                            return
+                        if "error" in result_data:
+                            consecutive_errors += 1
+                            _log_error(game_dir, username, f"[pilot] Auto-pass error: {result_data['error']}")
+                            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                                _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                return
+                            await asyncio.sleep(5)
+                        else:
+                            consecutive_errors = 0
                     except Exception as pass_err:
-                        _log_error(game_dir, username, f"[pilot] Pass-only error: {pass_err}")
+                        consecutive_errors += 1
+                        _log_error(game_dir, username, f"[pilot] Auto-pass exception: {pass_err}")
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                            _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                            return
                         await asyncio.sleep(5)
+                _log_error(game_dir, username, "[pilot] Auto-pass loop reached max iterations, exiting")
+                return
 
             # Transient error - keep actions flowing while waiting to retry
             try:
