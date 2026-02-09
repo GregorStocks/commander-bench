@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import IO
 
 import psutil
 
@@ -62,7 +63,7 @@ class ProcessManager:
     """
 
     def __init__(self):
-        self._processes: list[subprocess.Popen] = []
+        self._processes: list[tuple[subprocess.Popen, IO | None]] = []
         self._lock = threading.Lock()
         self._cleaned_up = False
 
@@ -99,21 +100,32 @@ class ProcessManager:
         if env:
             merged_env.update(env)
 
-        stdout = open(log_file, "w") if log_file else subprocess.PIPE
-        stderr = subprocess.STDOUT if log_file else subprocess.PIPE
+        log_fh: IO | None = None
+        if log_file:
+            log_fh = open(log_file, "w")
+            stdout = log_fh
+            stderr = subprocess.STDOUT
+        else:
+            stdout = subprocess.PIPE
+            stderr = subprocess.PIPE
 
-        proc = subprocess.Popen(
-            args,
-            cwd=cwd,
-            env=merged_env,
-            stdout=stdout,
-            stderr=stderr,
-            # Don't use start_new_session=True - keep processes in same group
-            # so they receive signals when parent is killed
-        )
+        try:
+            proc = subprocess.Popen(
+                args,
+                cwd=cwd,
+                env=merged_env,
+                stdout=stdout,
+                stderr=stderr,
+                # Don't use start_new_session=True - keep processes in same group
+                # so they receive signals when parent is killed
+            )
+        except Exception:
+            if log_fh:
+                log_fh.close()
+            raise
 
         with self._lock:
-            self._processes.append(proc)
+            self._processes.append((proc, log_fh))
 
         return proc
 
@@ -122,15 +134,22 @@ class ProcessManager:
         kill_tree(pid)
 
     def cleanup(self):
-        """Terminate all tracked processes and their children."""
+        """Terminate all tracked processes and close log file handles."""
         with self._lock:
             if self._cleaned_up:
                 return
             self._cleaned_up = True
 
-            for proc in self._processes:
+            for proc, _fh in self._processes:
                 if proc.poll() is None:  # Still running
                     print(f"Killing process tree rooted at PID {proc.pid}")
                     self._kill_tree(proc.pid)
+
+            for _proc, fh in self._processes:
+                if fh is not None:
+                    try:
+                        fh.close()
+                    except OSError:
+                        pass
 
             self._processes.clear()
