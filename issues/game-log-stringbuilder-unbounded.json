@@ -1,0 +1,10 @@
+{
+  "title": "In-memory game log StringBuilder grows without bound in long games",
+  "description": "SkeletonCallbackHandler.java:86: The `gameLog` StringBuilder is appended to throughout the game but never truncated or capped. In long multiplayer Commander games with many turns, this can consume significant heap memory.\n\nThe log is served via the `get_game_log` MCP tool with a `max_chars` parameter that only limits the response, not the underlying buffer. Should cap the StringBuilder size (e.g., keep last N characters) or use a ring buffer approach.",
+  "status": "open",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}

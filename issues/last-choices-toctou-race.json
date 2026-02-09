@@ -1,0 +1,10 @@
+{
+  "title": "Race condition between lastChoices size check and access in choose_action",
+  "description": "SkeletonCallbackHandler.java:879-885: `lastChoices` is declared `volatile` but the compound operation (size check at line 879, then `get(index)` at line 885) is not atomic. An XMage callback can overwrite `lastChoices` with a new list between these two lines, causing IndexOutOfBoundsException or selecting the wrong card/target.\n\nFix: snapshot `lastChoices` into a local variable before the compound check-then-use, or protect the entire block with a lock.",
+  "status": "open",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-08T00:00:00.000000-08:00",
+  "updated_at": "2026-02-08T00:00:00.000000-08:00"
+}
