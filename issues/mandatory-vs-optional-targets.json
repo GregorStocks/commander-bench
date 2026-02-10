@@ -1,0 +1,13 @@
+{
+  "title": "Models don't understand mandatory vs optional target selections",
+  "description": "When XMage requires a mandatory target selection (e.g. for a spell on the stack), models try to pass priority or send answer:false instead of selecting a target. They don't understand that some selections are required and cannot be skipped.\n\nEvidence from game_20260209_184021: Models repeatedly try to skip mandatory GAME_TARGET prompts, causing the prompt to reappear and creating loops.\n\nPossible fixes:\n- Include a 'required' flag in get_action_choices output when the selection is mandatory\n- Add clearer messaging in the MCP layer about mandatory vs optional selections\n- Auto-select the only valid target when there's exactly one legal option\n\nGame log: ~/mage-bench-logs/game_20260209_184021/",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": [
+    "headless-client",
+    "pilot"
+  ],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}

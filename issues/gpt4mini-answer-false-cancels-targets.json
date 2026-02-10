@@ -1,0 +1,10 @@
+{
+  "title": "GPT-4.1-mini sends answer:false with every choose_action, cancelling target selections",
+  "description": "GPT-4.1-mini consistently sends answer:false alongside index selections in choose_action calls. This cancels the action instead of confirming it. The model appears to misunderstand the answer parameter — it treats answer:false as 'I don't want to do anything else' rather than understanding it cancels the current selection.\n\nEvidence from game_20260209_184021: Every choose_action call from GPT-4.1-mini includes answer:false, causing spells to fizzle after targets are selected. This is the single biggest reason the model fails to resolve spells.\n\nPossible fixes:\n- Ignore answer:false when an index is also provided (index takes precedence)\n- Add validation in the MCP layer to warn/block contradictory parameters\n- Improve tool description to make the answer parameter's effect clearer\n\nGame log: ~/mage-bench-logs/game_20260209_184021/",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "labels": ["headless-client", "pilot"],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}

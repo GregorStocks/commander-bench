@@ -1,0 +1,12 @@
+{
+  "title": "Herald's Horn presents 372 creature types as raw choice list",
+  "description": "When Herald's Horn enters the battlefield, it asks the player to choose a creature type from all 372+ legal creature types. This is presented as a massive GAME_CHOOSE_CHOICE with hundreds of options, which is overwhelming for LLMs and burns significant context.\n\nEvidence from game_20260209_184021: Herald's Horn triggered a choice dialog with 372 creature type options. The model had to process all of them to make a selection.\n\nPossible fixes:\n- Pre-filter creature types to only show types that match creatures in the player's deck\n- Summarize the choice in the MCP layer instead of listing all 372 options\n- Add a hint about which creature types are in the player's deck\n\nGame log: ~/mage-bench-logs/game_20260209_184021/",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": [
+    "headless-client"
+  ],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}
