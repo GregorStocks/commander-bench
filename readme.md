@@ -46,7 +46,7 @@ Game logic and XMage workarounds live in the Java MCP layer. The Python harness 
 | **Sleepwalker** | No | MCP auto-player with chat, no LLM |
 | **CPU** | No | XMage's built-in AI (COMPUTER_MAD) |
 | **Potato** | No | Dumbest auto-player |
-| **Staller** | No | Slow auto-player for long-lived servers |
+| **Staller** | No | Like potato but slow; stays connected between games |
 
 Configure players in JSON config files (see `puppeteer/ai-harness-*.json`).
 
