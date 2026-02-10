@@ -1,0 +1,191 @@
+---
+import Base from '../layouts/Base.astro';
+import toolsData from '../data/mcp-tools.json';
+
+const categories = [
+  {
+    title: 'Game Flow',
+    description: 'Tools for managing the action/priority loop.',
+    tools: ['is_action_on_me', 'wait_for_action', 'pass_priority', 'auto_pass_until_event'],
+  },
+  {
+    title: 'Actions',
+    description: 'Tools for making game decisions.',
+    tools: ['take_action', 'get_action_choices', 'choose_action'],
+  },
+  {
+    title: 'Game State',
+    description: 'Tools for observing the game.',
+    tools: ['get_game_state', 'get_game_log', 'get_oracle_text'],
+  },
+  {
+    title: 'Communication',
+    description: 'Tools for interacting with other players.',
+    tools: ['send_chat_message'],
+  },
+];
+
+const toolsByName = Object.fromEntries(toolsData.map((t: any) => [t.name, t]));
+
+function getProperties(tool: any) {
+  const props = tool.inputSchema?.properties ?? {};
+  const required = tool.inputSchema?.required ?? [];
+  return Object.entries(props).map(([name, schema]: [string, any]) => ({
+    name,
+    type: schema.type,
+    required: required.includes(name),
+    description: schema.description,
+    items: schema.items,
+  }));
+}
+---
+
+<Base title="MCP Tools">
+  <h1>MCP Tools</h1>
+
+  <p>
+    The headless Java client exposes these tools via the
+    <a href="https://modelcontextprotocol.io">Model Context Protocol</a> over stdio.
+    LLM players use them to observe game state and make decisions. This page is
+    generated from the same schema the LLM clients use.
+  </p>
+
+  {categories.map(category => (
+    <section>
+      <h2>{category.title}</h2>
+      <p class="category-desc">{category.description}</p>
+
+      {category.tools.map(toolName => {
+        const tool = toolsByName[toolName];
+        if (!tool) return null;
+        const props = getProperties(tool);
+
+        return (
+          <div class="tool">
+            <h3><code>{tool.name}</code></h3>
+            <p class="tool-desc">{tool.description}</p>
+
+            {props.length > 0 ? (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {props.map(prop => (
+                    <tr>
+                      <td><code>{prop.name}</code></td>
+                      <td>{prop.type}{prop.items ? `[${prop.items.type}]` : ''}</td>
+                      <td>{prop.required ? 'Yes' : 'No'}</td>
+                      <td>{prop.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p class="no-params">No parameters.</p>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  ))}
+
+  <p class="source-link">
+    Source: <a href="https://github.com/GregorStocks/mage-bench/blob/master/Mage.Client.Headless/src/main/java/mage/client/headless/McpServer.java">McpServer.java</a>
+  </p>
+</Base>
+
+<style>
+  h1 {
+    color: #e94560;
+    margin-bottom: 1.5rem;
+  }
+
+  h2 {
+    color: #e94560;
+    margin: 2.5rem 0 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  h3 {
+    margin: 0 0 0.5rem;
+  }
+
+  h3 code {
+    font-size: 1.1rem;
+    color: #e94560;
+    background: #16213e;
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+  }
+
+  p {
+    line-height: 1.7;
+    margin-bottom: 1rem;
+  }
+
+  a {
+    color: #e94560;
+  }
+
+  .category-desc {
+    color: #a0a0b8;
+    margin-bottom: 1rem;
+  }
+
+  .tool {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    background: rgba(22, 33, 62, 0.3);
+  }
+
+  .tool-desc {
+    font-size: 0.95rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 0;
+    font-size: 0.9rem;
+  }
+
+  th {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid #0f3460;
+    color: #a0a0b8;
+    font-weight: 600;
+  }
+
+  td {
+    padding: 0.5rem;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+  }
+
+  td code {
+    color: #e94560;
+    font-size: 0.85rem;
+  }
+
+  .no-params {
+    color: #a0a0b8;
+    font-style: italic;
+    font-size: 0.9rem;
+    margin-bottom: 0;
+  }
+
+  .source-link {
+    margin-top: 2rem;
+    color: #a0a0b8;
+    font-size: 0.9rem;
+  }
+</style>

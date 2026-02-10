@@ -57,7 +57,7 @@ run-llm4:
 # Generate mcp-tools.json with MCP tool definitions
 .PHONY: mcp-tools
 mcp-tools:
-	cd Mage.Client.Headless && mvn -q exec:exec -Dexec.executable=java '-Dexec.args=-cp %classpath mage.client.headless.McpServer' > ../mcp-tools.json
+	cd Mage.Client.Headless && mvn -q exec:exec -Dexec.executable=java '-Dexec.args=-cp %classpath mage.client.headless.McpServer' > ../website/src/data/mcp-tools.json
 
 # 1v1 Legacy: CPU players, no API keys needed
 .PHONY: run-legacy-dumb
