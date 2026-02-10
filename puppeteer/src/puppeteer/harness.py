@@ -205,6 +205,30 @@ def _print_game_summary(game_dir: Path) -> None:
         except OSError:
             pass
 
+    # Fall back to game_events.jsonl (written by the streaming observer).
+    # CPU-only games have no headless client logs, but the observer still
+    # records a game_over event.
+    if not game_over_found:
+        events_file = game_dir / "game_events.jsonl"
+        if events_file.exists():
+            try:
+                for line in events_file.read_text().splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "game_over":
+                        msg = event.get("message", "")
+                        if msg and event.get("reason") != "timeout_or_killed":
+                            game_over_found = True
+                            print(f"  Game over: {msg}")
+                        break
+            except OSError:
+                pass
+
     if not game_over_found:
         print("  Game did not finish (killed or disconnected)")
 
