@@ -76,6 +76,47 @@ def bring_to_foreground_macos() -> None:
     )
 
 
+def _ensure_game_over_event(game_dir: Path) -> None:
+    """Append a game_over event to game_events.jsonl if one is missing.
+
+    When the game ends via time limit or process kill, XMage may not fire a
+    GAME_OVER callback. This ensures the event log always has a termination
+    record for downstream analysis.
+    """
+    events_file = game_dir / "game_events.jsonl"
+    has_game_over = False
+    if events_file.exists():
+        try:
+            with open(events_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "game_over":
+                        has_game_over = True
+                        break
+        except OSError:
+            pass
+
+    if not has_game_over:
+        ts = datetime.now().isoformat(timespec="milliseconds")
+        event = {
+            "ts": ts,
+            "type": "game_over",
+            "message": "Game ended (no GAME_OVER received)",
+            "reason": "timeout_or_killed",
+        }
+        try:
+            with open(events_file, "a") as f:
+                f.write(json.dumps(event, separators=(",", ":")) + "\n")
+        except OSError:
+            pass
+
+
 def _write_error_log(game_dir: Path) -> None:
     """Combine per-player error logs into a unified errors.log.
 
@@ -868,6 +909,11 @@ def main() -> int:
 
         # Wait for observer client to exit
         observer_proc.wait()
+
+        # Ensure a game_over event exists in game_events.jsonl.
+        # When the game ends via time limit, XMage may not send a GAME_OVER
+        # callback, leaving the event log without a termination record.
+        _ensure_game_over_event(game_dir)
 
         _write_error_log(game_dir)
         try:

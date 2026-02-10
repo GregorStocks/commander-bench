@@ -47,11 +47,13 @@ def _log_error(game_dir: Path | None, username: str, msg: str) -> None:
             pass
 
 
-# Tools the pilot is allowed to use (excludes auto_pass_until_event to prevent
-# accidentally skipping all decisions, and excludes is_action_on_me since
-# wait_for_action is strictly better).
+# Tools the pilot is allowed to use.
+# Excludes wait_for_action: pass_priority is strictly better (auto-skips empty
+# priorities). Models that discover wait_for_action use it instead of pass_priority,
+# creating rapid polling loops that waste context and tokens.
+# Excludes auto_pass_until_event: prevents accidentally skipping all decisions.
+# Excludes is_action_on_me: pass_priority handles this.
 PILOT_TOOLS = {
-    "wait_for_action",
     "pass_priority",
     "get_action_choices",
     "choose_action",
@@ -163,11 +165,12 @@ async def run_pilot_loop(
     """Run the LLM-driven game-playing loop."""
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "The game is starting. Call wait_for_action to begin."},
+        {"role": "user", "content": "The game is starting. Call pass_priority to begin."},
     ]
     model_price = get_model_price(model, prices or {})
     cumulative_cost = 0.0
     empty_responses = 0  # consecutive LLM responses with no reasoning text
+    last_was_empty = False  # retry once on first empty response before counting
     consecutive_timeouts = 0
     turns_without_progress = 0  # LLM turns without a successful game action
     MAX_TURNS_WITHOUT_PROGRESS = 8
@@ -250,7 +253,7 @@ async def run_pilot_loop(
                 # Reset conversation so the LLM gets a fresh start
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "A new turn has started. Call wait_for_action to see what's happening."},
+                    {"role": "user", "content": "A new turn has started. Call pass_priority to continue."},
                 ]
                 continue
 
@@ -262,6 +265,7 @@ async def run_pilot_loop(
                 if choice.message.content:
                     _log(f"[pilot] Thinking: {choice.message.content}")
                 empty_responses = 0
+                last_was_empty = False
                 # Build a clean assistant message dict for cross-provider
                 # compatibility.  The raw ChatCompletionMessage includes extra
                 # fields (refusal, annotations, audio, function_call) that
@@ -344,7 +348,14 @@ async def run_pilot_loop(
                     _log(f"[pilot] Thinking: {content[:500]}")
                     messages.append({"role": "assistant", "content": content})
                     empty_responses = 0
+                    last_was_empty = False
+                elif not last_was_empty:
+                    # First empty response: retry immediately without counting
+                    _log(f"[pilot] Empty response from LLM, retrying...")
+                    last_was_empty = True
+                    continue
                 else:
+                    last_was_empty = False
                     empty_responses += 1
                     _log_error(game_dir, username, f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]")
                     if empty_responses >= 10:
@@ -386,7 +397,7 @@ async def run_pilot_loop(
                         return
                 messages.append({
                     "role": "user",
-                    "content": "Continue playing. Call wait_for_action.",
+                    "content": "Continue playing. Call pass_priority.",
                 })
 
             # Trim message history to avoid unbounded growth.
@@ -418,7 +429,7 @@ async def run_pilot_loop(
                     game_log.emit("context_reset", reason="repeated_timeouts")
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Continue playing. Call wait_for_action."},
+                    {"role": "user", "content": "Continue playing. Call pass_priority."},
                 ]
                 consecutive_timeouts = 0
 
@@ -478,7 +489,7 @@ async def run_pilot_loop(
             # Reset conversation on error
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Continue playing. Call wait_for_action."},
+                {"role": "user", "content": "Continue playing. Call pass_priority."},
             ]
 
 

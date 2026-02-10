@@ -164,6 +164,10 @@
         "index": {
           "description": "Choice index from get_action_choices (for target/ability/choice and mana source/pool choices)",
           "type": "integer"
+        },
+        "text": {
+          "description": "Text value for GAME_CHOOSE_CHOICE (use instead of index to pick any option by name, e.g. a creature type not in the filtered list)",
+          "type": "string"
         }
       }
     },

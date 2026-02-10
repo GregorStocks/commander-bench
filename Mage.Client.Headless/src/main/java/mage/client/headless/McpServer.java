@@ -370,6 +370,10 @@ public class McpServer {
         pileProp.put("type", "integer");
         pileProp.put("description", "Pile number: 1 or 2 (for pile choices)");
         chooseActionProps.put("pile", pileProp);
+        Map<String, Object> textProp = new HashMap<>();
+        textProp.put("type", "string");
+        textProp.put("description", "Text value for GAME_CHOOSE_CHOICE (use instead of index to pick any option by name, e.g. a creature type not in the filtered list)");
+        chooseActionProps.put("text", textProp);
         chooseActionSchema.put("properties", chooseActionProps);
         chooseActionSchema.put("additionalProperties", false);
         chooseActionTool.put("inputSchema", chooseActionSchema);
@@ -478,7 +482,8 @@ public class McpServer {
                     }
                 }
                 Integer choicePile = arguments.has("pile") ? arguments.get("pile").getAsInt() : null;
-                toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile);
+                String choiceText = arguments.has("text") ? arguments.get("text").getAsString() : null;
+                toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile, choiceText);
                 break;
 
             case "get_my_decklist":
