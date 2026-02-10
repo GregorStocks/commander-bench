@@ -94,6 +94,30 @@ Recordings are saved to `~/mage-bench-logs/` by default.
 
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
+## Screenshots
+
+When working on UI changes, take screenshots to verify your work. See `doc/screenshots.md` for full details.
+
+**Java Swing UI** (from game recordings):
+
+```bash
+make run-dumb                # run a quick game (~2s)
+make screenshot              # final frame -> /tmp/mage-screenshot.png
+make screenshot T=5          # frame at 5s into the game
+# Then: Read /tmp/mage-screenshot.png
+```
+
+**Website visualizer** (via Chrome browser automation):
+
+Start the dev server with `make website`, then navigate Chrome to:
+- Mock data: `http://localhost:4321/games/live?mock=1`
+- Game replay: `http://localhost:4321/games/{game_id}`
+
+Use visual verification when:
+- Modifying `StreamingGamePanel` layout or rendering
+- Changing `website/public/game-renderer.js` or `game-renderer.css`
+- Debugging card display or overlay state issues
+
 ## Issues
 
 Issues are tracked as JSON files in `issues/`. See `doc/issues.md` for format and queries.
