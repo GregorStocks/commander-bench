@@ -113,6 +113,26 @@ website:
 export-game:
 	python3 scripts/export_game.py $(GAME)
 
+# Extract a screenshot from a game recording
+# Usage: make screenshot [GAME=path] [T=time] [FILE=path]
+#   T=-0.5  (default) 0.5s before end. Negative = from end, positive = from start.
+#   GAME    path to game log dir (default: most recent)
+#   FILE    output path (default: /tmp/mage-screenshot.png)
+.PHONY: screenshot
+screenshot:
+	@GAME_DIR=$${GAME:-$$(ls -1td ~/mage-bench-logs/game_* 2>/dev/null | head -1)}; \
+	if [ -z "$$GAME_DIR" ]; then echo "No game logs found in ~/mage-bench-logs/" >&2; exit 1; fi; \
+	VIDEO="$$GAME_DIR/recording.mov"; \
+	if [ ! -f "$$VIDEO" ]; then echo "No recording.mov in $$GAME_DIR" >&2; exit 1; fi; \
+	OUT=$${FILE:-/tmp/mage-screenshot.png}; \
+	TIME=$${T:--0.5}; \
+	if echo "$$TIME" | grep -q '^-'; then \
+	  ffmpeg -y -sseof "$$TIME" -i "$$VIDEO" -frames:v 1 -update 1 "$$OUT" 2>/dev/null; \
+	else \
+	  ffmpeg -y -ss "$$TIME" -i "$$VIDEO" -frames:v 1 -update 1 "$$OUT" 2>/dev/null; \
+	fi && \
+	echo "Screenshot saved to $$OUT (T=$$TIME from $$VIDEO)"
+
 # Standalone test server (stays running until Ctrl-C)
 # Optional: make run-staller PORT=18080
 .PHONY: run-staller
