@@ -1,0 +1,10 @@
+{
+  "title": "Live visualizer silently drops errors after initial connection",
+  "description": "In website/src/pages/games/live.astro, the catch block in tick() (line 203) only updates the status element when gameUI is still hidden. Once the game UI is shown after the first successful fetch, all subsequent fetch errors are silently swallowed — no reconnection indicator, no stale-data warning. The game freezes on the last good state with no user feedback. Should show an error/reconnecting indicator even when the game UI is already visible.",
+  "status": "open",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["streaming-client", "ui"],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}
