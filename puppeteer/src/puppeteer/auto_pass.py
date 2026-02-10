@@ -1,0 +1,100 @@
+"""Shared auto-pass loop for LLM fallback mode.
+
+When an LLM becomes non-functional (degraded, credits exhausted, model not
+found), the harness falls back to repeatedly calling auto_pass_until_event
+until the game ends. This module provides that shared loop so pilot.py and
+chatterbox.py don't duplicate it.
+"""
+
+import asyncio
+import json
+from datetime import datetime
+from pathlib import Path
+
+from mcp import ClientSession
+
+MAX_AUTO_PASS_ITERATIONS = 500  # ~80+ min at 10s/iteration
+MAX_CONSECUTIVE_ERRORS = 20  # 20 * 5s = ~100s of continuous failure
+
+
+def _log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[{ts}] {msg}")
+
+
+def _log_error(game_dir: Path | None, username: str, msg: str) -> None:
+    _log(msg)
+    if game_dir:
+        ts = datetime.now().strftime("%H:%M:%S")
+        try:
+            with open(game_dir / f"{username}_errors.log", "a") as f:
+                f.write(f"[{ts}] {msg}\n")
+        except OSError:
+            pass
+
+
+async def _execute_tool(session: ClientSession, name: str, arguments: dict) -> str:
+    try:
+        result = await session.call_tool(name, arguments)
+        return result.content[0].text
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+async def auto_pass_loop(
+    session: ClientSession,
+    game_dir: Path | None,
+    username: str,
+    label: str,
+    max_iterations: int = MAX_AUTO_PASS_ITERATIONS,
+    max_consecutive_errors: int = MAX_CONSECUTIVE_ERRORS,
+) -> None:
+    """Run auto_pass_until_event in a loop until game over or error threshold.
+
+    Used when the LLM is no longer functional and the game must finish on
+    autopilot.
+    """
+    consecutive_errors = 0
+    for _ in range(max_iterations):
+        try:
+            result_text = await _execute_tool(session, "auto_pass_until_event", {})
+            try:
+                result_data = json.loads(result_text)
+            except (json.JSONDecodeError, TypeError):
+                result_data = {}
+            if result_data.get("game_over"):
+                _log(f"[{label}] Game over detected, exiting auto-pass loop")
+                return
+            if "error" in result_data:
+                consecutive_errors += 1
+                _log_error(
+                    game_dir,
+                    username,
+                    f"[{label}] Auto-pass error: {result_data['error']}",
+                )
+                if consecutive_errors >= max_consecutive_errors:
+                    _log_error(
+                        game_dir,
+                        username,
+                        f"[{label}] Too many consecutive errors, exiting",
+                    )
+                    return
+                await asyncio.sleep(5)
+            else:
+                consecutive_errors = 0
+        except Exception as pass_err:
+            consecutive_errors += 1
+            _log_error(game_dir, username, f"[{label}] Auto-pass exception: {pass_err}")
+            if consecutive_errors >= max_consecutive_errors:
+                _log_error(
+                    game_dir,
+                    username,
+                    f"[{label}] Too many consecutive errors, exiting",
+                )
+                return
+            await asyncio.sleep(5)
+    _log_error(
+        game_dir,
+        username,
+        f"[{label}] Auto-pass loop reached max iterations, exiting",
+    )
