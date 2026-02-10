@@ -13,6 +13,30 @@ clean:
 .PHONY: lint
 lint:
 	uv run python scripts/lint-issues.py
+	uv run --project puppeteer ruff check puppeteer/ scripts/
+
+.PHONY: lint-fix
+lint-fix:
+	uv run --project puppeteer ruff check --fix puppeteer/ scripts/
+
+.PHONY: format
+format:
+	uv run --project puppeteer ruff format puppeteer/ scripts/
+
+.PHONY: format-check
+format-check:
+	uv run --project puppeteer ruff format --check puppeteer/ scripts/
+
+.PHONY: typecheck
+typecheck:
+	uv run --project puppeteer mypy --config-file puppeteer/pyproject.toml puppeteer/src/puppeteer/
+
+.PHONY: test
+test:
+	uv run --project puppeteer pytest puppeteer/
+
+.PHONY: check
+check: lint format-check typecheck test
 
 
 .PHONY: build

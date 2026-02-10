@@ -1,14 +1,14 @@
 """Structured game logging: JSONL writer, decklist parser, post-game merge."""
 
 import json
-import time
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 class GameLogWriter:
     """Appends JSONL events to {player}_llm.jsonl."""
+
     _TZ = ZoneInfo("America/Los_Angeles")
 
     def __init__(self, game_dir: Path, player_name: str):
@@ -78,7 +78,7 @@ def merge_game_log(game_dir: Path) -> None:
     # Collect from all source files
     for pattern in ["game_events.jsonl", "*_llm.jsonl"]:
         for path in game_dir.glob(pattern):
-            for line_num, line in enumerate(path.read_text().splitlines(), 1):
+            for _line_num, line in enumerate(path.read_text().splitlines(), 1):
                 line = line.strip()
                 if not line:
                     continue

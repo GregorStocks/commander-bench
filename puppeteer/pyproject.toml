@@ -9,6 +9,64 @@ dependencies = [
     "openai>=1.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8.0",
+    "mypy>=1.13.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "SIM102",  # nested ifs - often clearer with comments between branches
+    "SIM105",  # contextlib.suppress - try/except/pass is fine
+    "SIM115",  # context manager for open - not always appropriate
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["puppeteer"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = false
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+# Existing code uses dynamic player type patterns that mypy can't follow.
+# These per-module overrides prevent noise while still checking new code.
+[[tool.mypy.overrides]]
+module = ["puppeteer.harness", "puppeteer.config"]
+disable_error_code = ["assignment", "attr-defined", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["puppeteer.sleepwalker", "puppeteer.chatterbox", "puppeteer.pilot"]
+disable_error_code = ["assignment", "attr-defined", "union-attr", "call-overload", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = ["puppeteer.process_manager"]
+disable_error_code = ["assignment"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

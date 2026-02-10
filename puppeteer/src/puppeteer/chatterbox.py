@@ -20,13 +20,12 @@ from puppeteer.llm_cost import (
     write_cost_file,
 )
 
-
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 256
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
-MAX_AUTO_PASS_ITERATIONS = 500   # ~80+ min at 10s/iteration
-MAX_CONSECUTIVE_ERRORS = 20      # 20 * 5s = ~100s of continuous failure
+MAX_AUTO_PASS_ITERATIONS = 500  # ~80+ min at 10s/iteration
+MAX_CONSECUTIVE_ERRORS = 20  # 20 * 5s = ~100s of continuous failure
 
 
 def _log(msg: str) -> None:
@@ -101,7 +100,12 @@ async def run_llm_loop(
     """Run the LLM-driven agentic loop."""
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": "The game is starting. Begin your loop: call auto_pass_until_event to wait for interesting game events."},
+        {
+            "role": "user",
+            "content": (
+                "The game is starting. Begin your loop: call auto_pass_until_event to wait for interesting game events."
+            ),
+        },
     ]
     calls_since_chat = 0
     model_price = get_model_price(model, prices or {})
@@ -159,11 +163,13 @@ async def run_llm_loop(
                         event = result_data.get("event_occurred", False)
                         _log(f"[chatterbox] Auto-pass: {actions} actions, {len(new_log)} new chars, event={event}")
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result_text,
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": result_text,
+                        }
+                    )
 
                 if chatted:
                     calls_since_chat = 0
@@ -177,32 +183,46 @@ async def run_llm_loop(
                 if content:
                     _log(f"[chatterbox] LLM text: {content[:200]}")
                     messages.append({"role": "assistant", "content": content})
-                messages.append({
-                    "role": "user",
-                    "content": "Continue your loop. Call auto_pass_until_event.",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Continue your loop. Call auto_pass_until_event.",
+                    }
+                )
                 calls_since_chat += 1
 
             # Nudge if the LLM has been quiet too long
             if calls_since_chat >= 8:
-                messages.append({
-                    "role": "user",
-                    "content": "You've been quiet for a while! Send a chat message reacting to what's happening.",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "You've been quiet for a while! Send a chat message reacting to what's happening.",
+                    }
+                )
                 calls_since_chat = 0
 
             # Trim message history to avoid unbounded growth.
             # Keep system prompt + a personality reminder + last messages.
             if len(messages) > 25:
-                messages = (
-                    [messages[0]]
-                    + [{"role": "user", "content": "Remember: you're an entertaining chatterbox. React to plays with short, funny chat messages. Don't just silently observe."}]
-                    + messages[-15:]
-                )
+                messages = [
+                    messages[0],
+                    {
+                        "role": "user",
+                        "content": (
+                            "Remember: you're an entertaining chatterbox. "
+                            "React to plays with short, funny chat messages. Don't just silently observe."
+                        ),
+                    },
+                    *messages[-15:],
+                ]
 
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
-            _log_error(game_dir, username, f"[chatterbox] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            _log_error(
+                game_dir,
+                username,
+                f"[chatterbox] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]",
+            )
             try:
                 await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
             except Exception:
@@ -212,7 +232,10 @@ async def run_llm_loop(
                 _log("[chatterbox] Repeated LLM timeouts, resetting conversation context")
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Continue playing. Call auto_pass_until_event to wait for game events."},
+                    {
+                        "role": "user",
+                        "content": "Continue playing. Call auto_pass_until_event to wait for game events.",
+                    },
                 ]
                 calls_since_chat = 0
                 consecutive_timeouts = 0
@@ -224,7 +247,11 @@ async def run_llm_loop(
 
             # Credit exhaustion - fall back to pass-only mode permanently
             if "402" in error_str:
-                _log_error(game_dir, username, "[chatterbox] Credits exhausted, switching to pass-only mode")
+                _log_error(
+                    game_dir,
+                    username,
+                    "[chatterbox] Credits exhausted, switching to pass-only mode",
+                )
                 consecutive_errors = 0
                 for _ in range(MAX_AUTO_PASS_ITERATIONS):
                     try:
@@ -238,9 +265,17 @@ async def run_llm_loop(
                             return
                         if "error" in result_data:
                             consecutive_errors += 1
-                            _log_error(game_dir, username, f"[chatterbox] Auto-pass error: {result_data['error']}")
+                            _log_error(
+                                game_dir,
+                                username,
+                                f"[chatterbox] Auto-pass error: {result_data['error']}",
+                            )
                             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                _log_error(game_dir, username, "[chatterbox] Too many consecutive errors, exiting")
+                                _log_error(
+                                    game_dir,
+                                    username,
+                                    "[chatterbox] Too many consecutive errors, exiting",
+                                )
                                 return
                             await asyncio.sleep(5)
                         else:
@@ -249,10 +284,18 @@ async def run_llm_loop(
                         consecutive_errors += 1
                         _log_error(game_dir, username, f"[chatterbox] Auto-pass exception: {pass_err}")
                         if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                            _log_error(game_dir, username, "[chatterbox] Too many consecutive errors, exiting")
+                            _log_error(
+                                game_dir,
+                                username,
+                                "[chatterbox] Too many consecutive errors, exiting",
+                            )
                             return
                         await asyncio.sleep(5)
-                _log_error(game_dir, username, "[chatterbox] Auto-pass loop reached max iterations, exiting")
+                _log_error(
+                    game_dir,
+                    username,
+                    "[chatterbox] Auto-pass loop reached max iterations, exiting",
+                )
                 return
 
             # Transient error - keep actions flowing while waiting to retry
@@ -264,7 +307,10 @@ async def run_llm_loop(
             # Reset conversation on error
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Continue playing. Call auto_pass_until_event to wait for game events."},
+                {
+                    "role": "user",
+                    "content": "Continue playing. Call auto_pass_until_event to wait for game events.",
+                },
             ]
 
 
@@ -327,18 +373,25 @@ async def run_chatterbox(
 
     _log("[chatterbox] Spawning skeleton client...")
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            result = await session.initialize()
-            _log(f"[chatterbox] MCP initialized: {result.serverInfo}")
+    async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
+        result = await session.initialize()
+        _log(f"[chatterbox] MCP initialized: {result.serverInfo}")
 
-            tools_result = await session.list_tools()
-            openai_tools = mcp_tools_to_openai(tools_result.tools)
-            _log(f"[chatterbox] Available tools: {[t.name for t in tools_result.tools]}")
+        tools_result = await session.list_tools()
+        openai_tools = mcp_tools_to_openai(tools_result.tools)
+        _log(f"[chatterbox] Available tools: {[t.name for t in tools_result.tools]}")
 
-            _log("[chatterbox] Starting LLM loop...")
-            await run_llm_loop(session, llm_client, model, system_prompt, openai_tools,
-                               username=username, game_dir=game_dir, prices=prices)
+        _log("[chatterbox] Starting LLM loop...")
+        await run_llm_loop(
+            session,
+            llm_client,
+            model,
+            system_prompt,
+            openai_tools,
+            username=username,
+            game_dir=game_dir,
+            prices=prices,
+        )
 
 
 def main() -> int:
@@ -378,19 +431,21 @@ def main() -> int:
     _log(f"[chatterbox] Project root: {project_root}")
 
     try:
-        asyncio.run(run_chatterbox(
-            server=args.server,
-            port=args.port,
-            username=args.username,
-            project_root=project_root,
-            deck_path=args.deck,
-            api_key=api_key,
-            model=args.model,
-            base_url=args.base_url,
-            system_prompt=args.system_prompt,
-            game_dir=args.game_dir,
-            prices=prices,
-        ))
+        asyncio.run(
+            run_chatterbox(
+                server=args.server,
+                port=args.port,
+                username=args.username,
+                project_root=project_root,
+                deck_path=args.deck,
+                api_key=api_key,
+                model=args.model,
+                base_url=args.base_url,
+                system_prompt=args.system_prompt,
+                game_dir=args.game_dir,
+                prices=prices,
+            )
+        )
     except KeyboardInterrupt:
         pass
 

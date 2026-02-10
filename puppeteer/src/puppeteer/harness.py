@@ -10,9 +10,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from puppeteer.config import ChatterboxPlayer, PilotPlayer, Config
+from puppeteer.config import ChatterboxPlayer, Config, PilotPlayer
 from puppeteer.game_log import merge_game_log, read_decklist
-from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL, required_api_key_env
+from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
+from puppeteer.llm_cost import required_api_key_env
 from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
@@ -20,9 +21,7 @@ from puppeteer.xml_config import modify_server_config
 _OBSERVER_TABLE_READY = "AI Harness: waiting for"
 
 
-def _wait_for_observer_table(
-    log_path: Path, proc: subprocess.Popen, timeout: int = 300
-) -> None:
+def _wait_for_observer_table(log_path: Path, proc: subprocess.Popen, timeout: int = 300) -> None:
     """Block until the observer log indicates the game table is ready.
 
     The streaming/GUI client logs a line containing ``AI Harness: waiting
@@ -33,17 +32,13 @@ def _wait_for_observer_table(
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError(
-                "Observer process exited before creating the game table"
-            )
+            raise RuntimeError("Observer process exited before creating the game table")
         if log_path.exists():
             text = log_path.read_text()
             if _OBSERVER_TABLE_READY in text:
                 return
         time.sleep(2)
-    raise TimeoutError(
-        f"Observer did not create a table within {timeout}s — check {log_path}"
-    )
+    raise TimeoutError(f"Observer did not create a table within {timeout}s — check {log_path}")
 
 
 def _missing_llm_api_keys(config: Config) -> list[str]:
@@ -54,9 +49,7 @@ def _missing_llm_api_keys(config: Config) -> list[str]:
         base_url = player.base_url or DEFAULT_LLM_BASE_URL
         key_env = required_api_key_env(base_url)
         if not os.environ.get(key_env, "").strip():
-            errors.append(
-                f"{player.name} ({base_url}) requires {key_env}"
-            )
+            errors.append(f"{player.name} ({base_url}) requires {key_env}")
     return errors
 
 
@@ -69,8 +62,9 @@ def bring_to_foreground_macos() -> None:
 
     subprocess.run(
         [
-            "osascript", "-e",
-            'tell application "System Events" to set frontmost of first process whose name contains "java" to true'
+            "osascript",
+            "-e",
+            'tell application "System Events" to set frontmost of first process whose name contains "java" to true',
         ],
         capture_output=True,
     )
@@ -87,7 +81,7 @@ def _ensure_game_over_event(game_dir: Path) -> None:
     has_game_over = False
     if events_file.exists():
         try:
-            with open(events_file, "r") as f:
+            with open(events_file) as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -142,11 +136,15 @@ def _write_error_log(game_dir: Path) -> None:
 
 def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None:
     """Write game_meta.json with player configs, decklists, format, and git info."""
+
     def _git(cmd: str) -> str:
         try:
             return subprocess.check_output(
-                f"git {cmd}", shell=True, cwd=project_root,
-                stderr=subprocess.DEVNULL, text=True,
+                f"git {cmd}",
+                shell=True,
+                cwd=project_root,
+                stderr=subprocess.DEVNULL,
+                text=True,
             ).strip()
         except Exception:
             return ""
@@ -181,9 +179,7 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
         "git_branch": _git("rev-parse --abbrev-ref HEAD"),
         "git_commit": _git("rev-parse --short HEAD"),
     }
-    (game_dir / "game_meta.json").write_text(
-        json.dumps(meta, indent=2) + "\n"
-    )
+    (game_dir / "game_meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
 
 def _print_game_summary(game_dir: Path) -> None:
@@ -329,9 +325,7 @@ def find_available_overlay_port(start_port: int, max_attempts: int = 100) -> int
         port = start_port + offset
         if can_bind_port(port):
             return port
-    raise RuntimeError(
-        f"No available overlay port found in range {start_port}-{start_port + max_attempts - 1}"
-    )
+    raise RuntimeError(f"No available overlay port found in range {start_port}-{start_port + max_attempts - 1}")
 
 
 def start_server(
@@ -349,11 +343,13 @@ def start_server(
     - Extended idle timeouts
     - Skipped user stats operations
     """
-    jvm_args = " ".join([
-        config.jvm_headless_opts,
-        "-Dxmage.testMode=true",
-        f"-Dxmage.config.path={config_path}",
-    ])
+    jvm_args = " ".join(
+        [
+            config.jvm_headless_opts,
+            "-Dxmage.testMode=true",
+            f"-Dxmage.config.path={config_path}",
+        ]
+    )
 
     env = {
         "XMAGE_AI_HARNESS": "1",
@@ -383,17 +379,19 @@ def start_gui_client(
     # Pass resolved player config (with actual deck paths, not "random")
     config_json = config.get_players_config_json()
 
-    jvm_args = " ".join([
-        config.jvm_opens,
-        config.jvm_rendering,
-        "-Dxmage.aiHarness.autoConnect=true",
-        "-Dxmage.aiHarness.autoStart=true",
-        "-Dxmage.aiHarness.disableWhatsNew=true",
-        f"-Dxmage.aiHarness.server={config.server}",
-        f"-Dxmage.aiHarness.port={config.port}",
-        f"-Dxmage.aiHarness.user={config.user}",
-        f"-Dxmage.aiHarness.password={config.password}",
-    ])
+    jvm_args = " ".join(
+        [
+            config.jvm_opens,
+            config.jvm_rendering,
+            "-Dxmage.aiHarness.autoConnect=true",
+            "-Dxmage.aiHarness.autoStart=true",
+            "-Dxmage.aiHarness.disableWhatsNew=true",
+            f"-Dxmage.aiHarness.server={config.server}",
+            f"-Dxmage.aiHarness.port={config.port}",
+            f"-Dxmage.aiHarness.user={config.user}",
+            f"-Dxmage.aiHarness.password={config.password}",
+        ]
+    )
 
     env = {
         "XMAGE_AI_HARNESS": "1",
@@ -487,11 +485,16 @@ def start_sleepwalker_client(
 
     args = [
         sys.executable,
-        "-m", "puppeteer.sleepwalker",
-        "--server", config.server,
-        "--port", str(config.port),
-        "--username", name,
-        "--project-root", str(project_root),
+        "-m",
+        "puppeteer.sleepwalker",
+        "--server",
+        config.server,
+        "--port",
+        str(config.port),
+        "--username",
+        name,
+        "--project-root",
+        str(project_root),
     ]
 
     if deck_path:
@@ -532,11 +535,16 @@ def start_chatterbox_client(
 
     args = [
         sys.executable,
-        "-m", "puppeteer.chatterbox",
-        "--server", config.server,
-        "--port", str(config.port),
-        "--username", player.name,
-        "--project-root", str(project_root),
+        "-m",
+        "puppeteer.chatterbox",
+        "--server",
+        config.server,
+        "--port",
+        str(config.port),
+        "--username",
+        player.name,
+        "--project-root",
+        str(project_root),
     ]
 
     if player.deck:
@@ -585,11 +593,16 @@ def start_pilot_client(
 
     args = [
         sys.executable,
-        "-m", "puppeteer.pilot",
-        "--server", config.server,
-        "--port", str(config.port),
-        "--username", player.name,
-        "--project-root", str(project_root),
+        "-m",
+        "puppeteer.pilot",
+        "--server",
+        config.server,
+        "--port",
+        str(config.port),
+        "--username",
+        player.name,
+        "--project-root",
+        str(project_root),
     ]
 
     if player.deck:
@@ -691,6 +704,7 @@ def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
         # Import inline to avoid circular deps and keep it optional
         sys.path.insert(0, str(project_root / "scripts"))
         from export_game import export_game
+
         website_games_dir = project_root / "website" / "public" / "games"
         output_path = export_game(game_dir, website_games_dir)
         size_kb = output_path.stat().st_size // 1024
@@ -736,8 +750,11 @@ def main() -> int:
         def _git(cmd: str) -> str:
             try:
                 return subprocess.check_output(
-                    f"git {cmd}", shell=True, cwd=project_root,
-                    stderr=subprocess.DEVNULL, text=True,
+                    f"git {cmd}",
+                    shell=True,
+                    cwd=project_root,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
                 ).strip()
             except Exception:
                 return ""
@@ -750,9 +767,7 @@ def main() -> int:
             "command": sys.argv,
             "config_file": str(config.config_file) if config.config_file else None,
         }
-        (game_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2) + "\n"
-        )
+        (game_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
         # Compile if needed
         if not compile_project(project_root, streaming=config.streaming):
@@ -775,9 +790,7 @@ def main() -> int:
             requested_overlay_port = config.overlay_port
             config.overlay_port = find_available_overlay_port(requested_overlay_port)
             if config.overlay_port != requested_overlay_port:
-                print(
-                    f"Overlay port {requested_overlay_port} unavailable, using {config.overlay_port}"
-                )
+                print(f"Overlay port {requested_overlay_port} unavailable, using {config.overlay_port}")
 
         # Generate server config into game directory
         server_config_path = game_dir / "server_config.xml"
@@ -837,12 +850,12 @@ def main() -> int:
 
         # Count headless clients (sleepwalker, chatterbox, pilot, potato, legacy skeleton)
         headless_count = (
-            len(config.sleepwalker_players) +
-            len(config.chatterbox_players) +
-            len(config.pilot_players) +
-            len(config.potato_players) +
-            len(config.staller_players) +
-            len(config.skeleton_players)  # Legacy
+            len(config.sleepwalker_players)
+            + len(config.chatterbox_players)
+            + len(config.pilot_players)
+            + len(config.potato_players)
+            + len(config.staller_players)
+            + len(config.skeleton_players)  # Legacy
         )
 
         # Start observer client first
