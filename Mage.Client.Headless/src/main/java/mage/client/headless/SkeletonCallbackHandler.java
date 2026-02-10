@@ -468,6 +468,36 @@ public class SkeletonCallbackHandler {
                 playerSummary.append(player.getLife()).append("hp)");
             }
             result.put("players", playerSummary.toString());
+
+            // Add mana pool and untapped land count for the current player
+            ManaPoolView pool = getMyManaPoolView(gameView);
+            if (pool != null) {
+                int total = pool.getRed() + pool.getGreen() + pool.getBlue()
+                          + pool.getWhite() + pool.getBlack() + pool.getColorless();
+                if (total > 0) {
+                    Map<String, Integer> mana = new HashMap<>();
+                    if (pool.getRed() > 0) mana.put("R", pool.getRed());
+                    if (pool.getGreen() > 0) mana.put("G", pool.getGreen());
+                    if (pool.getBlue() > 0) mana.put("U", pool.getBlue());
+                    if (pool.getWhite() > 0) mana.put("W", pool.getWhite());
+                    if (pool.getBlack() > 0) mana.put("B", pool.getBlack());
+                    if (pool.getColorless() > 0) mana.put("C", pool.getColorless());
+                    result.put("mana_pool", mana);
+                }
+            }
+
+            PlayerView myPlayer = gameView.getMyPlayer();
+            if (myPlayer != null && myPlayer.getBattlefield() != null) {
+                int untappedLands = 0;
+                for (PermanentView perm : myPlayer.getBattlefield().values()) {
+                    if (perm.isLand() && !perm.isTapped()) {
+                        untappedLands++;
+                    }
+                }
+                if (untappedLands > 0) {
+                    result.put("untapped_lands", untappedLands);
+                }
+            }
         }
 
         ClientCallbackMethod method = action.getMethod();
@@ -1130,16 +1160,38 @@ public class SkeletonCallbackHandler {
                         // Cancel — only for optional targets
                         GameClientMessage targetMsg = (GameClientMessage) data;
                         if (targetMsg.isFlag()) {
-                            // Required target — cannot cancel, must pick one
-                            result.put("success", false);
-                            result.put("error", "This target selection is required. You must choose one of the available options by index.");
-                            pendingAction = action;
-                            return result;
+                            // Required target — auto-select first valid target to prevent infinite loops
+                            // (models sometimes send answer=false for mandatory targets like Sylvan Library triggers)
+                            Set<UUID> autoTargets = findValidTargets(targetMsg);
+                            if (autoTargets != null && !autoTargets.isEmpty()) {
+                                UUID firstTarget = autoTargets.iterator().next();
+                                logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (model sent answer=false)");
+                                session.sendPlayerUUID(gameId, firstTarget);
+                                result.put("action_taken", "auto_selected_required_target");
+                                result.put("warning", "Required target auto-selected because answer=false is invalid for mandatory targets. Use index=N next time.");
+                            } else {
+                                logger.error("[" + client.getUsername() + "] Required GAME_TARGET has no valid targets — cancelling to avoid infinite loop");
+                                session.sendPlayerBoolean(gameId, false);
+                                result.put("action_taken", "cancelled_no_valid_targets");
+                            }
+                            break;
                         }
                         session.sendPlayerBoolean(gameId, false);
                         result.put("action_taken", "cancelled");
                     } else {
                         GameClientMessage targetMsg2 = (GameClientMessage) data;
+                        if (targetMsg2.isFlag()) {
+                            // Required target with no valid response — auto-select to prevent loops
+                            Set<UUID> autoTargets = findValidTargets(targetMsg2);
+                            if (autoTargets != null && !autoTargets.isEmpty()) {
+                                UUID firstTarget = autoTargets.iterator().next();
+                                logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (no index or answer provided)");
+                                session.sendPlayerUUID(gameId, firstTarget);
+                                result.put("action_taken", "auto_selected_required_target");
+                                result.put("warning", "Required target auto-selected. Use index=N to choose a specific target.");
+                                break;
+                            }
+                        }
                         result.put("success", false);
                         result.put("error", targetMsg2.isFlag()
                             ? "Integer 'index' required for this mandatory target selection"

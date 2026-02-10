@@ -80,8 +80,16 @@ GAME LOOP - follow this exactly:
 
 CRITICAL RULES:
 - ALWAYS call get_action_choices before choose_action. Never guess.
-- NEVER call pass_priority when get_action_choices just showed you playable cards. \
-  Play your cards first! Only pass when you're done playing for this phase.
+- When get_action_choices shows playable cards, you should play them before passing. \
+  Only pass (answer=false) when you have nothing more you want to play this phase.
+
+UNDERSTANDING get_action_choices OUTPUT:
+- All cards listed in response_type=select are confirmed castable with your current mana. \
+  The server pre-filters to only show cards you can legally play right now.
+- mana_pool shows your current floating mana (e.g. {"R": 2, "W": 1}).
+- untapped_lands shows how many untapped lands you control.
+- Cards with [Cast] are spells from your hand. Cards with [Activate] are abilities \
+  on permanents you control.
 
 MULLIGAN DECISIONS:
 When you see "Mulligan" in GAME_ASK, your_hand shows your current hand.
@@ -90,13 +98,13 @@ When you see "Mulligan" in GAME_ASK, your_hand shows your current hand.
 Think carefully: answer=false means KEEP, answer=true means MULLIGAN.
 
 HOW ACTIONS WORK:
-- response_type=select: Cards listed are playable RIGHT NOW with your current mana. \
+- response_type=select: Cards listed are confirmed playable with your current mana. \
   Play a card with choose_action(index=N). Pass with choose_action(answer=false) only \
-  when you don't want to play anything more this phase.
+  when you are done playing cards this phase.
 - response_type=boolean with no playable cards: Pass with choose_action(answer=false).
 - GAME_ASK (boolean): Answer true/false based on what's being asked.
 - GAME_CHOOSE_ABILITY (index): Pick an ability by index.
-- GAME_TARGET (index): Pick a target by index.
+- GAME_TARGET (index): Pick a target by index. If required=true, you must pick one.
 - GAME_PLAY_MANA (select): Pick a mana source by index, or answer=false to cancel.
 
 COMBAT - ATTACKING:
@@ -107,7 +115,6 @@ When you see combat_phase="declare_attackers" in get_action_choices:
 - "All attack" declares all your creatures as attackers at once.
 - When done selecting attackers, call choose_action(answer=true) to confirm.
 - To skip attacking, call choose_action(answer=false).
-- You should usually attack with your creatures when opponents are open!
 
 COMBAT - BLOCKING:
 When you see combat_phase="declare_blockers" in get_action_choices:
@@ -487,22 +494,45 @@ async def run_pilot_loop(
             # Trim message history to avoid unbounded growth.
             # The game loop is tool-call-heavy (3+ messages per action), so we need
             # a generous limit to avoid constant trimming that degrades LLM reasoning.
-            if len(messages) > 120:
-                _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~82 messages")
+            if len(messages) > 200:
+                # Fetch current game state to preserve context across trim
+                state_summary = ""
+                try:
+                    state_result = await execute_tool(session, "get_game_state", {})
+                    state_data = json.loads(state_result)
+                    if not state_data.get("error"):
+                        parts = []
+                        if "turn" in state_data:
+                            parts.append(f"Turn {state_data['turn']}")
+                        if "phase" in state_data:
+                            parts.append(state_data["phase"])
+                        for p in state_data.get("players", []):
+                            name = p.get("name", "?")
+                            life = p.get("life", "?")
+                            bf = len(p.get("battlefield", []))
+                            hand = p.get("hand_count", p.get("hand_size", "?"))
+                            parts.append(f"{name}: {life}hp, {bf} permanents, {hand} cards")
+                        state_summary = "Current game state: " + "; ".join(parts) + ". "
+                except Exception:
+                    pass
+
+                trim_target = 160
+                _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~{trim_target + 2} messages")
                 if game_log:
-                    game_log.emit("context_trim", messages_before=len(messages), messages_after=82)
+                    game_log.emit("context_trim", messages_before=len(messages), messages_after=trim_target + 2)
                 messages = [
                     messages[0],
                     {
                         "role": "user",
                         "content": (
+                            f"{state_summary}"
                             "Continue playing. Use pass_priority to skip ahead, "
                             "then get_action_choices before choose_action. "
                             "All cards listed are playable right now. "
                             "Play cards with index=N, pass with answer=false."
                         ),
                     },
-                    *messages[-80:],
+                    *messages[-trim_target:],
                 ]
 
         except asyncio.TimeoutError:
