@@ -1,0 +1,10 @@
+{
+  "title": "choose_action fails with 'Index 0 out of range' when GAME_TARGET has no valid targets",
+  "description": "choose_action(index=0) fails for GAME_TARGET even after the auto-populate fix in #137, because findValidTargets() can return null/empty, leaving lastChoices as an empty list.\n\nEvidence:\n- ~/mage-bench-logs/game_20260210_074307/GPT-4.1-mini_errors.log: 20+ 'Index 0 out of range' failures (commit ec99b4f, which includes fix #137)\n- ~/mage-bench-logs/game_20260210_071725/Gemini2.5Flash_errors.log: 3 failures (commit f0959785, which IS fix #137)\n- Reproduces across games and models\n\nRoot cause: SkeletonCallbackHandler.java:846-864 — getActionChoices() for GAME_TARGET sets lastChoices = indexToUuid (empty ArrayList when targets is null). Auto-populate at line 1068 calls getActionChoices(), which populates lastChoices = []. Then at line 1212, index >= choices.size() evaluates to 0 >= 0 = true, returning the error.\n\nSuggested fix: When GAME_TARGET choose_action finds empty choices after auto-populate and the target is required, fall through to the auto-select behavior already implemented at lines 1226-1237 (which handles answer=false for required targets). When the target is optional, cancel gracefully instead of returning an error.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-10T12:00:00.000000-08:00",
+  "updated_at": "2026-02-10T12:00:00.000000-08:00"
+}
