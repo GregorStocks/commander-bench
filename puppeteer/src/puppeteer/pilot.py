@@ -63,6 +63,10 @@ PILOT_TOOLS = {
     "take_action",
 }
 
+# Tools that are purely informational (don't advance game state).
+# Used by stall detection to classify LLM turns.
+INFO_ONLY_TOOLS = {"get_game_state", "get_oracle_text", "send_chat_message"}
+
 DEFAULT_SYSTEM_PROMPT = """\
 You are a Magic: The Gathering player. You have a fun, trash-talking personality. \
 Use send_chat_message to comment on the game occasionally.
@@ -173,7 +177,7 @@ async def run_pilot_loop(
     last_was_empty = False  # retry once on first empty response before counting
     consecutive_timeouts = 0
     turns_without_progress = 0  # LLM turns without a successful game action
-    MAX_TURNS_WITHOUT_PROGRESS = 8
+    MAX_TURNS_WITHOUT_PROGRESS = 20
 
     while True:
         # Check for auto-passable actions before calling LLM
@@ -230,35 +234,13 @@ async def run_pilot_loop(
                 llm_event["cumulative_cost_usd"] = round(cumulative_cost, 6)
                 game_log.emit("llm_response", **llm_event)
 
-            turns_without_progress += 1
-
-            # If the LLM is spinning without advancing game state, auto-pass
-            # until something interesting happens (new turn, new cards, etc.)
-            if turns_without_progress >= MAX_TURNS_WITHOUT_PROGRESS:
-                _log_error(game_dir, username, f"[pilot] Stalled: {turns_without_progress} turns without progress, auto-passing until next event")
-                if game_log:
-                    game_log.emit("stall", turns_without_progress=turns_without_progress)
-                try:
-                    await execute_tool(session, "send_chat_message", {"message": "Brain freeze! Auto-passing until next turn..."})
-                except Exception:
-                    pass
-                try:
-                    result_text = await execute_tool(session, "auto_pass_until_event", {})
-                    result_data = json.loads(result_text)
-                    actions = result_data.get("actions_taken", 0)
-                    _log(f"[pilot] Auto-passed {actions} actions until next event")
-                except Exception as e:
-                    _log(f"[pilot] Auto-pass failed: {e}")
-                turns_without_progress = 0
-                # Reset conversation so the LLM gets a fresh start
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "A new turn has started. Call pass_priority to continue."},
-                ]
-                continue
-
             # If the LLM produced tool calls, process them
             if choice.message.tool_calls:
+                # Per-turn tracking for stall detection
+                turn_had_successful_action = False
+                turn_had_actionable_opportunity = False
+                turn_tools_called = set()
+
                 # Tool calls present = LLM is functioning, reset degradation counter.
                 # Gemini often omits reasoning text for obvious actions (like passing) -
                 # that's normal, not degradation.
@@ -303,16 +285,19 @@ async def run_pilot_loop(
                                       result=result_text[:2000],
                                       latency_ms=tool_latency_ms)
 
-                    # Log interesting results
+                    # Log interesting results and track for stall detection
+                    turn_tools_called.add(fn.name)
                     if fn.name == "choose_action":
                         result_data = json.loads(result_text)
                         action_taken = result_data.get("action_taken", "")
                         success = result_data.get("success", False)
                         if success:
                             _log(f"[pilot] Action: {action_taken}")
+                            turn_had_successful_action = True
                             turns_without_progress = 0
                         else:
                             _log_error(game_dir, username, f"[pilot] Action failed: {result_data.get('error', '')}")
+                            turn_had_actionable_opportunity = True
                     elif fn.name == "get_action_choices":
                         result_data = json.loads(result_text)
                         action_type = result_data.get("action_type", "")
@@ -320,11 +305,21 @@ async def run_pilot_loop(
                         choices = result_data.get("choices", [])
                         if choices:
                             _log(f"[pilot] Choices for {action_type}: {len(choices)} options")
+                            turn_had_actionable_opportunity = True
                         else:
                             _log(f"[pilot] Action: {action_type} - {msg[:100]}")
+                    elif fn.name == "pass_priority":
+                        try:
+                            result_data = json.loads(result_text)
+                            if result_data.get("action_pending"):
+                                turn_had_actionable_opportunity = True
+                            # timeout=true means nothing to do — don't penalize
+                        except (json.JSONDecodeError, TypeError):
+                            pass
                     elif fn.name == "wait_for_action":
                         result_data = json.loads(result_text)
                         if result_data.get("action_pending"):
+                            turn_had_actionable_opportunity = True
                             # Check for auto-pass before the LLM sees it
                             auto, auto_args = should_auto_pass(result_data)
                             if auto:
@@ -341,8 +336,15 @@ async def run_pilot_loop(
                         "tool_call_id": tool_call.id,
                         "content": result_text,
                     })
+
+                # Stall counter: only count turns where LLM had a real chance to act
+                if not turn_had_successful_action:
+                    if turn_had_actionable_opportunity or not turn_tools_called or turn_tools_called <= INFO_ONLY_TOOLS:
+                        turns_without_progress += 1
+                    # else: passive wait (pass_priority timeout) — don't penalize
             else:
-                # LLM stopped calling tools - prompt it to continue
+                # LLM stopped calling tools — always counts as stalling
+                turns_without_progress += 1
                 content = (choice.message.content or "").strip()
                 if content:
                     _log(f"[pilot] Thinking: {content[:500]}")
@@ -399,6 +401,35 @@ async def run_pilot_loop(
                     "role": "user",
                     "content": "Continue playing. Call pass_priority.",
                 })
+
+            # If the LLM is spinning without advancing game state, auto-pass
+            # until something interesting happens (new turn, new cards, etc.)
+            if turns_without_progress >= MAX_TURNS_WITHOUT_PROGRESS:
+                last_tools = sorted(turn_tools_called) if choice.message.tool_calls and turn_tools_called else []
+                _log_error(game_dir, username,
+                    f"[pilot] Stalled: {turns_without_progress} turns without progress, "
+                    f"last tools: {last_tools or 'none'}, auto-passing until next event")
+                if game_log:
+                    game_log.emit("stall", turns_without_progress=turns_without_progress,
+                                  last_tools=last_tools)
+                try:
+                    await execute_tool(session, "send_chat_message", {"message": "Brain freeze! Auto-passing until next turn..."})
+                except Exception:
+                    pass
+                try:
+                    result_text = await execute_tool(session, "auto_pass_until_event", {})
+                    result_data = json.loads(result_text)
+                    actions = result_data.get("actions_taken", 0)
+                    _log(f"[pilot] Auto-passed {actions} actions until next event")
+                except Exception as e:
+                    _log(f"[pilot] Auto-pass failed: {e}")
+                turns_without_progress = 0
+                # Reset conversation so the LLM gets a fresh start
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "A new turn has started. Call pass_priority to continue."},
+                ]
+                continue
 
             # Trim message history to avoid unbounded growth.
             # The game loop is tool-call-heavy (3+ messages per action), so we need
