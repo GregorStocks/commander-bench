@@ -327,7 +327,7 @@ public class SkeletonCallbackHandler {
                 // Try to find valid targets from multiple sources
                 Set<UUID> targets = findValidTargets(targetMsg);
                 if (required && targets != null && !targets.isEmpty()) {
-                    UUID firstTarget = targets.iterator().next();
+                    UUID firstTarget = selectDeterministicTarget(targets, null);
                     session.sendPlayerUUID(gameId, firstTarget);
                     result.put("action_taken", "selected_first_target");
                 } else {
@@ -1164,7 +1164,7 @@ public class SkeletonCallbackHandler {
                             // (models sometimes send answer=false for mandatory targets like Sylvan Library triggers)
                             Set<UUID> autoTargets = findValidTargets(targetMsg);
                             if (autoTargets != null && !autoTargets.isEmpty()) {
-                                UUID firstTarget = autoTargets.iterator().next();
+                                UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
                                 logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (model sent answer=false)");
                                 session.sendPlayerUUID(gameId, firstTarget);
                                 result.put("action_taken", "auto_selected_required_target");
@@ -1184,7 +1184,7 @@ public class SkeletonCallbackHandler {
                             // Required target with no valid response — auto-select to prevent loops
                             Set<UUID> autoTargets = findValidTargets(targetMsg2);
                             if (autoTargets != null && !autoTargets.isEmpty()) {
-                                UUID firstTarget = autoTargets.iterator().next();
+                                UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
                                 logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (no index or answer provided)");
                                 session.sendPlayerUUID(gameId, firstTarget);
                                 result.put("action_taken", "auto_selected_required_target");
@@ -2543,7 +2543,7 @@ public class SkeletonCallbackHandler {
 
         sleepBeforeAction();
         if (required && targets != null && !targets.isEmpty()) {
-            UUID firstTarget = targets.iterator().next();
+            UUID firstTarget = selectDeterministicTarget(targets, null);
             logger.info("[" + client.getUsername() + "] Target (required): \"" + message.getMessage() + "\" -> " + firstTarget);
             session.sendPlayerUUID(gameId, firstTarget);
         } else {
@@ -2584,6 +2584,35 @@ public class SkeletonCallbackHandler {
         }
 
         return null;
+    }
+
+    /**
+     * Select a deterministic target from a set of valid targets.
+     * Prefer the order from choices (if provided), otherwise fall back to lexicographic UUID ordering.
+     */
+    private UUID selectDeterministicTarget(Set<UUID> targets, List<Object> choices) {
+        if (targets == null || targets.isEmpty()) {
+            return null;
+        }
+
+        if (choices != null && !choices.isEmpty()) {
+            for (Object choice : choices) {
+                if (choice instanceof UUID) {
+                    UUID candidate = (UUID) choice;
+                    if (targets.contains(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+
+        UUID selected = null;
+        for (UUID candidate : targets) {
+            if (selected == null || candidate.toString().compareTo(selected.toString()) < 0) {
+                selected = candidate;
+            }
+        }
+        return selected;
     }
 
     private void handleGameChooseAbility(UUID gameId, ClientCallback callback) {
