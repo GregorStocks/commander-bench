@@ -205,7 +205,6 @@ public class StreamingGamePanel extends GamePanel {
     @Override
     public synchronized void updateGame(int messageId, GameView game) {
         super.updateGame(messageId, game);
-        restoreDeadPlayerPanelSizes();
         this.lastGame = game;
         roundTracker.update(game);
         // Schedule auto-dismissal of any popup dialogs created by the parent
@@ -231,6 +230,19 @@ public class StreamingGamePanel extends GamePanel {
         relayoutStackVertically();
         writeStateSnapshotIfChanged(game);
         pushOverlayState(game, false);
+    }
+
+    /**
+     * Override the no-arg updateGame to restore dead player panel sizes.
+     * The parent's updateGame() contains the collapse code that shrinks eliminated
+     * players to 95px. By overriding here (rather than only in the 2-arg version),
+     * we catch all code paths: the 5-arg updateGame, direct no-arg calls from
+     * callbacks, endMessage, ask, select, etc.
+     */
+    @Override
+    public synchronized void updateGame() {
+        super.updateGame();
+        restoreDeadPlayerPanelSizes();
     }
 
     /**
