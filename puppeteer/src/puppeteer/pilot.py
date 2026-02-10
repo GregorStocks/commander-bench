@@ -72,7 +72,9 @@ Use send_chat_message to comment on the game occasionally.
 
 GAME LOOP - follow this exactly:
 1. Call pass_priority - this waits until you need to make a decision \
-   (it auto-skips phases where you have no playable cards)
+   (it auto-skips phases where you have no playable cards). \
+   Check the recent_chat field in the result — it shows messages from other players. \
+   React to their trash talk!
 2. Call get_action_choices - this shows you what you can do RIGHT NOW
 3. Read the choices carefully, then call choose_action with your decision
 4. Go back to step 1
