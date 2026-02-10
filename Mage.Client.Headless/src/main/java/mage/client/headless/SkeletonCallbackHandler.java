@@ -16,6 +16,7 @@ import mage.view.CounterView;
 import mage.view.CardsView;
 import mage.view.CardView;
 import mage.view.ChatMessage;
+import mage.view.CombatGroupView;
 import mage.view.ExileView;
 import mage.view.GameClientMessage;
 import mage.view.GameView;
@@ -1619,6 +1620,34 @@ public class SkeletonCallbackHandler {
                 playerInfo.put("graveyard", graveyard);
             }
 
+            // Exile
+            List<String> exileCards = new ArrayList<>();
+            if (player.getExile() != null) {
+                for (CardView card : player.getExile().values()) {
+                    exileCards.add(card.getDisplayName());
+                }
+            }
+            if (!exileCards.isEmpty()) {
+                playerInfo.put("exile", exileCards);
+            }
+
+            // Mana pool
+            ManaPoolView pool = player.getManaPool();
+            if (pool != null) {
+                int total = pool.getRed() + pool.getGreen() + pool.getBlue()
+                          + pool.getWhite() + pool.getBlack() + pool.getColorless();
+                if (total > 0) {
+                    Map<String, Integer> mana = new HashMap<>();
+                    if (pool.getRed() > 0) mana.put("R", pool.getRed());
+                    if (pool.getGreen() > 0) mana.put("G", pool.getGreen());
+                    if (pool.getBlue() > 0) mana.put("U", pool.getBlue());
+                    if (pool.getWhite() > 0) mana.put("W", pool.getWhite());
+                    if (pool.getBlack() > 0) mana.put("B", pool.getBlack());
+                    if (pool.getColorless() > 0) mana.put("C", pool.getColorless());
+                    playerInfo.put("mana_pool", mana);
+                }
+            }
+
             // Player counters (poison, etc.)
             if (player.getCounters() != null && !player.getCounters().isEmpty()) {
                 Map<String, Integer> counters = new HashMap<>();
@@ -1655,6 +1684,42 @@ public class SkeletonCallbackHandler {
             }
         }
         state.put("stack", stack);
+
+        // Combat
+        if (gameView.getCombat() != null && !gameView.getCombat().isEmpty()) {
+            List<Map<String, Object>> combatGroups = new ArrayList<>();
+            for (CombatGroupView group : gameView.getCombat()) {
+                Map<String, Object> groupInfo = new HashMap<>();
+                List<Map<String, Object>> attackers = new ArrayList<>();
+                for (CardView attacker : group.getAttackers().values()) {
+                    Map<String, Object> aInfo = new HashMap<>();
+                    aInfo.put("name", attacker.getDisplayName());
+                    if (attacker.getPower() != null) {
+                        aInfo.put("power", attacker.getPower());
+                        aInfo.put("toughness", attacker.getToughness());
+                    }
+                    attackers.add(aInfo);
+                }
+                groupInfo.put("attackers", attackers);
+                List<Map<String, Object>> blockers = new ArrayList<>();
+                for (CardView blocker : group.getBlockers().values()) {
+                    Map<String, Object> bInfo = new HashMap<>();
+                    bInfo.put("name", blocker.getDisplayName());
+                    if (blocker.getPower() != null) {
+                        bInfo.put("power", blocker.getPower());
+                        bInfo.put("toughness", blocker.getToughness());
+                    }
+                    blockers.add(bInfo);
+                }
+                if (!blockers.isEmpty()) {
+                    groupInfo.put("blockers", blockers);
+                }
+                groupInfo.put("blocked", group.isBlocked());
+                groupInfo.put("defending", group.getDefenderName());
+                combatGroups.add(groupInfo);
+            }
+            state.put("combat", combatGroups);
+        }
 
         return state;
     }

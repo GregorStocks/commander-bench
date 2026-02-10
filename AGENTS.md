@@ -35,6 +35,16 @@ The **Python harness** (`puppeteer/`) should stay simple. Its job is to:
 
 If you're tempted to add a special case or workaround in Python, consider whether it should live in Java instead. The LLMs should see a clean, high-level interface — the MCP layer absorbs the complexity.
 
+## MCP Tools
+
+When modifying MCP tool definitions or descriptions in `McpServer.java`, regenerate the tool definitions JSON used by the website:
+
+```bash
+make mcp-tools
+```
+
+This updates `website/src/data/mcp-tools.json`. Include the regenerated file in your commit.
+
 ## Python
 
 Always use `uv` for Python. Never use system Python directly.

@@ -276,8 +276,9 @@ public class McpServer {
         Map<String, Object> gameStateTool = new HashMap<>();
         gameStateTool.put("name", "get_game_state");
         gameStateTool.put("description",
-                "Get full game state: turn, phase, players, stack. Each player has life, hand (yours only), " +
-                "battlefield (name, tapped, P/T, counters, token/copy/face_down flags), graveyard, commanders.");
+                "Get full game state: turn, phase, players, stack, combat. Each player has life, mana_pool, " +
+                "hand (yours only), battlefield (name, tapped, P/T, counters, token/copy/face_down flags), " +
+                "graveyard, exile, commanders.");
         Map<String, Object> gameStateSchema = new HashMap<>();
         gameStateSchema.put("type", "object");
         gameStateSchema.put("properties", new HashMap<>());
