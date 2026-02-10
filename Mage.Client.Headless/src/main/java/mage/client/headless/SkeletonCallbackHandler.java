@@ -7,6 +7,8 @@ import mage.cards.repository.CardRepository;
 import mage.choices.Choice;
 import mage.constants.ManaType;
 import mage.constants.PlayerAction;
+import mage.constants.SubType;
+import mage.constants.SubTypeSet;
 import mage.interfaces.callback.ClientCallback;
 import mage.interfaces.callback.ClientCallbackMethod;
 import mage.remote.Session;
@@ -884,6 +886,35 @@ public class SkeletonCallbackHandler {
                     }
                 }
 
+                // Filter large choice lists to deck-relevant options
+                int totalChoices = choiceList.size();
+                if (totalChoices >= 50 && deckList != null) {
+                    Set<String> deckTypes = getDeckCreatureTypes();
+                    if (!deckTypes.isEmpty()) {
+                        List<Map<String, Object>> filtered = new ArrayList<>();
+                        List<Object> filteredKeys = new ArrayList<>();
+                        int idx = 0;
+                        for (int i = 0; i < choiceList.size(); i++) {
+                            String desc = (String) choiceList.get(i).get("description");
+                            if (deckTypes.contains(desc)) {
+                                Map<String, Object> entry = new HashMap<>();
+                                entry.put("index", idx);
+                                entry.put("description", desc);
+                                filtered.add(entry);
+                                filteredKeys.add(indexToKey.get(i));
+                                idx++;
+                            }
+                        }
+                        if (!filtered.isEmpty()) {
+                            choiceList = filtered;
+                            indexToKey = filteredKeys;
+                            result.put("note", "Showing " + filtered.size()
+                                + " types from your deck (" + totalChoices
+                                + " total available). Use choose_action(text='TypeName') for any other type.");
+                        }
+                    }
+                }
+
                 result.put("choices", choiceList);
                 lastChoices = indexToKey;
                 break;
@@ -955,7 +986,7 @@ public class SkeletonCallbackHandler {
      * Respond to the current pending action with a specific choice.
      * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
      */
-    public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile) {
+    public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile, String text) {
         Map<String, Object> result = new HashMap<>();
         PendingAction action = pendingAction;
 
@@ -1138,9 +1169,62 @@ public class SkeletonCallbackHandler {
                 }
 
                 case GAME_CHOOSE_CHOICE: {
+                    // Support text parameter for choosing by name (e.g. creature type not in filtered list)
+                    if (text != null && !text.isEmpty()) {
+                        GameClientMessage choiceMsg = (GameClientMessage) data;
+                        Choice choiceObj = choiceMsg.getChoice();
+                        if (choiceObj == null) {
+                            result.put("success", false);
+                            result.put("error", "No choice available");
+                            pendingAction = action;
+                            return result;
+                        }
+                        // Validate text is a legal choice
+                        if (choiceObj.isKeyChoice()) {
+                            // For key choices, text must match a value; find the key
+                            Map<String, String> keyChoices = choiceObj.getKeyChoices();
+                            String matchedKey = null;
+                            if (keyChoices != null) {
+                                for (Map.Entry<String, String> entry : keyChoices.entrySet()) {
+                                    if (entry.getValue().equalsIgnoreCase(text) || entry.getKey().equalsIgnoreCase(text)) {
+                                        matchedKey = entry.getKey();
+                                        break;
+                                    }
+                                }
+                            }
+                            if (matchedKey == null) {
+                                result.put("success", false);
+                                result.put("error", "'" + text + "' is not a valid choice");
+                                pendingAction = action;
+                                return result;
+                            }
+                            session.sendPlayerString(gameId, matchedKey);
+                        } else {
+                            // For plain choices, text must match a choice string
+                            Set<String> choices = choiceObj.getChoices();
+                            String matched = null;
+                            if (choices != null) {
+                                for (String c : choices) {
+                                    if (c.equalsIgnoreCase(text)) {
+                                        matched = c;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (matched == null) {
+                                result.put("success", false);
+                                result.put("error", "'" + text + "' is not a valid choice");
+                                pendingAction = action;
+                                return result;
+                            }
+                            session.sendPlayerString(gameId, matched);
+                        }
+                        result.put("action_taken", "selected_choice_text_" + text);
+                        break;
+                    }
                     if (index == null) {
                         result.put("success", false);
-                        result.put("error", "Integer 'index' required for GAME_CHOOSE_CHOICE");
+                        result.put("error", "Integer 'index' or string 'text' required for GAME_CHOOSE_CHOICE");
                         pendingAction = action;
                         return result;
                     }
@@ -1217,13 +1301,13 @@ public class SkeletonCallbackHandler {
         if (cardsView != null) {
             CardView cv = cardsView.get(targetId);
             if (cv != null) {
-                return buildCardDescription(cv);
+                return buildCardDescription(cv) + controllerSuffix(targetId);
             }
         }
         // Fall back to game state lookup
         CardView cv = findCardViewById(targetId);
         if (cv != null) {
-            return buildCardDescription(cv);
+            return buildCardDescription(cv) + controllerSuffix(targetId);
         }
         // Check if the target is a player
         GameView gameView = lastGameView;
@@ -1241,6 +1325,27 @@ public class SkeletonCallbackHandler {
             }
         }
         return "Unknown (" + targetId.toString().substring(0, 8) + ")";
+    }
+
+    /**
+     * Return a suffix like " (yours)" or " (PlayerName's)" indicating who controls
+     * the permanent with the given ID. Returns "" if not found on any battlefield.
+     */
+    private String controllerSuffix(UUID objectId) {
+        GameView gameView = lastGameView;
+        if (gameView == null) return "";
+        UUID gameId = currentGameId;
+        UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
+        for (PlayerView player : gameView.getPlayers()) {
+            if (player.getBattlefield().get(objectId) != null) {
+                if (player.getPlayerId().equals(myPlayerId)) {
+                    return " (yours)";
+                } else {
+                    return " (" + player.getName() + "'s)";
+                }
+            }
+        }
+        return "";
     }
 
     private String buildCardDescription(CardView cv) {
@@ -1895,6 +2000,27 @@ public class SkeletonCallbackHandler {
         return result;
     }
 
+    /**
+     * Collect all creature subtypes from cards in the deck.
+     * Used to filter large GAME_CHOOSE_CHOICE lists (e.g. Herald's Horn).
+     */
+    private Set<String> getDeckCreatureTypes() {
+        Set<String> types = new HashSet<>();
+        DeckCardLists deck = this.deckList;
+        if (deck == null) return types;
+        for (DeckCardInfo card : deck.getCards()) {
+            CardInfo info = CardRepository.instance.findCard(card.getCardName());
+            if (info != null) {
+                for (SubType st : info.getSubTypes()) {
+                    if (st.getSubTypeSet() == SubTypeSet.CreatureType) {
+                        types.add(st.toString());
+                    }
+                }
+            }
+        }
+        return types;
+    }
+
     public Map<String, Object> getOracleText(String cardName, String objectId, String[] cardNames) {
         Map<String, Object> result = new HashMap<>();
 
@@ -2108,6 +2234,20 @@ public class SkeletonCallbackHandler {
 
                 case GAME_TARGET:
                     if (mcpMode) {
+                        // Auto-select when required and only one legal target
+                        GameClientMessage targetCallbackMsg = (GameClientMessage) callback.getData();
+                        if (targetCallbackMsg.isFlag()) { // required
+                            Set<UUID> autoTargets = findValidTargets(targetCallbackMsg);
+                            if (autoTargets != null && autoTargets.size() == 1) {
+                                UUID onlyTarget = autoTargets.iterator().next();
+                                logger.info("[" + client.getUsername() + "] Auto-selecting single mandatory target: " + onlyTarget.toString().substring(0, 8));
+                                // Update game view if available
+                                GameView gv = targetCallbackMsg.getGameView();
+                                if (gv != null) lastGameView = gv;
+                                session.sendPlayerUUID(objectId, onlyTarget);
+                                break;
+                            }
+                        }
                         storePendingAction(objectId, method, callback);
                     } else {
                         handleGameTarget(objectId, callback);
