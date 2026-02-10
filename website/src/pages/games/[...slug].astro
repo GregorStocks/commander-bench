@@ -17,6 +17,7 @@ const { slug } = Astro.params;
 ---
 
 <Base title="Game Replay" wide>
+  <link rel="stylesheet" href="/game-renderer.css" />
   <div id="visualizer">
     <div id="loading">Loading game data...</div>
     <div id="error" class="hidden"></div>
@@ -88,10 +89,6 @@ const { slug } = Astro.params;
 
   #error {
     color: #e94560;
-  }
-
-  .hidden {
-    display: none !important;
   }
 
   /* Header */
@@ -207,217 +204,6 @@ const { slug } = Astro.params;
     text-align: right;
   }
 
-  /* Players grid */
-  #players-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-
-  @media (max-width: 800px) {
-    #players-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .player-card {
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    background: #16213e;
-    overflow: hidden;
-  }
-
-  .player-card.eliminated {
-    opacity: 0.5;
-  }
-
-  /* Player accent colors */
-  .player-card.player-0 { border-left: 3px solid #3b82f6; }
-  .player-card.player-1 { border-left: 3px solid #ef4444; }
-  .player-card.player-2 { border-left: 3px solid #22c55e; }
-  .player-card.player-3 { border-left: 3px solid #f59e0b; }
-  .player-name.player-0 { color: #3b82f6; }
-  .player-name.player-1 { color: #ef4444; }
-  .player-name.player-2 { color: #22c55e; }
-  .player-name.player-3 { color: #f59e0b; }
-  .action-player-0 { color: #3b82f6; font-weight: 600; }
-  .action-player-1 { color: #ef4444; font-weight: 600; }
-  .action-player-2 { color: #22c55e; font-weight: 600; }
-  .action-player-3 { color: #f59e0b; font-weight: 600; }
-
-  .player-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .player-name {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: #e0e0e0;
-  }
-
-  .player-name.active-player {
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .player-life {
-    font-size: 0.85rem;
-    color: #a0a0b8;
-  }
-
-  .player-counters {
-    font-size: 0.75rem;
-    color: #a0a0b8;
-    padding: 0.15rem 0.75rem;
-  }
-
-  /* Zones */
-  .zone {
-    padding: 0.4rem 0.75rem;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
-  }
-
-  .zone:last-child {
-    border-bottom: 0;
-  }
-
-  .zone-title {
-    font-size: 0.7rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #a0a0b8;
-    margin-bottom: 0.3rem;
-  }
-
-  .cards-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .card-chip {
-    border: 1px solid rgba(150, 195, 205, 0.2);
-    background: rgba(44, 64, 72, 0.8);
-    color: #e0e0e0;
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-size: 0.7rem;
-    line-height: 1.4;
-    cursor: default;
-    white-space: nowrap;
-    transition: border-color 0.15s;
-  }
-
-  .card-chip:hover {
-    border-color: #e94560;
-  }
-
-  .card-chip.tapped {
-    opacity: 0.6;
-    font-style: italic;
-  }
-
-  .card-chip.tapped::before {
-    content: "⟳ ";
-    font-style: normal;
-  }
-
-  .card-chip .pt {
-    color: #a8d9a5;
-    margin-left: 2px;
-  }
-
-  .zone-empty {
-    font-size: 0.7rem;
-    color: #555;
-    font-style: italic;
-  }
-
-  /* Battlefield card thumbnails */
-  .cards-grid {
-    gap: 6px;
-    align-items: flex-start;
-  }
-
-  .card-thumb {
-    position: relative;
-    width: 60px;
-    border-radius: 4px;
-    overflow: hidden;
-    border: 1px solid rgba(150, 195, 205, 0.2);
-    transition: border-color 0.15s;
-    cursor: default;
-    flex-shrink: 0;
-  }
-
-  .card-thumb:hover {
-    border-color: #e94560;
-    z-index: 1;
-  }
-
-  .card-thumb img {
-    display: block;
-    width: 100%;
-    height: auto;
-    border-radius: 3px;
-  }
-
-  .card-thumb.tapped {
-    transform: rotate(90deg);
-    margin: 12px 12px;
-  }
-
-  .card-thumb-pt {
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    background: rgba(0, 0, 0, 0.8);
-    color: #a8d9a5;
-    font-size: 0.6rem;
-    font-weight: 700;
-    padding: 1px 4px;
-    border-radius: 3px;
-    line-height: 1.2;
-  }
-
-  .card-thumb-fallback {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    aspect-ratio: 146 / 204;
-    background: rgba(44, 64, 72, 0.8);
-    color: #e0e0e0;
-    font-size: 0.5rem;
-    text-align: center;
-    padding: 4px;
-    word-break: break-word;
-  }
-
-  /* Section titles */
-  .section-title {
-    font-size: 0.75rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #a0a0b8;
-    margin-bottom: 0.4rem;
-  }
-
-  /* Stack */
-  #stack-section {
-    padding: 0.75rem 1rem;
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    margin-bottom: 0.75rem;
-  }
-
   /* Action log */
   #action-log {
     padding: 0.75rem 1rem;
@@ -443,548 +229,65 @@ const { slug } = Astro.params;
   .action-line:last-child {
     border-bottom: 0;
   }
-
-  /* Card preview */
-  #card-preview {
-    position: fixed;
-    right: 12px;
-    bottom: 12px;
-    width: min(420px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    display: grid;
-    grid-template-columns: 160px 1fr;
-    gap: 10px;
-    padding: 10px;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    background: rgba(22, 33, 62, 0.97);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
-    z-index: 9999;
-  }
-
-  #card-preview img {
-    width: 100%;
-    height: auto;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .card-meta {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .card-name {
-    font-size: 0.9rem;
-    font-weight: 700;
-    margin-bottom: 4px;
-  }
-
-  .card-type {
-    font-size: 0.75rem;
-    color: #a0a0b8;
-    margin-bottom: 4px;
-  }
-
-  .card-stats {
-    font-size: 0.75rem;
-    color: #a8d9a5;
-    margin-bottom: 6px;
-  }
-
-  .card-rules {
-    margin: 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-size: 0.75rem;
-    line-height: 1.35;
-    color: #c0c0d0;
-    font-family: system-ui, -apple-system, sans-serif;
-  }
-
-  @media (max-width: 600px) {
-    #card-preview {
-      grid-template-columns: 100px 1fr;
-    }
-  }
-
-  /* Diff highlight animations */
-  @keyframes card-enter-glow {
-    0% {
-      border-color: #4caf50;
-      box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
-    }
-    100% {
-      border-color: rgba(150, 195, 205, 0.2);
-      box-shadow: none;
-    }
-  }
-
-  .card-chip.card-entered,
-  .card-thumb.card-entered {
-    animation: card-enter-glow 1.5s ease-out;
-  }
-
-  @keyframes card-ghost-fade {
-    0% {
-      opacity: 0.7;
-      border-color: #e94560;
-      box-shadow: 0 0 6px rgba(233, 69, 96, 0.4);
-    }
-    70% {
-      opacity: 0.3;
-    }
-    100% {
-      opacity: 0;
-      max-width: 0;
-      padding: 0;
-      margin: 0;
-      border-width: 0;
-      overflow: hidden;
-    }
-  }
-
-  .card-chip.card-ghost {
-    animation: card-ghost-fade 2s ease-out forwards;
-    border-color: #e94560;
-    text-decoration: line-through;
-    pointer-events: none;
-  }
-
-  .card-thumb.card-ghost {
-    animation: card-ghost-fade 2s ease-out forwards;
-    border-color: #e94560;
-    pointer-events: none;
-    filter: grayscale(0.5);
-  }
-
-  @keyframes life-pulse-up {
-    0% { color: #4caf50; transform: scale(1.15); }
-    100% { color: #a0a0b8; transform: scale(1); }
-  }
-
-  @keyframes life-pulse-down {
-    0% { color: #e94560; transform: scale(1.15); }
-    100% { color: #a0a0b8; transform: scale(1); }
-  }
-
-  .life-changed-up {
-    animation: life-pulse-up 1.2s ease-out;
-    display: inline-block;
-  }
-
-  .life-changed-down {
-    animation: life-pulse-down 1.2s ease-out;
-    display: inline-block;
-  }
-
-  .life-up {
-    color: #4caf50;
-    font-weight: 600;
-  }
-
-  .life-down {
-    color: #e94560;
-    font-weight: 600;
-  }
-
-  @keyframes tap-highlight {
-    0% {
-      box-shadow: 0 0 6px rgba(168, 217, 165, 0.6);
-      border-color: #a8d9a5;
-    }
-    100% {
-      box-shadow: none;
-      border-color: rgba(150, 195, 205, 0.2);
-    }
-  }
-
-  .card-chip.card-tap-changed,
-  .card-thumb.card-tap-changed {
-    animation: tap-highlight 1.2s ease-out;
-  }
-
-  /* Mana symbols */
-  .mana-icon {
-    width: 14px;
-    height: 14px;
-    vertical-align: middle;
-    display: inline-block;
-    margin: 0 1px;
-  }
-
-  .card-type .mana-icon {
-    width: 18px;
-    height: 18px;
-  }
 </style>
 
-<script>
+<script is:inline src="/game-renderer.js"></script>
+<script is:inline>
   (function () {
-    const slug = window.location.pathname.replace(/^\/games\//, "").replace(/\/$/, "");
+    var R = window.GameRenderer;
+
+    var slug = window.location.pathname.replace(/^\/games\//, "").replace(/\/$/, "");
     if (!slug) {
       showError("No game ID in URL.");
       return;
     }
 
-    const loadingEl = document.getElementById("loading");
-    const errorEl = document.getElementById("error");
-    const gameUI = document.getElementById("game-ui");
+    var loadingEl = document.getElementById("loading");
+    var errorEl = document.getElementById("error");
+    var gameUI = document.getElementById("game-ui");
 
     // Transport
-    const btnStart = document.getElementById("btn-start");
-    const btnPrev = document.getElementById("btn-prev");
-    const btnNext = document.getElementById("btn-next");
-    const btnEnd = document.getElementById("btn-end");
-    const btnAuto = document.getElementById("btn-auto");
-    const slider = document.getElementById("slider");
-    const counterEl = document.getElementById("snapshot-counter");
+    var btnStart = document.getElementById("btn-start");
+    var btnPrev = document.getElementById("btn-prev");
+    var btnNext = document.getElementById("btn-next");
+    var btnEnd = document.getElementById("btn-end");
+    var btnAuto = document.getElementById("btn-auto");
+    var slider = document.getElementById("slider");
+    var counterEl = document.getElementById("snapshot-counter");
 
     // Display
-    const gameTitleEl = document.getElementById("game-title");
-    const turnInfoEl = document.getElementById("turn-info");
-    const playersGrid = document.getElementById("players-grid");
-    const stackSection = document.getElementById("stack-section");
-    const stackCards = document.getElementById("stack-cards");
-    const actionList = document.getElementById("action-list");
-
-    // Card preview
-    const cardPreview = document.getElementById("card-preview");
-    const previewImage = document.getElementById("preview-image");
-    const previewName = document.getElementById("preview-name");
-    const previewType = document.getElementById("preview-type");
-    const previewStats = document.getElementById("preview-stats");
-    const previewRules = document.getElementById("preview-rules");
+    var gameTitleEl = document.getElementById("game-title");
+    var turnInfoEl = document.getElementById("turn-info");
+    var playersGrid = document.getElementById("players-grid");
+    var stackSection = document.getElementById("stack-section");
+    var stackCards = document.getElementById("stack-cards");
+    var actionList = document.getElementById("action-list");
 
     // Turn navigation
-    const turnSelect = document.getElementById("turn-select");
-    const btnPrevTurn = document.getElementById("btn-prev-turn");
-    const btnNextTurn = document.getElementById("btn-next-turn");
+    var turnSelect = document.getElementById("turn-select");
+    var btnPrevTurn = document.getElementById("btn-prev-turn");
+    var btnNextTurn = document.getElementById("btn-next-turn");
 
-    let game = null;
-    let currentIndex = 0;
-    let autoPlayInterval = null;
+    // Card preview elements
+    var previewEls = {
+      container: document.getElementById("card-preview"),
+      image: document.getElementById("preview-image"),
+      name: document.getElementById("preview-name"),
+      type: document.getElementById("preview-type"),
+      stats: document.getElementById("preview-stats"),
+      rules: document.getElementById("preview-rules"),
+    };
+
+    var game = null;
+    var currentIndex = 0;
+    var autoPlayInterval = null;
     var playerColorMap = {};
     var turnStartIndices = [];
-    var PLAYER_COLORS = ["player-0", "player-1", "player-2", "player-3"];
-
-    // --- Diff computation ---
-
-    function diffStringBag(prevList, currList) {
-      var prevBag = {};
-      var currBag = {};
-      prevList.forEach(function (n) { prevBag[n] = (prevBag[n] || 0) + 1; });
-      currList.forEach(function (n) { currBag[n] = (currBag[n] || 0) + 1; });
-      var entered = [];
-      var left = [];
-      var allNames = {};
-      Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
-      Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
-      Object.keys(allNames).forEach(function (name) {
-        var diff = (currBag[name] || 0) - (prevBag[name] || 0);
-        for (var i = 0; i < Math.abs(diff); i++) {
-          if (diff > 0) entered.push(name);
-          else left.push(name);
-        }
-      });
-      return { entered: entered, left: left };
-    }
-
-    function diffBattlefield(prevCards, currCards) {
-      var prevBag = {};
-      var currBag = {};
-      var prevTapped = {};
-      var currTapped = {};
-      prevCards.forEach(function (c) {
-        var n = c.name || "Unknown";
-        prevBag[n] = (prevBag[n] || 0) + 1;
-        if (!prevTapped[n]) prevTapped[n] = [];
-        prevTapped[n].push(!!c.tapped);
-      });
-      currCards.forEach(function (c) {
-        var n = c.name || "Unknown";
-        currBag[n] = (currBag[n] || 0) + 1;
-        if (!currTapped[n]) currTapped[n] = [];
-        currTapped[n].push(!!c.tapped);
-      });
-      var entered = [];
-      var left = [];
-      var tapChanged = [];
-      var allNames = {};
-      Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
-      Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
-      Object.keys(allNames).forEach(function (name) {
-        var pc = prevBag[name] || 0;
-        var cc = currBag[name] || 0;
-        var diff = cc - pc;
-        if (diff > 0) {
-          for (var i = 0; i < diff; i++) entered.push(name);
-        } else if (diff < 0) {
-          for (var i = 0; i < -diff; i++) {
-            var cardObj = prevCards.find(function (c) { return (c.name || "Unknown") === name; });
-            left.push(cardObj || { name: name, tapped: false });
-          }
-        }
-        if (pc > 0 && cc > 0) {
-          var minCount = Math.min(pc, cc);
-          var pt = (prevTapped[name] || []).slice(0, minCount);
-          var ct = (currTapped[name] || []).slice(0, minCount);
-          for (var i = 0; i < minCount; i++) {
-            if (pt[i] !== ct[i]) {
-              tapChanged.push(name);
-              break;
-            }
-          }
-        }
-      });
-      return { entered: entered, left: left, tapChanged: tapChanged };
-    }
-
-    function computeDiff(prevSnap, currSnap) {
-      if (!prevSnap || !currSnap) return null;
-      var diffs = {};
-      var prevPlayers = {};
-      (prevSnap.players || []).forEach(function (p) { prevPlayers[p.name] = p; });
-      (currSnap.players || []).forEach(function (curr) {
-        var prev = prevPlayers[curr.name];
-        if (!prev) return;
-        var prevHandNames = (prev.hand || []).map(function (c) {
-          return typeof c === "string" ? c : (c.name || "Unknown");
-        });
-        var currHandNames = (curr.hand || []).map(function (c) {
-          return typeof c === "string" ? c : (c.name || "Unknown");
-        });
-        diffs[curr.name] = {
-          lifeChange: (curr.life || 0) - (prev.life || 0),
-          handCountChange: (curr.hand_count || 0) - (prev.hand_count || 0),
-          battlefield: diffBattlefield(prev.battlefield || [], curr.battlefield || []),
-          graveyard: diffStringBag(prev.graveyard || [], curr.graveyard || []),
-          exile: diffStringBag(prev.exile || [], curr.exile || []),
-          hand: diffStringBag(prevHandNames, currHandNames),
-        };
-      });
-      return diffs;
-    }
 
     function showError(msg) {
       loadingEl.classList.add("hidden");
       errorEl.textContent = msg;
       errorEl.classList.remove("hidden");
-    }
-
-    function scryfallUrl(cardName, cardImages, version) {
-      version = version || "small";
-      if (cardImages[cardName]) {
-        return cardImages[cardName].replace("version=small", "version=" + version);
-      }
-      return (
-        "https://api.scryfall.com/cards/named?exact=" +
-        encodeURIComponent(cardName) +
-        "&format=image&version=" + version
-      );
-    }
-
-    function renderManaCost(manaCostStr) {
-      var frag = document.createDocumentFragment();
-      if (!manaCostStr) return frag;
-      var re = /\{([^}]+)\}/g;
-      var match;
-      while ((match = re.exec(manaCostStr)) !== null) {
-        var symbol = match[1].replace(/\//g, "");
-        var img = document.createElement("img");
-        img.className = "mana-icon";
-        img.src = "https://svgs.scryfall.io/card-symbols/" + encodeURIComponent(symbol) + ".svg";
-        img.alt = match[0];
-        img.title = match[0];
-        frag.appendChild(img);
-      }
-      if (!frag.hasChildNodes()) {
-        frag.appendChild(document.createTextNode(manaCostStr));
-      }
-      return frag;
-    }
-
-    function showPreview(cardName, cardObj, cardImages) {
-      previewName.textContent = cardName;
-
-      // Type line from card data if available
-      previewType.textContent = "";
-      previewStats.textContent = "";
-      previewRules.textContent = "";
-
-      if (cardObj) {
-        if (cardObj.power || cardObj.toughness) {
-          previewStats.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
-        }
-        if (cardObj.mana_cost) {
-          previewType.textContent = "";
-          previewType.appendChild(renderManaCost(cardObj.mana_cost));
-        }
-      }
-
-      const imgUrl = scryfallUrl(cardName, cardImages, "normal");
-      previewImage.src = imgUrl;
-      previewImage.alt = cardName;
-      cardPreview.classList.remove("hidden");
-    }
-
-    function hidePreview() {
-      cardPreview.classList.add("hidden");
-    }
-
-    function makeCardChip(cardName, cardObj, cardImages, isTapped) {
-      const chip = document.createElement("span");
-      chip.className = "card-chip" + (isTapped ? " tapped" : "");
-
-      let label = cardName;
-      if (cardObj && (cardObj.power || cardObj.toughness)) {
-        label += " ";
-        const pt = document.createElement("span");
-        pt.className = "pt";
-        pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
-        chip.textContent = cardName + " ";
-        chip.appendChild(pt);
-      } else {
-        chip.textContent = cardName;
-      }
-
-      chip.addEventListener("mouseenter", () => showPreview(cardName, cardObj, cardImages));
-      chip.addEventListener("mouseleave", hidePreview);
-      return chip;
-    }
-
-    function makeCardThumbnail(cardName, cardObj, cardImages, isTapped) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "card-thumb" + (isTapped ? " tapped" : "");
-
-      const img = document.createElement("img");
-      img.src = scryfallUrl(cardName, cardImages, "small");
-      img.alt = cardName;
-      img.loading = "lazy";
-      img.draggable = false;
-
-      img.addEventListener("error", function () {
-        img.style.display = "none";
-        const fallback = document.createElement("span");
-        fallback.className = "card-thumb-fallback";
-        fallback.textContent = cardName;
-        wrapper.appendChild(fallback);
-      });
-
-      wrapper.appendChild(img);
-
-      if (cardObj && (cardObj.power || cardObj.toughness)) {
-        const pt = document.createElement("span");
-        pt.className = "card-thumb-pt";
-        pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
-        wrapper.appendChild(pt);
-      }
-
-      wrapper.addEventListener("mouseenter", function () {
-        showPreview(cardName, cardObj, cardImages);
-      });
-      wrapper.addEventListener("mouseleave", hidePreview);
-
-      return wrapper;
-    }
-
-    function makeZone(title, cards, cardImages, countOverride, useThumbnails, diffInfo) {
-      const zone = document.createElement("div");
-      zone.className = "zone";
-
-      const titleEl = document.createElement("div");
-      titleEl.className = "zone-title";
-      const count = countOverride != null ? countOverride : (cards ? cards.length : 0);
-      titleEl.textContent = title + " (" + count + ")";
-      zone.appendChild(titleEl);
-
-      const row = document.createElement("div");
-      row.className = useThumbnails ? "cards-row cards-grid" : "cards-row";
-      zone.appendChild(row);
-
-      if (!cards || cards.length === 0) {
-        if (count > 0) {
-          // Cards exist but are hidden (e.g. hand)
-          const hidden = document.createElement("span");
-          hidden.className = "zone-empty";
-          hidden.textContent = count + " card" + (count !== 1 ? "s" : "");
-          row.appendChild(hidden);
-        }
-        // Still render ghost cards even if current cards list is empty
-        if (diffInfo && diffInfo.ghostCards) {
-          diffInfo.ghostCards.forEach(function (ghost) {
-            var gName = typeof ghost === "string" ? ghost : (ghost.name || "Unknown");
-            var gObj = typeof ghost === "string" ? null : ghost;
-            var gTapped = gObj ? !!gObj.tapped : false;
-            var el;
-            if (useThumbnails) {
-              el = makeCardThumbnail(gName, gObj, cardImages, gTapped);
-            } else {
-              el = makeCardChip(gName, gObj, cardImages, gTapped);
-            }
-            el.classList.add("card-ghost");
-            row.appendChild(el);
-          });
-        }
-        return zone;
-      }
-
-      // Track entered names to consume (splice) so duplicates are handled correctly
-      var enteredBag = diffInfo ? diffInfo.enteredNames.slice() : [];
-      var tapChangedSet = diffInfo ? diffInfo.tapChangedNames : [];
-
-      cards.forEach(function (card) {
-        let name, obj, tapped;
-        if (typeof card === "string") {
-          name = card;
-          obj = null;
-          tapped = false;
-        } else {
-          name = card.name || "Unknown";
-          obj = card;
-          tapped = !!card.tapped;
-        }
-        var el;
-        if (useThumbnails) {
-          el = makeCardThumbnail(name, obj, cardImages, tapped);
-        } else {
-          el = makeCardChip(name, obj, cardImages, tapped);
-        }
-
-        // Apply diff highlights
-        if (diffInfo) {
-          var enteredIdx = enteredBag.indexOf(name);
-          if (enteredIdx !== -1) {
-            el.classList.add("card-entered");
-            enteredBag.splice(enteredIdx, 1);
-          }
-          if (tapChangedSet.indexOf(name) !== -1) {
-            el.classList.add("card-tap-changed");
-          }
-        }
-
-        row.appendChild(el);
-      });
-
-      // Render ghost cards (cards that left this zone)
-      if (diffInfo && diffInfo.ghostCards) {
-        diffInfo.ghostCards.forEach(function (ghost) {
-          var gName = typeof ghost === "string" ? ghost : (ghost.name || "Unknown");
-          var gObj = typeof ghost === "string" ? null : ghost;
-          var gTapped = gObj ? !!gObj.tapped : false;
-          var el;
-          if (useThumbnails) {
-            el = makeCardThumbnail(gName, gObj, cardImages, gTapped);
-          } else {
-            el = makeCardChip(gName, gObj, cardImages, gTapped);
-          }
-          el.classList.add("card-ghost");
-          row.appendChild(el);
-        });
-      }
-
-      return zone;
     }
 
     function escapeHtml(str) {
@@ -996,7 +299,7 @@ const { slug } = Astro.params;
       var names = Object.keys(playerColorMap);
       names.sort(function (a, b) { return b.length - a.length; });
       names.forEach(function (name) {
-        var cls = "action-" + PLAYER_COLORS[playerColorMap[name]];
+        var cls = "action-" + R.PLAYER_COLORS[playerColorMap[name]];
         var escapedName = escapeHtml(name);
         escaped = escaped.split(escapedName).join('<span class="' + cls + '">' + escapedName + '</span>');
       });
@@ -1004,130 +307,49 @@ const { slug } = Astro.params;
     }
 
     function renderSnapshot(index) {
-      const snap = game.snapshots[index];
+      var snap = game.snapshots[index];
       if (!snap) return;
 
       // Compute diff against previous snapshot
       var prevSnap = index > 0 ? game.snapshots[index - 1] : null;
-      var diffs = computeDiff(prevSnap, snap);
+      var diffs = R.computeDiff(prevSnap, snap);
 
       // Turn info
-      const phase = snap.phase || "";
-      const step = snap.step || "";
-      const phaseDisplay = step && step !== phase ? phase + " / " + step : phase;
+      var phase = snap.phase || "";
+      var step = snap.step || "";
+      var phaseDisplay = step && step !== phase ? phase + " / " + step : phase;
       turnInfoEl.textContent =
         "Turn " + snap.turn + "/" + game.totalTurns +
         " | " + phaseDisplay +
         " | Active: " + (snap.active_player || "?");
 
       // Players
-      playersGrid.innerHTML = "";
-      (snap.players || []).forEach(function (player) {
-        var playerDiff = diffs ? diffs[player.name] : null;
-
-        const card = document.createElement("article");
-        card.className = "player-card";
-        if (player.has_left) card.classList.add("eliminated");
-        var pColorIdx = playerColorMap[player.name];
-        if (pColorIdx != null) card.classList.add(PLAYER_COLORS[pColorIdx]);
-
-        // Header
-        const header = document.createElement("div");
-        header.className = "player-header";
-
-        const nameEl = document.createElement("div");
-        nameEl.className = "player-name";
-        if (pColorIdx != null) nameEl.classList.add(PLAYER_COLORS[pColorIdx]);
-        if (player.is_active) nameEl.classList.add("active-player");
-        nameEl.textContent = player.name || "?";
-        header.appendChild(nameEl);
-
-        const lifeEl = document.createElement("div");
-        lifeEl.className = "player-life";
-        lifeEl.textContent = "Life " + (player.life ?? "?") + " | Lib " + (player.library_count ?? "?");
-        if (playerDiff && playerDiff.lifeChange !== 0) {
-          var lifeSpan = document.createElement("span");
-          lifeSpan.className = playerDiff.lifeChange > 0 ? "life-up" : "life-down";
-          lifeSpan.textContent = " (" + (playerDiff.lifeChange > 0 ? "+" : "") + playerDiff.lifeChange + ")";
-          lifeEl.appendChild(lifeSpan);
-          lifeEl.classList.add(playerDiff.lifeChange > 0 ? "life-changed-up" : "life-changed-down");
-        }
-        header.appendChild(lifeEl);
-
-        card.appendChild(header);
-
-        // Counters
-        const counters = (player.counters || []).filter(function (c) { return c.count > 0; });
-        if (counters.length > 0) {
-          const countersEl = document.createElement("div");
-          countersEl.className = "player-counters";
-          countersEl.textContent = counters.map(function (c) { return c.name + ": " + c.count; }).join(" | ");
-          card.appendChild(countersEl);
-        }
-
-        // Zones — pass diff info where available
-        var bfDiff = playerDiff ? {
-          enteredNames: (playerDiff.battlefield.entered || []).slice(),
-          tapChangedNames: playerDiff.battlefield.tapChanged || [],
-          ghostCards: playerDiff.battlefield.left || [],
-        } : null;
-        card.appendChild(makeZone("Commander", player.commanders, game.cardImages));
-        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages, null, true, bfDiff));
-
-        var handDiff = playerDiff ? {
-          enteredNames: (playerDiff.hand.entered || []).slice(),
-          tapChangedNames: [],
-          ghostCards: [],
-        } : null;
-        card.appendChild(makeZone("Hand", player.hand, game.cardImages, player.hand_count, false, handDiff));
-
-        var gyDiff = playerDiff ? {
-          enteredNames: (playerDiff.graveyard.entered || []).slice(),
-          tapChangedNames: [],
-          ghostCards: [],
-        } : null;
-        card.appendChild(makeZone("Graveyard", player.graveyard, game.cardImages, null, false, gyDiff));
-
-        if (player.exile && player.exile.length > 0) {
-          var exDiff = playerDiff ? {
-            enteredNames: (playerDiff.exile.entered || []).slice(),
-            tapChangedNames: [],
-            ghostCards: [],
-          } : null;
-          card.appendChild(makeZone("Exile", player.exile, game.cardImages, null, false, exDiff));
-        }
-
-        playersGrid.appendChild(card);
+      R.renderPlayers(playersGrid, snap.players, {
+        cardImages: game.cardImages,
+        playerColorMap: playerColorMap,
+        diffs: diffs,
+        previewEls: previewEls,
       });
 
       // Stack
-      if (snap.stack && snap.stack.length > 0) {
-        stackCards.innerHTML = "";
-        snap.stack.forEach(function (item) {
-          const name = typeof item === "string" ? item : (item.name || "?");
-          stackCards.appendChild(makeCardChip(name, item, game.cardImages, false));
-        });
-        stackSection.classList.remove("hidden");
-      } else {
-        stackSection.classList.add("hidden");
-      }
+      R.renderStack(stackSection, stackCards, snap.stack, game.cardImages, previewEls);
 
       // Action log: show actions between previous snapshot seq and current snapshot seq
       actionList.innerHTML = "";
-      const prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
-      const curSeq = snap.seq;
-      const relevantActions = game.actions.filter(function (a) {
+      var prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
+      var curSeq = snap.seq;
+      var relevantActions = game.actions.filter(function (a) {
         return a.seq > prevSeq && a.seq <= curSeq;
       });
 
       if (relevantActions.length === 0) {
-        const empty = document.createElement("div");
+        var empty = document.createElement("div");
         empty.className = "action-line";
         empty.textContent = "(no actions)";
         actionList.appendChild(empty);
       } else {
         relevantActions.forEach(function (action) {
-          const line = document.createElement("div");
+          var line = document.createElement("div");
           line.className = "action-line";
           line.innerHTML = colorizePlayerNames(action.message);
           actionList.appendChild(line);
@@ -1215,7 +437,7 @@ const { slug } = Astro.params;
         });
 
         // Title
-        const playerNames = (game.players || []).map(function (p) {
+        var playerNames = (game.players || []).map(function (p) {
           return p.commander || p.name;
         }).join(" vs ");
         gameTitleEl.textContent = playerNames;
@@ -1249,7 +471,7 @@ const { slug } = Astro.params;
           if (e.key === "Home") { e.preventDefault(); goTo(0); }
           if (e.key === "End") { e.preventDefault(); goTo(game.snapshots.length - 1); }
           if (e.key === " ") { e.preventDefault(); toggleAutoPlay(); }
-          if (e.key === "Escape") { hidePreview(); }
+          if (e.key === "Escape") { R.hidePreview(previewEls); }
           if (e.key === "[") { e.preventDefault(); btnPrevTurn.click(); }
           if (e.key === "]") { e.preventDefault(); btnNextTurn.click(); }
         });
@@ -1261,6 +483,6 @@ const { slug } = Astro.params;
         showError(err.message || "Failed to load game data.");
       });
 
-    window.addEventListener("blur", hidePreview);
+    window.addEventListener("blur", function () { R.hidePreview(previewEls); });
   })();
 </script>

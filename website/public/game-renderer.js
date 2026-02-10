@@ -1,0 +1,707 @@
+/**
+ * game-renderer.js — shared rendering module for replay + live visualizer.
+ *
+ * In the browser this attaches to window.GameRenderer.
+ * In Node/Vitest it is importable as a module.
+ */
+(function (root) {
+  "use strict";
+
+  // ── Data normalisation (live API camelCase → internal snake_case) ──
+
+  function normalizeCard(c) {
+    if (!c || typeof c === "string") return c;
+    return {
+      name: c.name,
+      tapped: !!c.tapped,
+      power: c.power,
+      toughness: c.toughness,
+      mana_cost: c.manaCost || c.mana_cost,
+      typeLine: c.typeLine,
+      rules: c.rules,
+      imageUrl: c.imageUrl,
+      damage: c.damage,
+      loyalty: c.loyalty,
+      defense: c.defense,
+      layout: c.layout || null,
+    };
+  }
+
+  function normalizeLivePlayer(p) {
+    return {
+      name: p.name,
+      life: p.life,
+      library_count: p.libraryCount,
+      hand_count: p.handCount,
+      is_active: p.isActive,
+      has_left: p.hasLeft,
+      counters: p.counters || [],
+      commanders: (p.commanders || []).map(normalizeCard),
+      battlefield: (p.battlefield || []).map(normalizeCard),
+      hand: (p.hand || []).map(normalizeCard),
+      graveyard: (p.graveyard || []).map(normalizeCard),
+      exile: (p.exile || []).map(normalizeCard),
+      timerActive: p.timerActive,
+      priorityTimeLeftSecs: p.priorityTimeLeftSecs,
+    };
+  }
+
+  function normalizeLiveState(apiState) {
+    if (!apiState) return apiState;
+    return {
+      status: apiState.status,
+      turn: apiState.turn,
+      phase: apiState.phase,
+      step: apiState.step,
+      active_player: apiState.activePlayer,
+      priority_player: apiState.priorityPlayer,
+      stack: (apiState.stack || []).map(normalizeCard),
+      players: (apiState.players || []).map(normalizeLivePlayer),
+      layout: apiState.layout || null,
+    };
+  }
+
+  // ── Card image resolution ──
+
+  function resolveCardImage(cardName, cardObj, cardImages, version) {
+    version = version || "small";
+    // Priority 1: explicit imageUrl on the card (live mode)
+    if (cardObj && cardObj.imageUrl) {
+      return cardObj.imageUrl
+        .replace("version=normal", "version=" + version)
+        .replace("version=small", "version=" + version);
+    }
+    // Priority 2: cardImages lookup map (replay mode)
+    if (cardImages && cardImages[cardName]) {
+      return cardImages[cardName].replace("version=small", "version=" + version);
+    }
+    // Priority 3: Scryfall name-based fallback
+    return (
+      "https://api.scryfall.com/cards/named?exact=" +
+      encodeURIComponent(cardName) +
+      "&format=image&version=" + version
+    );
+  }
+
+  // ── Mana symbol rendering ──
+
+  function renderManaCost(manaCostStr) {
+    var frag = document.createDocumentFragment();
+    if (!manaCostStr) return frag;
+    var re = /\{([^}]+)\}/g;
+    var match;
+    while ((match = re.exec(manaCostStr)) !== null) {
+      var symbol = match[1].replace(/\//g, "");
+      var img = document.createElement("img");
+      img.className = "mana-icon";
+      img.src = "https://svgs.scryfall.io/card-symbols/" + encodeURIComponent(symbol) + ".svg";
+      img.alt = match[0];
+      img.title = match[0];
+      frag.appendChild(img);
+    }
+    if (!frag.hasChildNodes()) {
+      frag.appendChild(document.createTextNode(manaCostStr));
+    }
+    return frag;
+  }
+
+  // ── Card preview ──
+
+  function showPreview(cardName, cardObj, cardImages, els) {
+    if (!els || !els.name) return;
+    els.name.textContent = cardName;
+    els.type.textContent = "";
+    els.stats.textContent = "";
+    els.rules.textContent = "";
+
+    if (cardObj) {
+      if (cardObj.power || cardObj.toughness) {
+        els.stats.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+      }
+      if (cardObj.loyalty) {
+        els.stats.textContent = (els.stats.textContent ? els.stats.textContent + " | " : "") + "Loyalty " + cardObj.loyalty;
+      }
+      if (cardObj.defense) {
+        els.stats.textContent = (els.stats.textContent ? els.stats.textContent + " | " : "") + "Defense " + cardObj.defense;
+      }
+      if (cardObj.damage && Number(cardObj.damage) > 0) {
+        els.stats.textContent = (els.stats.textContent ? els.stats.textContent + " | " : "") + "Damage " + cardObj.damage;
+      }
+      if (cardObj.mana_cost) {
+        els.type.textContent = "";
+        els.type.appendChild(renderManaCost(cardObj.mana_cost));
+      }
+      if (cardObj.typeLine) {
+        // If we already rendered mana cost, append type line
+        if (els.type.childNodes.length > 0) {
+          els.type.appendChild(document.createTextNode(" — " + cardObj.typeLine));
+        } else {
+          els.type.textContent = cardObj.typeLine;
+        }
+      }
+      if (cardObj.rules) {
+        els.rules.textContent = cardObj.rules;
+      }
+    }
+
+    var imgUrl = resolveCardImage(cardName, cardObj, cardImages, "normal");
+    els.image.src = imgUrl;
+    els.image.alt = cardName;
+    els.container.classList.remove("hidden");
+  }
+
+  function hidePreview(els) {
+    if (els && els.container) {
+      els.container.classList.add("hidden");
+    }
+  }
+
+  // ── Card chip ──
+
+  function makeCardChip(cardName, cardObj, cardImages, isTapped, previewEls) {
+    var chip = document.createElement("span");
+    chip.className = "card-chip" + (isTapped ? " tapped" : "");
+
+    if (cardObj && (cardObj.power || cardObj.toughness)) {
+      chip.textContent = cardName + " ";
+      var pt = document.createElement("span");
+      pt.className = "pt";
+      pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+      chip.appendChild(pt);
+    } else {
+      chip.textContent = cardName;
+    }
+
+    chip.addEventListener("mouseenter", function () {
+      showPreview(cardName, cardObj, cardImages, previewEls);
+    });
+    chip.addEventListener("mouseleave", function () {
+      hidePreview(previewEls);
+    });
+    return chip;
+  }
+
+  // ── Card thumbnail (battlefield) ──
+
+  function makeCardThumbnail(cardName, cardObj, cardImages, isTapped, previewEls) {
+    var wrapper = document.createElement("div");
+    wrapper.className = "card-thumb" + (isTapped ? " tapped" : "");
+
+    var img = document.createElement("img");
+    img.src = resolveCardImage(cardName, cardObj, cardImages, "small");
+    img.alt = cardName;
+    img.loading = "lazy";
+    img.draggable = false;
+
+    img.addEventListener("error", function () {
+      img.style.display = "none";
+      var fallback = document.createElement("span");
+      fallback.className = "card-thumb-fallback";
+      fallback.textContent = cardName;
+      wrapper.appendChild(fallback);
+    });
+
+    wrapper.appendChild(img);
+
+    if (cardObj && (cardObj.power || cardObj.toughness)) {
+      var pt = document.createElement("span");
+      pt.className = "card-thumb-pt";
+      pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+      wrapper.appendChild(pt);
+    }
+
+    wrapper.addEventListener("mouseenter", function () {
+      showPreview(cardName, cardObj, cardImages, previewEls);
+    });
+    wrapper.addEventListener("mouseleave", function () {
+      hidePreview(previewEls);
+    });
+
+    return wrapper;
+  }
+
+  // ── Zone rendering ──
+
+  function makeZone(title, cards, opts) {
+    // opts: { cardImages, countOverride, useThumbnails, diffInfo, previewEls }
+    opts = opts || {};
+    var cardImages = opts.cardImages || {};
+    var countOverride = opts.countOverride;
+    var useThumbnails = opts.useThumbnails || false;
+    var diffInfo = opts.diffInfo || null;
+    var previewEls = opts.previewEls;
+
+    var zone = document.createElement("div");
+    zone.className = "zone";
+
+    var titleEl = document.createElement("div");
+    titleEl.className = "zone-title";
+    var count = countOverride != null ? countOverride : (cards ? cards.length : 0);
+    titleEl.textContent = title + " (" + count + ")";
+    zone.appendChild(titleEl);
+
+    var row = document.createElement("div");
+    row.className = useThumbnails ? "cards-row cards-grid" : "cards-row";
+    zone.appendChild(row);
+
+    if (!cards || cards.length === 0) {
+      if (count > 0) {
+        var hidden = document.createElement("span");
+        hidden.className = "zone-empty";
+        hidden.textContent = count + " card" + (count !== 1 ? "s" : "");
+        row.appendChild(hidden);
+      }
+      // Render ghost cards even if current list is empty
+      if (diffInfo && diffInfo.ghostCards) {
+        _renderGhosts(row, diffInfo.ghostCards, cardImages, useThumbnails, previewEls);
+      }
+      return zone;
+    }
+
+    var enteredBag = diffInfo ? diffInfo.enteredNames.slice() : [];
+    var tapChangedSet = diffInfo ? diffInfo.tapChangedNames : [];
+
+    cards.forEach(function (card) {
+      var name, obj, tapped;
+      if (typeof card === "string") {
+        name = card; obj = null; tapped = false;
+      } else {
+        name = card.name || "Unknown"; obj = card; tapped = !!card.tapped;
+      }
+      var el;
+      if (useThumbnails) {
+        el = makeCardThumbnail(name, obj, cardImages, tapped, previewEls);
+      } else {
+        el = makeCardChip(name, obj, cardImages, tapped, previewEls);
+      }
+
+      if (diffInfo) {
+        var enteredIdx = enteredBag.indexOf(name);
+        if (enteredIdx !== -1) {
+          el.classList.add("card-entered");
+          enteredBag.splice(enteredIdx, 1);
+        }
+        if (tapChangedSet.indexOf(name) !== -1) {
+          el.classList.add("card-tap-changed");
+        }
+      }
+
+      row.appendChild(el);
+    });
+
+    if (diffInfo && diffInfo.ghostCards) {
+      _renderGhosts(row, diffInfo.ghostCards, cardImages, useThumbnails, previewEls);
+    }
+
+    return zone;
+  }
+
+  function _renderGhosts(row, ghostCards, cardImages, useThumbnails, previewEls) {
+    ghostCards.forEach(function (ghost) {
+      var gName = typeof ghost === "string" ? ghost : (ghost.name || "Unknown");
+      var gObj = typeof ghost === "string" ? null : ghost;
+      var gTapped = gObj ? !!gObj.tapped : false;
+      var el;
+      if (useThumbnails) {
+        el = makeCardThumbnail(gName, gObj, cardImages, gTapped, previewEls);
+      } else {
+        el = makeCardChip(gName, gObj, cardImages, gTapped, previewEls);
+      }
+      el.classList.add("card-ghost");
+      row.appendChild(el);
+    });
+  }
+
+  // ── Player rendering ──
+
+  var PLAYER_COLORS = ["player-0", "player-1", "player-2", "player-3"];
+
+  function renderPlayers(container, players, opts) {
+    // opts: { cardImages, playerColorMap, diffs, previewEls, showTimer, showThumbnails }
+    opts = opts || {};
+    var cardImages = opts.cardImages || {};
+    var playerColorMap = opts.playerColorMap || {};
+    var diffs = opts.diffs || null;
+    var previewEls = opts.previewEls;
+    var showTimer = opts.showTimer || false;
+
+    container.innerHTML = "";
+    if (!players || players.length === 0) return;
+
+    players.forEach(function (player) {
+      var playerDiff = diffs ? diffs[player.name] : null;
+
+      var card = document.createElement("article");
+      card.className = "player-card";
+      if (player.has_left) card.classList.add("eliminated");
+      var pColorIdx = playerColorMap[player.name];
+      if (pColorIdx != null) card.classList.add(PLAYER_COLORS[pColorIdx]);
+
+      // Header
+      var header = document.createElement("div");
+      header.className = "player-header";
+
+      var nameEl = document.createElement("div");
+      nameEl.className = "player-name";
+      if (pColorIdx != null) nameEl.classList.add(PLAYER_COLORS[pColorIdx]);
+      if (player.is_active) nameEl.classList.add("active-player");
+      nameEl.textContent = player.name || "?";
+      header.appendChild(nameEl);
+
+      var lifeEl = document.createElement("div");
+      lifeEl.className = "player-life";
+      var lifeText = "Life " + (player.life != null ? player.life : "?") +
+                     " | Lib " + (player.library_count != null ? player.library_count : "?");
+      if (showTimer && (player.priorityTimeLeftSecs > 0 || player.timerActive)) {
+        var secs = player.priorityTimeLeftSecs || 0;
+        var m = Math.floor(secs / 60);
+        var s = secs % 60;
+        lifeText += " | Clock " + m + ":" + String(s).padStart(2, "0");
+      }
+      lifeEl.textContent = lifeText;
+
+      if (playerDiff && playerDiff.lifeChange !== 0) {
+        var lifeSpan = document.createElement("span");
+        lifeSpan.className = playerDiff.lifeChange > 0 ? "life-up" : "life-down";
+        lifeSpan.textContent = " (" + (playerDiff.lifeChange > 0 ? "+" : "") + playerDiff.lifeChange + ")";
+        lifeEl.appendChild(lifeSpan);
+        lifeEl.classList.add(playerDiff.lifeChange > 0 ? "life-changed-up" : "life-changed-down");
+      }
+      header.appendChild(lifeEl);
+
+      card.appendChild(header);
+
+      // Counters
+      var counters = (player.counters || []).filter(function (c) { return c && c.count > 0; });
+      if (counters.length > 0) {
+        var countersEl = document.createElement("div");
+        countersEl.className = "player-counters";
+        countersEl.textContent = counters.map(function (c) { return c.name + ": " + c.count; }).join(" | ");
+        card.appendChild(countersEl);
+      }
+
+      // Zones
+      var zoneOpts = { cardImages: cardImages, previewEls: previewEls };
+
+      var bfDiff = playerDiff ? {
+        enteredNames: (playerDiff.battlefield.entered || []).slice(),
+        tapChangedNames: playerDiff.battlefield.tapChanged || [],
+        ghostCards: playerDiff.battlefield.left || [],
+      } : null;
+
+      card.appendChild(makeZone("Commander", player.commanders, zoneOpts));
+      card.appendChild(makeZone("Battlefield", player.battlefield, {
+        cardImages: cardImages, useThumbnails: true, diffInfo: bfDiff, previewEls: previewEls,
+      }));
+
+      var handDiff = playerDiff ? {
+        enteredNames: (playerDiff.hand.entered || []).slice(),
+        tapChangedNames: [],
+        ghostCards: [],
+      } : null;
+      card.appendChild(makeZone("Hand", player.hand, {
+        cardImages: cardImages, countOverride: player.hand_count, diffInfo: handDiff, previewEls: previewEls,
+      }));
+
+      var gyDiff = playerDiff ? {
+        enteredNames: (playerDiff.graveyard.entered || []).slice(),
+        tapChangedNames: [],
+        ghostCards: [],
+      } : null;
+      card.appendChild(makeZone("Graveyard", player.graveyard, {
+        cardImages: cardImages, diffInfo: gyDiff, previewEls: previewEls,
+      }));
+
+      if (player.exile && player.exile.length > 0) {
+        var exDiff = playerDiff ? {
+          enteredNames: (playerDiff.exile.entered || []).slice(),
+          tapChangedNames: [],
+          ghostCards: [],
+        } : null;
+        card.appendChild(makeZone("Exile", player.exile, {
+          cardImages: cardImages, diffInfo: exDiff, previewEls: previewEls,
+        }));
+      }
+
+      container.appendChild(card);
+    });
+  }
+
+  // ── Stack rendering ──
+
+  function renderStack(container, cardsContainer, stack, cardImages, previewEls) {
+    if (!container) return;
+    if (stack && stack.length > 0) {
+      cardsContainer.innerHTML = "";
+      stack.forEach(function (item) {
+        var name = typeof item === "string" ? item : (item.name || "?");
+        var obj = typeof item === "string" ? null : item;
+        cardsContainer.appendChild(makeCardChip(name, obj, cardImages, false, previewEls));
+      });
+      container.classList.remove("hidden");
+    } else {
+      container.classList.add("hidden");
+    }
+  }
+
+  // ── Status line ──
+
+  function renderStatusLine(el, snap) {
+    if (!el || !snap) return;
+    var turn = snap.turn != null ? "Turn " + snap.turn : "Turn ?";
+    var phase = snap.phase || "?";
+    var step = snap.step || "?";
+    var phaseDisplay = step && step !== phase ? phase + " / " + step : phase;
+    var active = snap.active_player || "?";
+    var priority = snap.priority_player || "?";
+    el.textContent = turn + " | " + phaseDisplay + " | Active: " + active + " | Priority: " + priority;
+  }
+
+  // ── Diff computation ──
+
+  function diffStringBag(prevList, currList) {
+    var prevBag = {};
+    var currBag = {};
+    prevList.forEach(function (n) { prevBag[n] = (prevBag[n] || 0) + 1; });
+    currList.forEach(function (n) { currBag[n] = (currBag[n] || 0) + 1; });
+    var entered = [];
+    var left = [];
+    var allNames = {};
+    Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
+    Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
+    Object.keys(allNames).forEach(function (name) {
+      var diff = (currBag[name] || 0) - (prevBag[name] || 0);
+      for (var i = 0; i < Math.abs(diff); i++) {
+        if (diff > 0) entered.push(name);
+        else left.push(name);
+      }
+    });
+    return { entered: entered, left: left };
+  }
+
+  function diffBattlefield(prevCards, currCards) {
+    var prevBag = {};
+    var currBag = {};
+    var prevTapped = {};
+    var currTapped = {};
+    prevCards.forEach(function (c) {
+      var n = c.name || "Unknown";
+      prevBag[n] = (prevBag[n] || 0) + 1;
+      if (!prevTapped[n]) prevTapped[n] = [];
+      prevTapped[n].push(!!c.tapped);
+    });
+    currCards.forEach(function (c) {
+      var n = c.name || "Unknown";
+      currBag[n] = (currBag[n] || 0) + 1;
+      if (!currTapped[n]) currTapped[n] = [];
+      currTapped[n].push(!!c.tapped);
+    });
+    var entered = [];
+    var left = [];
+    var tapChanged = [];
+    var allNames = {};
+    Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
+    Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
+    Object.keys(allNames).forEach(function (name) {
+      var pc = prevBag[name] || 0;
+      var cc = currBag[name] || 0;
+      var diff = cc - pc;
+      if (diff > 0) {
+        for (var i = 0; i < diff; i++) entered.push(name);
+      } else if (diff < 0) {
+        for (var i = 0; i < -diff; i++) {
+          var cardObj = prevCards.find(function (c) { return (c.name || "Unknown") === name; });
+          left.push(cardObj || { name: name, tapped: false });
+        }
+      }
+      if (pc > 0 && cc > 0) {
+        var minCount = Math.min(pc, cc);
+        var pt = (prevTapped[name] || []).slice(0, minCount);
+        var ct = (currTapped[name] || []).slice(0, minCount);
+        for (var i = 0; i < minCount; i++) {
+          if (pt[i] !== ct[i]) {
+            tapChanged.push(name);
+            break;
+          }
+        }
+      }
+    });
+    return { entered: entered, left: left, tapChanged: tapChanged };
+  }
+
+  function computeDiff(prevSnap, currSnap) {
+    if (!prevSnap || !currSnap) return null;
+    var diffs = {};
+    var prevPlayers = {};
+    (prevSnap.players || []).forEach(function (p) { prevPlayers[p.name] = p; });
+    (currSnap.players || []).forEach(function (curr) {
+      var prev = prevPlayers[curr.name];
+      if (!prev) return;
+      var prevHandNames = (prev.hand || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      var currHandNames = (curr.hand || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      var prevGraveyardNames = (prev.graveyard || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      var currGraveyardNames = (curr.graveyard || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      var prevExileNames = (prev.exile || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      var currExileNames = (curr.exile || []).map(function (c) {
+        return typeof c === "string" ? c : (c.name || "Unknown");
+      });
+      diffs[curr.name] = {
+        lifeChange: (curr.life || 0) - (prev.life || 0),
+        handCountChange: (curr.hand_count || 0) - (prev.hand_count || 0),
+        battlefield: diffBattlefield(prev.battlefield || [], curr.battlefield || []),
+        graveyard: diffStringBag(prevGraveyardNames, currGraveyardNames),
+        exile: diffStringBag(prevExileNames, currExileNames),
+        hand: diffStringBag(prevHandNames, currHandNames),
+      };
+    });
+    return diffs;
+  }
+
+  // ── Positioned mode (OBS) ──
+
+  function collectPositionCards(state) {
+    var out = [];
+    var zoneList = ["commanders", "battlefield", "hand", "graveyard", "exile"];
+    (state.players || []).forEach(function (player) {
+      zoneList.forEach(function (zone) {
+        (player[zone] || []).forEach(function (card) {
+          if (card && card.layout) {
+            out.push({ card: card, playerId: player.id || player.name, zone: zone, layout: card.layout });
+          }
+        });
+      });
+    });
+    (state.stack || []).forEach(function (card) {
+      if (card && card.layout) {
+        out.push({ card: card, playerId: "global", zone: "stack", layout: card.layout });
+      }
+    });
+    return out;
+  }
+
+  function computeCardFontSize(width, height) {
+    if (width < 42 || height < 16) return 0;
+    return Math.max(6, Math.min(11, Math.round(width / 9.5)));
+  }
+
+  function renderPositionLayer(positionLayer, state, containerEl, previewEls) {
+    if (!positionLayer) return false;
+
+    var sourceWidth = Number(state && state.layout && state.layout.sourceWidth || 0);
+    var sourceHeight = Number(state && state.layout && state.layout.sourceHeight || 0);
+    if (sourceWidth <= 0 || sourceHeight <= 0) return false;
+
+    var entries = collectPositionCards(state);
+    if (entries.length === 0) return false;
+
+    // Enable positioned mode before measuring
+    if (containerEl) containerEl.classList.add("positioned-mode");
+    positionLayer.classList.remove("hidden");
+
+    positionLayer.innerHTML = "";
+
+    var layerRect = positionLayer.getBoundingClientRect();
+    var layerWidth = layerRect.width > 0 ? layerRect.width : (typeof window !== "undefined" ? window.innerWidth : 0);
+    var layerHeight = layerRect.height > 0 ? layerRect.height : (typeof window !== "undefined" ? window.innerHeight : 0);
+    if (layerWidth <= 0 || layerHeight <= 0) return false;
+
+    var scaleX = layerWidth / sourceWidth;
+    var scaleY = layerHeight / sourceHeight;
+
+    entries.forEach(function (entry) {
+      var layout = entry.layout || {};
+      var x = Math.round(Number(layout.x || 0) * scaleX);
+      var y = Math.round(Number(layout.y || 0) * scaleY);
+      var width = Math.max(4, Math.round(Number(layout.width || 0) * scaleX));
+      var height = Math.max(4, Math.round(Number(layout.height || 0) * scaleY));
+
+      if (width < 2 || height < 2) return;
+
+      var hotspot = document.createElement("div");
+      hotspot.className = "position-card" + (entry.card.tapped ? " tapped" : "");
+      var fontSize = computeCardFontSize(width, height);
+      if (fontSize === 0) {
+        hotspot.classList.add("small");
+      } else {
+        hotspot.style.fontSize = fontSize + "px";
+        hotspot.textContent = entry.card.name || "";
+        var linesAvailable = Math.floor((height - 4) / (fontSize * 1.15));
+        if (width < 80 && linesAvailable >= 2) {
+          hotspot.classList.add("wrap-name");
+          hotspot.style.webkitLineClamp = Math.min(linesAvailable, 3);
+        }
+      }
+
+      hotspot.style.left = x + "px";
+      hotspot.style.top = y + "px";
+      hotspot.style.width = width + "px";
+      hotspot.style.height = height + "px";
+
+      if (previewEls) {
+        hotspot.addEventListener("mouseenter", function () {
+          showPreview(entry.card.name, entry.card, {}, previewEls);
+        });
+        hotspot.addEventListener("mouseleave", function () {
+          hidePreview(previewEls);
+        });
+      }
+
+      positionLayer.appendChild(hotspot);
+    });
+
+    return true;
+  }
+
+  // ── Public API ──
+
+  var GameRenderer = {
+    // Normalisation
+    normalizeLiveState: normalizeLiveState,
+    normalizeCard: normalizeCard,
+    // Images
+    resolveCardImage: resolveCardImage,
+    renderManaCost: renderManaCost,
+    // Preview
+    showPreview: showPreview,
+    hidePreview: hidePreview,
+    // Elements
+    makeCardChip: makeCardChip,
+    makeCardThumbnail: makeCardThumbnail,
+    makeZone: makeZone,
+    // Rendering
+    renderPlayers: renderPlayers,
+    renderStack: renderStack,
+    renderStatusLine: renderStatusLine,
+    // Diffs
+    computeDiff: computeDiff,
+    diffStringBag: diffStringBag,
+    diffBattlefield: diffBattlefield,
+    // Positioned mode
+    renderPositionLayer: renderPositionLayer,
+    collectPositionCards: collectPositionCards,
+    computeCardFontSize: computeCardFontSize,
+    // Constants
+    PLAYER_COLORS: PLAYER_COLORS,
+  };
+
+  // Browser: attach to window
+  if (typeof root !== "undefined" && root !== null) {
+    root.GameRenderer = GameRenderer;
+  }
+
+  // Module: export for Vitest / Node
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = GameRenderer;
+  }
+
+})(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this);

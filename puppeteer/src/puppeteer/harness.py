@@ -817,9 +817,9 @@ def main() -> int:
             print(f"Recording to: {record_path}")
         if config.streaming and config.overlay:
             base = f"http://{config.overlay_host}:{config.overlay_port}"
-            print(f"Overlay URL: {base}/")
-            print(f"Overlay mock URL: {base}/?mock=1")
-            print(f"Video overlay URL: {base}/video_overlay.html")
+            print(f"Overlay API: {base}/api/state")
+            print(f"Live viewer: http://localhost:4321/games/live?api={base}")
+            print(f"OBS source:  http://localhost:4321/games/live?api={base}&positions=1&obs=1")
 
         # Start server
         print("Starting XMage server...")

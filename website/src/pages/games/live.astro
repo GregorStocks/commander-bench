@@ -1,0 +1,227 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+
+<Base title="Live Game" wide>
+  <link rel="stylesheet" href="/game-renderer.css" />
+  <div id="live-visualizer">
+    <div id="connection-status">Connecting to game server...</div>
+
+    <div id="game-ui" class="hidden">
+      <!-- Header -->
+      <div id="game-header" class="game-header-bar">
+        <div id="game-title">Live Game</div>
+        <div id="turn-info"></div>
+      </div>
+
+      <!-- Board: 2x2 player grid -->
+      <div id="players-grid"></div>
+
+      <!-- Stack -->
+      <div id="stack-section" class="hidden">
+        <div class="section-title">Stack</div>
+        <div id="stack-cards" class="cards-row"></div>
+      </div>
+
+      <!-- Position layer for OBS positioned mode -->
+      <div id="position-layer" class="position-layer hidden"></div>
+
+      <!-- Card preview (hover) -->
+      <div id="card-preview" class="hidden">
+        <img id="preview-image" alt="" />
+        <div class="card-meta">
+          <div id="preview-name" class="card-name"></div>
+          <div id="preview-type" class="card-type"></div>
+          <div id="preview-stats" class="card-stats"></div>
+          <pre id="preview-rules" class="card-rules"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<style>
+  #live-visualizer {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  #connection-status {
+    text-align: center;
+    padding: 4rem 0;
+    color: #a0a0b8;
+  }
+
+  #connection-status.error {
+    color: #e94560;
+  }
+
+  /* Header */
+  #game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+  }
+
+  #game-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #e94560;
+  }
+
+  #turn-info {
+    font-size: 0.85rem;
+    color: #a0a0b8;
+    text-align: right;
+  }
+</style>
+
+<script is:inline src="/game-renderer.js"></script>
+<script is:inline>
+  (function () {
+    var R = window.GameRenderer;
+    var params = new URLSearchParams(window.location.search);
+    var apiBase = params.get("api") || "http://127.0.0.1:17888";
+    var pollMs = Math.max(250, Number(params.get("pollMs") || 700));
+    var usePositioned = params.get("positions") === "1";
+    var useMock = params.get("mock") === "1";
+    var obsMode = params.get("obs") === "1";
+
+    // OBS mode: transparent background, hide nav/footer
+    if (obsMode) {
+      var nav = document.querySelector("nav");
+      if (nav) nav.style.display = "none";
+      var footer = document.querySelector("footer");
+      if (footer) footer.style.display = "none";
+      document.body.style.background = "transparent";
+      var mainEl = document.querySelector("main");
+      if (mainEl) { mainEl.style.padding = "0"; mainEl.style.margin = "0"; }
+    }
+
+    var statusEl = document.getElementById("connection-status");
+    var gameUI = document.getElementById("game-ui");
+    var turnInfoEl = document.getElementById("turn-info");
+    var gameTitleEl = document.getElementById("game-title");
+    var playersGrid = document.getElementById("players-grid");
+    var stackSection = document.getElementById("stack-section");
+    var stackCards = document.getElementById("stack-cards");
+    var positionLayer = document.getElementById("position-layer");
+    var visualizer = document.getElementById("live-visualizer");
+
+    var previewEls = {
+      container: document.getElementById("card-preview"),
+      image: document.getElementById("preview-image"),
+      name: document.getElementById("preview-name"),
+      type: document.getElementById("preview-type"),
+      stats: document.getElementById("preview-stats"),
+      rules: document.getElementById("preview-rules"),
+    };
+
+    var requestInFlight = false;
+    var playerColorMap = {};
+    var playersInitialized = false;
+    var prevState = null;
+
+    function initPlayerColors(players) {
+      if (playersInitialized) return;
+      (players || []).forEach(function (p, i) {
+        playerColorMap[p.name] = i % 4;
+      });
+      playersInitialized = true;
+    }
+
+    async function tick() {
+      if (requestInFlight) return;
+      requestInFlight = true;
+
+      try {
+        var url = useMock
+          ? apiBase + "/api/mock-state"
+          : apiBase + "/api/state";
+        var resp = await fetch(url, { cache: "no-store" });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        var raw = await resp.json();
+
+        if (raw && raw.status === "waiting") {
+          statusEl.textContent = "Waiting for game to start...";
+          statusEl.classList.remove("error");
+          return;
+        }
+
+        var state = R.normalizeLiveState(raw);
+
+        // First successful state: show UI
+        if (statusEl && !statusEl.classList.contains("hidden")) {
+          statusEl.classList.add("hidden");
+          gameUI.classList.remove("hidden");
+        }
+
+        initPlayerColors(state.players);
+
+        // Compute diff against previous state for animations
+        var diffs = prevState ? R.computeDiff(prevState, state) : null;
+        prevState = state;
+
+        // Status line
+        R.renderStatusLine(turnInfoEl, state);
+
+        // Positioned mode (OBS)
+        if (usePositioned) {
+          var rendered = R.renderPositionLayer(positionLayer, state, visualizer, previewEls);
+          if (rendered) {
+            playersGrid.classList.add("hidden");
+          } else {
+            playersGrid.classList.remove("hidden");
+            positionLayer.classList.add("hidden");
+            if (visualizer) visualizer.classList.remove("positioned-mode");
+            R.renderPlayers(playersGrid, state.players, {
+              cardImages: {},
+              playerColorMap: playerColorMap,
+              diffs: diffs,
+              previewEls: previewEls,
+              showTimer: true,
+            });
+          }
+        } else {
+          R.renderPlayers(playersGrid, state.players, {
+            cardImages: {},
+            playerColorMap: playerColorMap,
+            diffs: diffs,
+            previewEls: previewEls,
+            showTimer: true,
+          });
+        }
+
+        // Stack
+        R.renderStack(stackSection, stackCards, state.stack, {}, previewEls);
+
+      } catch (err) {
+        if (gameUI.classList.contains("hidden")) {
+          statusEl.textContent = "Cannot reach game server at " + apiBase + " — retrying...";
+          statusEl.classList.add("error");
+        }
+      } finally {
+        requestInFlight = false;
+      }
+    }
+
+    // Preview dismiss
+    window.addEventListener("blur", function () { R.hidePreview(previewEls); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") R.hidePreview(previewEls);
+    });
+
+    // Rerender on resize for positioned mode
+    if (usePositioned) {
+      window.addEventListener("resize", function () { tick(); });
+    }
+
+    tick();
+    window.setInterval(tick, pollMs);
+  })();
+</script>
