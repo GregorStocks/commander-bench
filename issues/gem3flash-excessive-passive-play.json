@@ -1,0 +1,10 @@
+{
+  "title": "Gemini 1.5 Flash (Gem3Flash) excessive passive play — 30+ consecutive passes with playable cards",
+  "description": "Gem3Flash frequently passes priority 30+ times in a row despite having playable cards in hand and mana available. While it did manage some attacks (5 total, the only model to attack), it was extremely passive about casting spells.\n\nEvidence from game_20260209_184021: Long stretches of consecutive passes with playable options available. The model appeared to cast very few spells overall despite having opportunities.\n\nMay be a model capability issue rather than a tooling bug, but worth investigating whether the prompt could be improved to encourage more active play.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["pilot"],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}

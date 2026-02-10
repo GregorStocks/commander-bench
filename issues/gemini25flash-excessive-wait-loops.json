@@ -1,0 +1,10 @@
+{
+  "title": "Gemini 2.5 Flash excessive wait_for_action loops when not its turn",
+  "description": "Gemini 2.5 Flash calls wait_for_action in rapid succession when it's not the active player, creating long loops of polling calls. This burns through context and API tokens without accomplishing anything.\n\nEvidence from game_20260209_184021: Extended sequences of wait_for_action calls from Gemini 2.5 Flash during other players' turns.\n\nPossible fixes:\n- Add backoff/delay guidance in the system prompt\n- Implement server-side rate limiting on wait_for_action\n- Have the MCP layer batch wait results to reduce round-trips",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "pilot"],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Mana-in-pool prompt traps LLMs in 20+ iteration loops",
+  "description": "When a player has unspent mana in their pool, XMage sends repeated GAME_ASK prompts asking if they want to use it. LLMs don't understand how to dismiss this and get trapped in loops of 20+ iterations trying to pass priority or take other actions while the mana prompt keeps reappearing.\n\nEvidence from game_20260209_184021: Multiple players hit this, especially after tapping lands without successfully casting a spell. The loop burns through context and wastes turns.\n\nPossible fixes:\n- Auto-answer 'no' to mana-in-pool prompts in the MCP layer after a configurable number of asks\n- Detect the mana-in-pool pattern and provide clearer guidance to the LLM\n- Add a special case in passPriority() or handleCallback() to auto-dismiss",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-09T00:00:00.000000-08:00",
+  "updated_at": "2026-02-09T00:00:00.000000-08:00"
+}
