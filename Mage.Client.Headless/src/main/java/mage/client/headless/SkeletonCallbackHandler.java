@@ -98,6 +98,7 @@ public class SkeletonCallbackHandler {
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
+    private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -1501,6 +1502,18 @@ public class SkeletonCallbackHandler {
     }
 
     /**
+     * Drain unseen chat messages and attach to result map (if any).
+     */
+    private void attachUnseenChat(Map<String, Object> result) {
+        synchronized (unseenChat) {
+            if (!unseenChat.isEmpty()) {
+                result.put("recent_chat", new ArrayList<>(unseenChat));
+                unseenChat.clear();
+            }
+        }
+    }
+
+    /**
      * Auto-pass empty GAME_SELECT priorities (no playable cards) and return
      * when a meaningful decision is needed: playable cards available, or
      * any non-GAME_SELECT action (mulligan, target, blocker, etc.).
@@ -1536,6 +1549,7 @@ public class SkeletonCallbackHandler {
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
+                    attachUnseenChat(result);
                     return result;
                 }
 
@@ -1561,6 +1575,7 @@ public class SkeletonCallbackHandler {
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
                     result.put("combat_phase", combatType);
+                    attachUnseenChat(result);
                     return result;
                 }
 
@@ -1590,6 +1605,7 @@ public class SkeletonCallbackHandler {
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
                     result.put("has_playable_cards", true);
+                    attachUnseenChat(result);
                     return result;
                 }
 
@@ -1621,6 +1637,7 @@ public class SkeletonCallbackHandler {
         result.put("action_pending", false);
         result.put("actions_passed", actionsPassed);
         result.put("timeout", true);
+        attachUnseenChat(result);
         return result;
     }
 
@@ -2481,6 +2498,16 @@ public class SkeletonCallbackHandler {
                 String msg = chatMsg.getMessage();
                 if (user != null && msg != null && !msg.isEmpty()) {
                     logEntry = "[Chat] " + user + ": " + msg;
+                    // Buffer chat from other players so pass_priority can surface it
+                    if (!user.equals(client.getUsername())) {
+                        synchronized (unseenChat) {
+                            unseenChat.add(user + ": " + msg);
+                            // Cap at 20 to bound memory
+                            if (unseenChat.size() > 20) {
+                                unseenChat.remove(0);
+                            }
+                        }
+                    }
                 }
             }
             if (logEntry != null && !logEntry.isEmpty()) {
