@@ -130,12 +130,15 @@ def test_print_game_summary_synthetic_game_over(capsys):
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
         events_file.write_text(
-            json.dumps({
-                "ts": "2024-01-01T00:05:00",
-                "type": "game_over",
-                "message": "Game ended (no GAME_OVER received)",
-                "reason": "timeout_or_killed",
-            }) + "\n"
+            json.dumps(
+                {
+                    "ts": "2024-01-01T00:05:00",
+                    "type": "game_over",
+                    "message": "Game ended (no GAME_OVER received)",
+                    "reason": "timeout_or_killed",
+                }
+            )
+            + "\n"
         )
 
         _print_game_summary(game_dir)
