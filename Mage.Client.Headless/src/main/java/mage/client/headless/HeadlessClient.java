@@ -113,6 +113,10 @@ public class HeadlessClient {
         if (skeletonLogPath != null && !skeletonLogPath.isEmpty()) {
             callbackHandler.setSkeletonLogPath(skeletonLogPath);
         }
+        Integer maxInteractions = Integer.getInteger("xmage.headless.maxInteractionsPerTurn");
+        if (maxInteractions != null) {
+            callbackHandler.setMaxInteractionsPerTurn(maxInteractions);
+        }
 
         Connection connection = new Connection();
         connection.setHost(server);

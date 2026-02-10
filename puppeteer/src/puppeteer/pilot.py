@@ -533,6 +533,7 @@ async def run_pilot(
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
+    max_interactions_per_turn: int | None = None,
 ) -> None:
     """Run the pilot client."""
     _log(f"[pilot] Starting for {username}@{server}:{port}")
@@ -571,6 +572,8 @@ async def run_pilot(
     if game_dir:
         mvn_args.append(f"-Dxmage.headless.errorlog={game_dir / f'{username}_errors.log'}")
         mvn_args.append(f"-Dxmage.headless.skeletonlog={game_dir / f'{username}_skeleton.jsonl'}")
+    if max_interactions_per_turn is not None:
+        mvn_args.append(f"-Dxmage.headless.maxInteractionsPerTurn={max_interactions_per_turn}")
     mvn_args.append("exec:java")
 
     server_params = StdioServerParameters(
@@ -636,6 +639,7 @@ def main() -> int:
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help=f"API base URL (default: {DEFAULT_BASE_URL})")
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="Custom system prompt")
     parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
+    parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
     args = parser.parse_args()
 
     # Determine project root
@@ -673,6 +677,7 @@ def main() -> int:
                 system_prompt=args.system_prompt,
                 game_dir=args.game_dir,
                 prices=prices,
+                max_interactions_per_turn=args.max_interactions_per_turn,
             )
         )
     except KeyboardInterrupt:
