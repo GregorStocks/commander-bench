@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 WEBSITE_GAMES_DIR = Path(__file__).resolve().parent.parent / "website" / "public" / "games"
-LOGS_DIR = Path.home() / "commander-bench-logs"
+LOGS_DIR = Path.home() / "mage-bench-logs"
 
 FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
 OBJECT_ID_RE = re.compile(r"\s*\[[0-9a-f]{3,}\]")

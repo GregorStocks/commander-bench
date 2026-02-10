@@ -86,7 +86,7 @@ class Config:
     password: str = ""
     server_wait: int = 90
     skeleton_delay: int = 5
-    log_dir: Path = field(default_factory=lambda: Path.home() / "commander-bench-logs")
+    log_dir: Path = field(default_factory=lambda: Path.home() / "mage-bench-logs")
     jvm_opens: str = "--add-opens=java.base/java.io=ALL-UNNAMED"
     # Enable XRender pipeline for Java 2D — GPU-accelerated rendering on Linux
     jvm_rendering: str = "-Dsun.java2d.xrender=true"

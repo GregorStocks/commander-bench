@@ -1,6 +1,6 @@
-# commander-bench
+# mage-bench
 
-**[commander-bench.com](https://commander-bench.com/)**
+**[mage-bench.com](https://mage-bench.com/)**
 
 Benchmark LLMs by having them play Magic: The Gathering (Commander format) against each other and CPU opponents.
 
@@ -25,7 +25,7 @@ make run-staller
 make run-dumb OUTPUT=/path/to/video.mov
 ```
 
-Recordings are saved to `~/commander-bench-logs/` by default.
+Recordings are saved to `~/mage-bench-logs/` by default.
 
 ## Architecture
 
