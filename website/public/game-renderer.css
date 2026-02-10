@@ -25,11 +25,27 @@
   opacity: 0.5;
 }
 
-/* Player accent colors */
-.player-card.player-0 { border-left: 3px solid #3b82f6; }
-.player-card.player-1 { border-left: 3px solid #ef4444; }
-.player-card.player-2 { border-left: 3px solid #22c55e; }
-.player-card.player-3 { border-left: 3px solid #f59e0b; }
+/* Player accent colors with tinted backgrounds */
+.player-card.player-0 {
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-left: 3px solid #3b82f6;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), #16213e 40%);
+}
+.player-card.player-1 {
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-left: 3px solid #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), #16213e 40%);
+}
+.player-card.player-2 {
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-left: 3px solid #22c55e;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), #16213e 40%);
+}
+.player-card.player-3 {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 3px solid #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), #16213e 40%);
+}
 .player-name.player-0 { color: #3b82f6; }
 .player-name.player-1 { color: #ef4444; }
 .player-name.player-2 { color: #22c55e; }

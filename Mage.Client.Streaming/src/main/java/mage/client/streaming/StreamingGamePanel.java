@@ -124,6 +124,22 @@ public class StreamingGamePanel extends GamePanel {
     private static final int OVERLAY_PUSH_INTERVAL_MS = 200;
     private long lastOverlayPushMs = 0L;
 
+    // Player color styling (matches website PLAYER_COLOR_HEX in game-renderer.js)
+    private static final Color[] PLAYER_ACCENT_COLORS = {
+        new Color(0x3b, 0x82, 0xf6),  // Player 0: blue
+        new Color(0xef, 0x44, 0x44),  // Player 1: red
+        new Color(0x22, 0xc5, 0x5e),  // Player 2: green
+        new Color(0xf5, 0x9e, 0x0b),  // Player 3: orange
+    };
+    private static final Color[] PLAYER_BG_COLORS = {
+        new Color(0x0c, 0x18, 0x38),  // Player 0: dark blue tint
+        new Color(0x28, 0x0c, 0x0c),  // Player 1: dark red tint
+        new Color(0x0c, 0x24, 0x14),  // Player 2: dark green tint
+        new Color(0x28, 0x1e, 0x06),  // Player 3: dark orange tint
+    };
+    private final Map<UUID, Integer> playerColorIndices = new LinkedHashMap<>();
+    private boolean playerPanelsStyled = false;
+
     // Game event JSONL logging
     private PrintWriter gameEventWriter;
     private int gameEventSeq = 0;
@@ -198,6 +214,15 @@ public class StreamingGamePanel extends GamePanel {
         requestHandPermissions(game);
         initCostPolling();
         initGameEventLog();
+        // Build player color index map and apply per-player styling
+        if (playerColorIndices.isEmpty() && game.getPlayers() != null) {
+            int idx = 0;
+            for (PlayerView player : game.getPlayers()) {
+                playerColorIndices.put(player.getPlayerId(), idx % PLAYER_ACCENT_COLORS.length);
+                idx++;
+            }
+        }
+        stylePlayerPanels();
         // Schedule auto-dismissal of any popup dialogs created during init
         schedulePopupDismissal();
         pushOverlayState(game, true);
@@ -331,6 +356,40 @@ public class StreamingGamePanel extends GamePanel {
             parent.validate();
             parent.repaint();
         }
+    }
+
+    /**
+     * Apply per-player background colors and accent borders to PlayAreaPanels.
+     * Each player gets a distinct dark-tinted background and a colored left border
+     * matching the website accent colors.
+     */
+    private void stylePlayerPanels() {
+        if (playerPanelsStyled || playerColorIndices.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (Map.Entry<UUID, Integer> entry : playerColorIndices.entrySet()) {
+            UUID playerId = entry.getKey();
+            int colorIdx = entry.getValue();
+            PlayAreaPanel playArea = players.get(playerId);
+            if (playArea == null) {
+                continue;
+            }
+
+            Color accent = PLAYER_ACCENT_COLORS[colorIdx];
+            Color bgTint = PLAYER_BG_COLORS[colorIdx];
+
+            playArea.setOpaque(true);
+            playArea.setBackground(bgTint);
+            playArea.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.WHITE, 2),
+                BorderFactory.createEmptyBorder(2, 2, 2, 2)
+            ));
+        }
+
+        playerPanelsStyled = true;
     }
 
     /**
