@@ -662,6 +662,177 @@
     return true;
   }
 
+  // ── Life total graph ──
+
+  var PLAYER_COLOR_HEX = ["#3b82f6", "#ef4444", "#22c55e", "#f59e0b"];
+
+  function extractLifeData(snapshots) {
+    if (!snapshots || snapshots.length === 0) return { series: [], snapshotCount: 0 };
+
+    var playerNames = [];
+    (snapshots[0].players || []).forEach(function (p) {
+      playerNames.push(p.name);
+    });
+
+    var series = playerNames.map(function (name) {
+      return {
+        name: name,
+        points: snapshots.map(function (snap) {
+          var player = null;
+          (snap.players || []).forEach(function (p) {
+            if (p.name === name) player = p;
+          });
+          return {
+            life: player ? (player.life != null ? player.life : 0) : 0,
+            hasLeft: player ? !!player.has_left : true,
+          };
+        }),
+      };
+    });
+
+    return { series: series, snapshotCount: snapshots.length };
+  }
+
+  function _lifeGraphMapX(index, snapshotCount, width) {
+    if (snapshotCount <= 1) return width / 2;
+    return (index / (snapshotCount - 1)) * width;
+  }
+
+  function _lifeGraphMapY(life, minLife, maxLife, height) {
+    if (maxLife === minLife) return height / 2;
+    return height - ((life - minLife) / (maxLife - minLife)) * height;
+  }
+
+  function renderLifeGraph(canvas, lifeData, playerColorMap, opts) {
+    opts = opts || {};
+    var ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    var dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+    var cssWidth = canvas.parentElement ? canvas.parentElement.clientWidth : canvas.clientWidth || 300;
+    var cssHeight = canvas.offsetHeight || 80;
+    canvas.width = Math.round(cssWidth * dpr);
+    canvas.height = Math.round(cssHeight * dpr);
+    ctx.scale(dpr, dpr);
+
+    var w = cssWidth;
+    var h = cssHeight;
+    var series = lifeData.series || [];
+    var count = lifeData.snapshotCount || 0;
+
+    // Compute Y range
+    var minLife = Infinity;
+    var maxLife = -Infinity;
+    series.forEach(function (s) {
+      s.points.forEach(function (p) {
+        if (p.life < minLife) minLife = p.life;
+        if (p.life > maxLife) maxLife = p.life;
+      });
+    });
+    if (!isFinite(minLife)) { minLife = 0; maxLife = 40; }
+    var range = maxLife - minLife;
+    var pad = Math.max(2, Math.round(range * 0.08));
+    minLife = minLife - pad;
+    maxLife = maxLife + pad;
+
+    // Clear
+    ctx.clearRect(0, 0, w, h);
+
+    // Gridlines at life = 0, 20, 40, ...
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    for (var gv = 0; gv <= maxLife + 20; gv += 20) {
+      if (gv >= minLife && gv <= maxLife) {
+        var gy = _lifeGraphMapY(gv, minLife, maxLife, h);
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(w, gy);
+        ctx.stroke();
+      }
+    }
+
+    // Draw player lines
+    series.forEach(function (s) {
+      var colorIdx = playerColorMap[s.name];
+      var color = PLAYER_COLOR_HEX[colorIdx != null ? colorIdx % 4 : 0];
+
+      if (count < 2) return;
+
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = "round";
+
+      var i = 0;
+      while (i < count) {
+        var runStart = i;
+        var isLeft = s.points[i].hasLeft;
+        while (i < count && s.points[i].hasLeft === isLeft) i++;
+
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = isLeft ? 0.3 : 1.0;
+        ctx.beginPath();
+        var startIdx = runStart > 0 ? runStart - 1 : runStart;
+        ctx.moveTo(_lifeGraphMapX(startIdx, count, w), _lifeGraphMapY(s.points[startIdx].life, minLife, maxLife, h));
+        for (var j = runStart; j < i; j++) {
+          ctx.lineTo(_lifeGraphMapX(j, count, w), _lifeGraphMapY(s.points[j].life, minLife, maxLife, h));
+        }
+        ctx.stroke();
+      }
+
+      ctx.globalAlpha = 1.0;
+    });
+
+    // Cache the base image
+    canvas._lifeGraphBase = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    canvas._lifeGraphCssSize = { w: w, h: h };
+    canvas._lifeGraphRange = { minLife: minLife, maxLife: maxLife };
+
+    // Draw initial marker
+    if (opts.markerIndex != null) {
+      _drawLifeMarker(ctx, lifeData, playerColorMap, opts.markerIndex, w, h, minLife, maxLife);
+    }
+  }
+
+  function _drawLifeMarker(ctx, lifeData, playerColorMap, markerIndex, w, h, minLife, maxLife) {
+    var count = lifeData.snapshotCount || 0;
+    if (count === 0) return;
+    var x = _lifeGraphMapX(markerIndex, count, w);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+
+    (lifeData.series || []).forEach(function (s) {
+      var pt = s.points[markerIndex];
+      if (!pt) return;
+      var colorIdx = playerColorMap[s.name];
+      var color = PLAYER_COLOR_HEX[colorIdx != null ? colorIdx % 4 : 0];
+      var y = _lifeGraphMapY(pt.life, minLife, maxLife, h);
+
+      ctx.fillStyle = color;
+      ctx.globalAlpha = pt.hasLeft ? 0.3 : 1.0;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+  }
+
+  function updateLifeGraphMarker(canvas, lifeData, playerColorMap, markerIndex) {
+    var ctx = canvas.getContext("2d");
+    if (!ctx || !canvas._lifeGraphBase) return;
+
+    var dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+    ctx.putImageData(canvas._lifeGraphBase, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    var size = canvas._lifeGraphCssSize || { w: 300, h: 80 };
+    var r = canvas._lifeGraphRange || { minLife: 0, maxLife: 40 };
+    _drawLifeMarker(ctx, lifeData, playerColorMap, markerIndex, size.w, size.h, r.minLife, r.maxLife);
+  }
+
   // ── Public API ──
 
   var GameRenderer = {
@@ -690,8 +861,13 @@
     renderPositionLayer: renderPositionLayer,
     collectPositionCards: collectPositionCards,
     computeCardFontSize: computeCardFontSize,
+    // Life graph
+    extractLifeData: extractLifeData,
+    renderLifeGraph: renderLifeGraph,
+    updateLifeGraphMarker: updateLifeGraphMarker,
     // Constants
     PLAYER_COLORS: PLAYER_COLORS,
+    PLAYER_COLOR_HEX: PLAYER_COLOR_HEX,
   };
 
   // Browser: attach to window

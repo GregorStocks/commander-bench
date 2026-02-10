@@ -518,3 +518,105 @@ describe("normalizeCard", () => {
     expect(card.mana_cost).toBe("{R}");
   });
 });
+
+// ── extractLifeData ──────────────────────────────────────────
+
+describe("extractLifeData", () => {
+  it("extracts life series from snapshots", () => {
+    const snapshots = [
+      { turn: 1, players: [
+        { name: "Alice", life: 40, has_left: false },
+        { name: "Bob", life: 40, has_left: false },
+      ]},
+      { turn: 1, players: [
+        { name: "Alice", life: 37, has_left: false },
+        { name: "Bob", life: 40, has_left: false },
+      ]},
+      { turn: 2, players: [
+        { name: "Alice", life: 37, has_left: false },
+        { name: "Bob", life: 35, has_left: false },
+      ]},
+    ];
+    const result = R.extractLifeData(snapshots);
+    expect(result.snapshotCount).toBe(3);
+    expect(result.series.length).toBe(2);
+    expect(result.series[0].name).toBe("Alice");
+    expect(result.series[0].points).toEqual([
+      { life: 40, hasLeft: false },
+      { life: 37, hasLeft: false },
+      { life: 37, hasLeft: false },
+    ]);
+    expect(result.series[1].name).toBe("Bob");
+    expect(result.series[1].points[2]).toEqual({ life: 35, hasLeft: false });
+  });
+
+  it("handles eliminated players", () => {
+    const snapshots = [
+      { turn: 1, players: [{ name: "A", life: 20, has_left: false }] },
+      { turn: 2, players: [{ name: "A", life: 0, has_left: true }] },
+    ];
+    const result = R.extractLifeData(snapshots);
+    expect(result.series[0].points[1]).toEqual({ life: 0, hasLeft: true });
+  });
+
+  it("returns empty for no snapshots", () => {
+    expect(R.extractLifeData([])).toEqual({ series: [], snapshotCount: 0 });
+    expect(R.extractLifeData(null)).toEqual({ series: [], snapshotCount: 0 });
+  });
+
+  it("handles player missing from a snapshot", () => {
+    const snapshots = [
+      { turn: 1, players: [
+        { name: "A", life: 20, has_left: false },
+        { name: "B", life: 20, has_left: false },
+      ]},
+      { turn: 2, players: [
+        { name: "A", life: 18, has_left: false },
+      ]},
+    ];
+    const result = R.extractLifeData(snapshots);
+    expect(result.series[1].points[1]).toEqual({ life: 0, hasLeft: true });
+  });
+
+  it("handles four players (Commander game)", () => {
+    const snapshots = [
+      { turn: 1, players: [
+        { name: "P1", life: 40, has_left: false },
+        { name: "P2", life: 40, has_left: false },
+        { name: "P3", life: 40, has_left: false },
+        { name: "P4", life: 40, has_left: false },
+      ]},
+    ];
+    const result = R.extractLifeData(snapshots);
+    expect(result.series.length).toBe(4);
+    result.series.forEach((s) => {
+      expect(s.points[0].life).toBe(40);
+    });
+  });
+
+  it("handles null life values", () => {
+    const snapshots = [
+      { turn: 1, players: [{ name: "A", life: null, has_left: false }] },
+    ];
+    const result = R.extractLifeData(snapshots);
+    expect(result.series[0].points[0].life).toBe(0);
+  });
+});
+
+// ── renderLifeGraph / updateLifeGraphMarker ──────────────────
+
+describe("renderLifeGraph", () => {
+  it("does not throw when canvas has no 2d context (happy-dom)", () => {
+    const canvas = document.createElement("canvas");
+    const lifeData = { series: [], snapshotCount: 0 };
+    expect(() => R.renderLifeGraph(canvas, lifeData, {}, {})).not.toThrow();
+  });
+});
+
+describe("updateLifeGraphMarker", () => {
+  it("does not throw when canvas has no 2d context", () => {
+    const canvas = document.createElement("canvas");
+    const lifeData = { series: [], snapshotCount: 0 };
+    expect(() => R.updateLifeGraphMarker(canvas, lifeData, {}, 0)).not.toThrow();
+  });
+});

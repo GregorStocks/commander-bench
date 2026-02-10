@@ -47,6 +47,11 @@ const { slug } = Astro.params;
         <div id="snapshot-counter"></div>
       </div>
 
+      <!-- Life total graph -->
+      <div id="life-graph" class="hidden">
+        <canvas id="life-canvas"></canvas>
+      </div>
+
       <!-- Board: 2x2 player grid -->
       <div id="players-grid"></div>
 
@@ -204,6 +209,28 @@ const { slug } = Astro.params;
     text-align: right;
   }
 
+  /* Life graph */
+  #life-graph {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 1rem;
+    cursor: crosshair;
+  }
+
+  #life-canvas {
+    display: block;
+    width: 100%;
+    height: 80px;
+  }
+
+  @media (max-width: 600px) {
+    #life-canvas {
+      height: 60px;
+    }
+  }
+
   /* Action log */
   #action-log {
     padding: 0.75rem 1rem;
@@ -278,11 +305,16 @@ const { slug } = Astro.params;
       rules: document.getElementById("preview-rules"),
     };
 
+    // Life graph
+    var lifeGraphEl = document.getElementById("life-graph");
+    var lifeCanvas = document.getElementById("life-canvas");
+
     var game = null;
     var currentIndex = 0;
     var autoPlayInterval = null;
     var playerColorMap = {};
     var turnStartIndices = [];
+    var lifeData = null;
 
     function showError(msg) {
       loadingEl.classList.add("hidden");
@@ -369,6 +401,11 @@ const { slug } = Astro.params;
             break;
           }
         }
+      }
+
+      // Update life graph marker
+      if (lifeData) {
+        R.updateLifeGraphMarker(lifeCanvas, lifeData, playerColorMap, index);
       }
     }
 
@@ -474,6 +511,25 @@ const { slug } = Astro.params;
           if (e.key === "Escape") { R.hidePreview(previewEls); }
           if (e.key === "[") { e.preventDefault(); btnPrevTurn.click(); }
           if (e.key === "]") { e.preventDefault(); btnNextTurn.click(); }
+        });
+
+        // Life graph
+        lifeData = R.extractLifeData(game.snapshots);
+        lifeGraphEl.classList.remove("hidden");
+        R.renderLifeGraph(lifeCanvas, lifeData, playerColorMap, { markerIndex: 0 });
+
+        lifeCanvas.addEventListener("click", function (e) {
+          var rect = lifeCanvas.getBoundingClientRect();
+          var x = e.clientX - rect.left;
+          var ratio = x / rect.width;
+          var targetIndex = Math.round(ratio * (game.snapshots.length - 1));
+          goTo(targetIndex);
+        });
+
+        window.addEventListener("resize", function () {
+          if (lifeData) {
+            R.renderLifeGraph(lifeCanvas, lifeData, playerColorMap, { markerIndex: currentIndex });
+          }
         });
 
         // Render first snapshot
