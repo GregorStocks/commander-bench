@@ -517,7 +517,11 @@ async def run_pilot_loop(
                     pass
 
                 trim_target = 160
-                _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~{trim_target + 2} messages")
+                _log_error(
+                    game_dir,
+                    username,
+                    f"[pilot] Trimming context: {len(messages)} -> ~{trim_target + 2} messages",
+                )
                 if game_log:
                     game_log.emit("context_trim", messages_before=len(messages), messages_after=trim_target + 2)
                 messages = [
