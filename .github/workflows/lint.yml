@@ -13,3 +13,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - run: make lint
+
+      - run: make format-check
+
+      - run: make typecheck

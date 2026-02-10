@@ -22,13 +22,13 @@ from puppeteer.llm_cost import (
     write_cost_file,
 )
 
-
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
-MAX_AUTO_PASS_ITERATIONS = 500   # ~80+ min at 10s/iteration
-MAX_CONSECUTIVE_ERRORS = 20      # 20 * 5s = ~100s of continuous failure
+MAX_AUTO_PASS_ITERATIONS = 500  # ~80+ min at 10s/iteration
+MAX_CONSECUTIVE_ERRORS = 20  # 20 * 5s = ~100s of continuous failure
+
 
 def _log(msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S")
@@ -278,12 +278,14 @@ async def run_pilot_loop(
 
                     # Log tool call to JSONL
                     if game_log:
-                        game_log.emit("tool_call",
-                                      call_id=tool_call.id,
-                                      tool=fn.name,
-                                      arguments=args,
-                                      result=result_text[:2000],
-                                      latency_ms=tool_latency_ms)
+                        game_log.emit(
+                            "tool_call",
+                            call_id=tool_call.id,
+                            tool=fn.name,
+                            arguments=args,
+                            result=result_text[:2000],
+                            latency_ms=tool_latency_ms,
+                        )
 
                     # Log interesting results and track for stall detection
                     turn_tools_called.add(fn.name)
@@ -296,7 +298,11 @@ async def run_pilot_loop(
                             turn_had_successful_action = True
                             turns_without_progress = 0
                         else:
-                            _log_error(game_dir, username, f"[pilot] Action failed: {result_data.get('error', '')}")
+                            _log_error(
+                                game_dir,
+                                username,
+                                f"[pilot] Action failed: {result_data.get('error', '')}",
+                            )
                             turn_had_actionable_opportunity = True
                     elif fn.name == "get_action_choices":
                         result_data = json.loads(result_text)
@@ -326,16 +332,20 @@ async def run_pilot_loop(
                                 await execute_tool(session, "choose_action", auto_args)
                                 _log(f"[pilot] Auto-passed: {result_data.get('action_type')}")
                                 # Replace the tool result with an indication to keep waiting
-                                result_text = json.dumps({
-                                    "action_pending": False,
-                                    "auto_passed": result_data.get("action_type"),
-                                })
+                                result_text = json.dumps(
+                                    {
+                                        "action_pending": False,
+                                        "auto_passed": result_data.get("action_type"),
+                                    }
+                                )
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result_text,
-                    })
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": result_text,
+                        }
+                    )
 
                 # Stall counter: only count turns where LLM had a real chance to act
                 if not turn_had_successful_action:
@@ -353,19 +363,31 @@ async def run_pilot_loop(
                     last_was_empty = False
                 elif not last_was_empty:
                     # First empty response: retry immediately without counting
-                    _log(f"[pilot] Empty response from LLM, retrying...")
+                    _log("[pilot] Empty response from LLM, retrying...")
                     last_was_empty = True
                     continue
                 else:
                     last_was_empty = False
                     empty_responses += 1
-                    _log_error(game_dir, username, f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]")
+                    _log_error(
+                        game_dir,
+                        username,
+                        f"[pilot] Empty response from LLM (no tools, no text) [{empty_responses}]",
+                    )
                     if empty_responses >= 10:
-                        _log_error(game_dir, username, "[pilot] LLM appears degraded (no tools or text), switching to auto-pass mode")
+                        _log_error(
+                            game_dir,
+                            username,
+                            "[pilot] LLM appears degraded (no tools or text), switching to auto-pass mode",
+                        )
                         if game_log:
                             game_log.emit("auto_pilot_mode", reason="LLM degraded (10+ empty responses)")
                         try:
-                            await execute_tool(session, "send_chat_message", {"message": "My brain is fried... going on autopilot for the rest of this game. GG!"})
+                            await execute_tool(
+                                session,
+                                "send_chat_message",
+                                {"message": "My brain is fried... going on autopilot for the rest of this game. GG!"},
+                            )
                         except Exception:
                             pass
                         consecutive_errors = 0
@@ -381,9 +403,17 @@ async def run_pilot_loop(
                                     return
                                 if "error" in result_data:
                                     consecutive_errors += 1
-                                    _log_error(game_dir, username, f"[pilot] Auto-pass error: {result_data['error']}")
+                                    _log_error(
+                                        game_dir,
+                                        username,
+                                        f"[pilot] Auto-pass error: {result_data['error']}",
+                                    )
                                     if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                        _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                        _log_error(
+                                            game_dir,
+                                            username,
+                                            "[pilot] Too many consecutive errors, exiting",
+                                        )
                                         return
                                     await asyncio.sleep(5)
                                 else:
@@ -392,28 +422,48 @@ async def run_pilot_loop(
                                 consecutive_errors += 1
                                 _log_error(game_dir, username, f"[pilot] Auto-pass exception: {pass_err}")
                                 if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                    _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                    _log_error(
+                                        game_dir,
+                                        username,
+                                        "[pilot] Too many consecutive errors, exiting",
+                                    )
                                     return
                                 await asyncio.sleep(5)
-                        _log_error(game_dir, username, "[pilot] Auto-pass loop reached max iterations, exiting")
+                        _log_error(
+                            game_dir,
+                            username,
+                            "[pilot] Auto-pass loop reached max iterations, exiting",
+                        )
                         return
-                messages.append({
-                    "role": "user",
-                    "content": "Continue playing. Call pass_priority.",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Continue playing. Call pass_priority.",
+                    }
+                )
 
             # If the LLM is spinning without advancing game state, auto-pass
             # until something interesting happens (new turn, new cards, etc.)
             if turns_without_progress >= MAX_TURNS_WITHOUT_PROGRESS:
                 last_tools = sorted(turn_tools_called) if choice.message.tool_calls and turn_tools_called else []
-                _log_error(game_dir, username,
+                _log_error(
+                    game_dir,
+                    username,
                     f"[pilot] Stalled: {turns_without_progress} turns without progress, "
-                    f"last tools: {last_tools or 'none'}, auto-passing until next event")
+                    f"last tools: {last_tools or 'none'}, auto-passing until next event",
+                )
                 if game_log:
-                    game_log.emit("stall", turns_without_progress=turns_without_progress,
-                                  last_tools=last_tools)
+                    game_log.emit(
+                        "stall",
+                        turns_without_progress=turns_without_progress,
+                        last_tools=last_tools,
+                    )
                 try:
-                    await execute_tool(session, "send_chat_message", {"message": "Brain freeze! Auto-passing until next turn..."})
+                    await execute_tool(
+                        session,
+                        "send_chat_message",
+                        {"message": "Brain freeze! Auto-passing until next turn..."},
+                    )
                 except Exception:
                     pass
                 try:
@@ -427,7 +477,10 @@ async def run_pilot_loop(
                 # Reset conversation so the LLM gets a fresh start
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "A new turn has started. Call pass_priority to continue."},
+                    {
+                        "role": "user",
+                        "content": "A new turn has started. Call pass_priority to continue.",
+                    },
                 ]
                 continue
 
@@ -438,17 +491,33 @@ async def run_pilot_loop(
                 _log_error(game_dir, username, f"[pilot] Trimming context: {len(messages)} -> ~82 messages")
                 if game_log:
                     game_log.emit("context_trim", messages_before=len(messages), messages_after=82)
-                messages = (
-                    [messages[0]]
-                    + [{"role": "user", "content": "Continue playing. Use pass_priority to skip ahead, then get_action_choices before choose_action. All cards listed are playable right now. Play cards with index=N, pass with answer=false."}]
-                    + messages[-80:]
-                )
+                messages = [
+                    messages[0],
+                    {
+                        "role": "user",
+                        "content": (
+                            "Continue playing. Use pass_priority to skip ahead, "
+                            "then get_action_choices before choose_action. "
+                            "All cards listed are playable right now. "
+                            "Play cards with index=N, pass with answer=false."
+                        ),
+                    },
+                    *messages[-80:],
+                ]
 
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
-            _log_error(game_dir, username, f"[pilot] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+            _log_error(
+                game_dir,
+                username,
+                f"[pilot] LLM request timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]",
+            )
             if game_log:
-                game_log.emit("llm_error", error_type="timeout", error_message=f"Timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]")
+                game_log.emit(
+                    "llm_error",
+                    error_type="timeout",
+                    error_message=f"Timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]",
+                )
             try:
                 await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
             except Exception:
@@ -478,7 +547,11 @@ async def run_pilot_loop(
                 if game_log:
                     game_log.emit("auto_pilot_mode", reason=reason)
                 try:
-                    await execute_tool(session, "send_chat_message", {"message": f"{reason}... going on autopilot. GG!"})
+                    await execute_tool(
+                        session,
+                        "send_chat_message",
+                        {"message": f"{reason}... going on autopilot. GG!"},
+                    )
                 except Exception:
                     pass
                 consecutive_errors = 0
@@ -494,9 +567,17 @@ async def run_pilot_loop(
                             return
                         if "error" in result_data:
                             consecutive_errors += 1
-                            _log_error(game_dir, username, f"[pilot] Auto-pass error: {result_data['error']}")
+                            _log_error(
+                                game_dir,
+                                username,
+                                f"[pilot] Auto-pass error: {result_data['error']}",
+                            )
                             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                _log_error(game_dir, username, "[pilot] Too many consecutive errors, exiting")
+                                _log_error(
+                                    game_dir,
+                                    username,
+                                    "[pilot] Too many consecutive errors, exiting",
+                                )
                                 return
                             await asyncio.sleep(5)
                         else:
@@ -590,30 +671,39 @@ async def run_pilot(
         game_log = GameLogWriter(game_dir, username)
 
     try:
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                result = await session.initialize()
-                _log(f"[pilot] MCP initialized: {result.serverInfo}")
+        async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
+            result = await session.initialize()
+            _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
-                tools_result = await session.list_tools()
-                openai_tools = mcp_tools_to_openai(tools_result.tools)
-                tool_names = [t['function']['name'] for t in openai_tools]
-                _log(f"[pilot] Available tools: {tool_names}")
+            tools_result = await session.list_tools()
+            openai_tools = mcp_tools_to_openai(tools_result.tools)
+            tool_names = [t["function"]["name"] for t in openai_tools]
+            _log(f"[pilot] Available tools: {tool_names}")
 
-                if game_log:
-                    game_log.emit("game_start",
-                                  model=model,
-                                  system_prompt=system_prompt[:500],
-                                  available_tools=tool_names,
-                                  deck_path=str(deck_path) if deck_path else None)
+            if game_log:
+                game_log.emit(
+                    "game_start",
+                    model=model,
+                    system_prompt=system_prompt[:500],
+                    available_tools=tool_names,
+                    deck_path=str(deck_path) if deck_path else None,
+                )
 
-                _log("[pilot] Starting game-playing loop...")
-                await run_pilot_loop(session, llm_client, model, system_prompt, openai_tools,
-                                    username=username, game_dir=game_dir, prices=prices, game_log=game_log)
+            _log("[pilot] Starting game-playing loop...")
+            await run_pilot_loop(
+                session,
+                llm_client,
+                model,
+                system_prompt,
+                openai_tools,
+                username=username,
+                game_dir=game_dir,
+                prices=prices,
+                game_log=game_log,
+            )
     finally:
         if game_log:
-            game_log.emit("game_end",
-                          total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
+            game_log.emit("game_end", total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
             game_log.close()
 
 
@@ -654,19 +744,21 @@ def main() -> int:
     _log(f"[pilot] Project root: {project_root}")
 
     try:
-        asyncio.run(run_pilot(
-            server=args.server,
-            port=args.port,
-            username=args.username,
-            project_root=project_root,
-            deck_path=args.deck,
-            api_key=api_key,
-            model=args.model,
-            base_url=args.base_url,
-            system_prompt=args.system_prompt,
-            game_dir=args.game_dir,
-            prices=prices,
-        ))
+        asyncio.run(
+            run_pilot(
+                server=args.server,
+                port=args.port,
+                username=args.username,
+                project_root=project_root,
+                deck_path=args.deck,
+                api_key=api_key,
+                model=args.model,
+                base_url=args.base_url,
+                system_prompt=args.system_prompt,
+                game_dir=args.game_dir,
+                prices=prices,
+            )
+        )
     except KeyboardInterrupt:
         pass
 

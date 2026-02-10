@@ -43,7 +43,7 @@ def kill_tree(pid: int):
             pass
 
         # Wait briefly then force kill if needed
-        gone, alive = psutil.wait_procs(children + [parent], timeout=3)
+        _gone, alive = psutil.wait_procs([*children, parent], timeout=3)
         for p in alive:
             try:
                 p.kill()

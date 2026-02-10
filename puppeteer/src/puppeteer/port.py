@@ -36,9 +36,7 @@ def find_available_port(host: str, start_port: int, max_attempts: int = 100) -> 
         port = start_port + offset
         if can_bind_port(port) and can_bind_port(port + 8):
             return port
-    raise RuntimeError(
-        f"No available port found in range {start_port}-{start_port + max_attempts}"
-    )
+    raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_attempts}")
 
 
 def wait_for_port(host: str, port: int, timeout: int, poll_interval: float = 1.0) -> bool:

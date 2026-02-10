@@ -82,82 +82,81 @@ async def run_sleepwalker(
         env=env,
     )
 
-    _log(f"[sleepwalker] Spawning skeleton client...")
+    _log("[sleepwalker] Spawning skeleton client...")
 
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            # Initialize MCP connection
-            result = await session.initialize()
-            _log(f"[sleepwalker] MCP initialized: {result.serverInfo}")
+    async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
+        # Initialize MCP connection
+        result = await session.initialize()
+        _log(f"[sleepwalker] MCP initialized: {result.serverInfo}")
 
-            # List available tools
-            tools = await session.list_tools()
-            _log(f"[sleepwalker] Available tools: {[t.name for t in tools.tools]}")
+        # List available tools
+        tools = await session.list_tools()
+        _log(f"[sleepwalker] Available tools: {[t.name for t in tools.tools]}")
 
-            last_chat_time = time.time()
-            last_log_length = 0
+        last_chat_time = time.time()
+        last_log_length = 0
 
-            _log(f"[sleepwalker] Entering main loop...")
+        _log("[sleepwalker] Entering main loop...")
 
-            while True:
-                try:
-                    # Check for pending action
-                    result = await session.call_tool("is_action_on_me", {})
-                    status = json.loads(result.content[0].text)
+        while True:
+            try:
+                # Check for pending action
+                result = await session.call_tool("is_action_on_me", {})
+                status = json.loads(result.content[0].text)
 
-                    if status.get("action_pending"):
-                        action_type = status.get("action_type", "UNKNOWN")
-                        message = status.get("message", "")
-                        _log(f"[sleepwalker] Action required: {action_type}")
-                        if message:
-                            _log(f"[sleepwalker]   Message: {message}")
+                if status.get("action_pending"):
+                    action_type = status.get("action_type", "UNKNOWN")
+                    message = status.get("message", "")
+                    _log(f"[sleepwalker] Action required: {action_type}")
+                    if message:
+                        _log(f"[sleepwalker]   Message: {message}")
 
-                        # Delay before taking action
-                        await asyncio.sleep(ACTION_DELAY_SECS)
+                    # Delay before taking action
+                    await asyncio.sleep(ACTION_DELAY_SECS)
 
-                        # Execute default action
-                        result = await session.call_tool("take_action", {})
-                        action_result = json.loads(result.content[0].text)
-                        _log(f"[sleepwalker]   Result: {action_result.get('action_taken', 'unknown')}")
+                    # Execute default action
+                    result = await session.call_tool("take_action", {})
+                    action_result = json.loads(result.content[0].text)
+                    _log(f"[sleepwalker]   Result: {action_result.get('action_taken', 'unknown')}")
 
-                        # Print game log (only new entries since last check)
-                        log_result = await session.call_tool("get_game_log", {"max_chars": 10000})
-                        log_data = json.loads(log_result.content[0].text)
-                        current_log = log_data.get("log", "")
-                        total_length = log_data.get("total_length", 0)
+                    # Print game log (only new entries since last check)
+                    log_result = await session.call_tool("get_game_log", {"max_chars": 10000})
+                    log_data = json.loads(log_result.content[0].text)
+                    current_log = log_data.get("log", "")
+                    total_length = log_data.get("total_length", 0)
 
-                        # Print new log entries
-                        if total_length > last_log_length:
-                            # Get the new portion of the log
-                            new_chars = total_length - last_log_length
-                            if new_chars > 0 and len(current_log) >= new_chars:
-                                new_log = current_log[-new_chars:]
-                                if new_log.strip():
-                                    _log(f"[sleepwalker] === New Log Entries ===")
-                                    print(new_log)
-                                    _log(f"[sleepwalker] ========================")
-                            last_log_length = total_length
+                    # Print new log entries
+                    if total_length > last_log_length:
+                        # Get the new portion of the log
+                        new_chars = total_length - last_log_length
+                        if new_chars > 0 and len(current_log) >= new_chars:
+                            new_log = current_log[-new_chars:]
+                            if new_log.strip():
+                                _log("[sleepwalker] === New Log Entries ===")
+                                print(new_log)
+                                _log("[sleepwalker] ========================")
+                        last_log_length = total_length
 
-                    # Send periodic chat message
-                    current_time = time.time()
-                    if current_time - last_chat_time > CHAT_INTERVAL_SECS:
-                        chat_message = get_sleepy_noise()
-                        result = await session.call_tool("send_chat_message", {"message": chat_message})
-                        chat_result = json.loads(result.content[0].text)
-                        if chat_result.get("success"):
-                            _log(f"[sleepwalker] Chat sent: {chat_message}")
-                        else:
-                            _log(f"[sleepwalker] Chat failed (no game active yet?)")
-                        last_chat_time = current_time
+                # Send periodic chat message
+                current_time = time.time()
+                if current_time - last_chat_time > CHAT_INTERVAL_SECS:
+                    chat_message = get_sleepy_noise()
+                    result = await session.call_tool("send_chat_message", {"message": chat_message})
+                    chat_result = json.loads(result.content[0].text)
+                    if chat_result.get("success"):
+                        _log(f"[sleepwalker] Chat sent: {chat_message}")
+                    else:
+                        _log("[sleepwalker] Chat failed (no game active yet?)")
+                    last_chat_time = current_time
 
-                    await asyncio.sleep(0.1)  # 100ms poll interval
+                await asyncio.sleep(0.1)  # 100ms poll interval
 
-                except KeyboardInterrupt:
-                    _log(f"[sleepwalker] Interrupted, shutting down...")
-                    break
-                except Exception as e:
-                    _log(f"[sleepwalker] Error: {e}")
-                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                _log("[sleepwalker] Interrupted, shutting down...")
+                break
+            except Exception as e:
+                _log(f"[sleepwalker] Error: {e}")
+                await asyncio.sleep(1)
 
 
 def main() -> int:
@@ -185,13 +184,15 @@ def main() -> int:
     _log(f"[sleepwalker] Project root: {project_root}")
 
     try:
-        asyncio.run(run_sleepwalker(
-            server=args.server,
-            port=args.port,
-            username=args.username,
-            project_root=project_root,
-            deck_path=args.deck,
-        ))
+        asyncio.run(
+            run_sleepwalker(
+                server=args.server,
+                port=args.port,
+                username=args.username,
+                project_root=project_root,
+                deck_path=args.deck,
+            )
+        )
     except KeyboardInterrupt:
         pass
 

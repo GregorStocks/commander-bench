@@ -6,7 +6,9 @@ import re
 import sys
 from pathlib import Path
 
-WEBSITE_GAMES_DIR = Path(__file__).resolve().parent.parent / "website" / "public" / "games"
+WEBSITE_GAMES_DIR = (
+    Path(__file__).resolve().parent.parent / "website" / "public" / "games"
+)
 LOGS_DIR = Path.home() / "mage-bench-logs"
 
 FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
@@ -78,10 +80,12 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             snap = {k: v for k, v in event.items() if k not in ("type", "ts")}
             snapshots.append(snap)
         elif event_type == "game_action":
-            actions.append({
-                "seq": event["seq"],
-                "message": _strip_html(event.get("message", "")),
-            })
+            actions.append(
+                {
+                    "seq": event["seq"],
+                    "message": _strip_html(event.get("message", "")),
+                }
+            )
         elif event_type == "game_over":
             game_over = {
                 "seq": event["seq"],
@@ -105,11 +109,13 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
 
     players_summary = []
     for p in meta.get("players", []):
-        players_summary.append({
-            "name": p.get("name", "?"),
-            "type": p.get("type", "?"),
-            "commander": _extract_commander(p),
-        })
+        players_summary.append(
+            {
+                "name": p.get("name", "?"),
+                "type": p.get("type", "?"),
+                "commander": _extract_commander(p),
+            }
+        )
 
     # Build output
     output = {
@@ -145,13 +151,15 @@ def _update_index(games_dir: Path, game_id: str, game_data: dict) -> None:
     games = [g for g in games if g.get("id") != game_id]
 
     # Add new entry (summary only, no full data)
-    games.append({
-        "id": game_id,
-        "timestamp": game_data.get("timestamp", ""),
-        "totalTurns": game_data.get("totalTurns", 0),
-        "winner": game_data.get("winner"),
-        "players": game_data.get("players", []),
-    })
+    games.append(
+        {
+            "id": game_id,
+            "timestamp": game_data.get("timestamp", ""),
+            "totalTurns": game_data.get("totalTurns", 0),
+            "winner": game_data.get("winner"),
+            "players": game_data.get("players", []),
+        }
+    )
 
     # Sort by id descending (newest first)
     games.sort(key=lambda g: g.get("id", ""), reverse=True)

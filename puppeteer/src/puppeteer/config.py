@@ -1,16 +1,16 @@
 """Configuration for the AI harness."""
 
+import json
 import random
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-import json
-from typing import Union
 
 
 @dataclass
 class SkeletonPlayer:
     """Legacy skeleton player (kept for backwards compatibility)."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
 
@@ -18,6 +18,7 @@ class SkeletonPlayer:
 @dataclass
 class PotatoPlayer:
     """Potato personality: pure Java, auto-responds to everything (dumbest)."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
 
@@ -25,6 +26,7 @@ class PotatoPlayer:
 @dataclass
 class StallerPlayer:
     """Staller personality: pure Java, intentionally slow auto-responder."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
 
@@ -32,6 +34,7 @@ class StallerPlayer:
 @dataclass
 class SleepwalkerPlayer:
     """Sleepwalker personality: MCP-based, Python client controls via stdio."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
 
@@ -39,6 +42,7 @@ class SleepwalkerPlayer:
 @dataclass
 class ChatterboxPlayer:
     """Chatterbox personality: LLM-powered commentator, auto-plays, chats via LLM."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
     model: str | None = None  # LLM model (e.g., "anthropic/claude-sonnet-4")
@@ -49,6 +53,7 @@ class ChatterboxPlayer:
 @dataclass
 class PilotPlayer:
     """Pilot personality: LLM-powered strategic game player."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
     model: str | None = None  # LLM model (e.g., "google/gemini-2.0-flash-001")
@@ -59,20 +64,13 @@ class PilotPlayer:
 @dataclass
 class CpuPlayer:
     """XMage built-in COMPUTER_MAD AI."""
+
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
 
 
 # Union type for all player types
-Player = Union[
-    PotatoPlayer,
-    StallerPlayer,
-    SleepwalkerPlayer,
-    ChatterboxPlayer,
-    PilotPlayer,
-    CpuPlayer,
-    SkeletonPlayer,
-]
+Player = PotatoPlayer | StallerPlayer | SleepwalkerPlayer | ChatterboxPlayer | PilotPlayer | CpuPlayer | SkeletonPlayer
 
 
 @dataclass
@@ -163,21 +161,25 @@ class Config:
                 if player_type == "sleepwalker":
                     self.sleepwalker_players.append(SleepwalkerPlayer(name=name, deck=deck))
                 elif player_type == "chatterbox":
-                    self.chatterbox_players.append(ChatterboxPlayer(
-                        name=name,
-                        deck=deck,
-                        model=player.get("model"),
-                        base_url=player.get("base_url"),
-                        system_prompt=player.get("system_prompt"),
-                    ))
+                    self.chatterbox_players.append(
+                        ChatterboxPlayer(
+                            name=name,
+                            deck=deck,
+                            model=player.get("model"),
+                            base_url=player.get("base_url"),
+                            system_prompt=player.get("system_prompt"),
+                        )
+                    )
                 elif player_type == "pilot":
-                    self.pilot_players.append(PilotPlayer(
-                        name=name,
-                        deck=deck,
-                        model=player.get("model"),
-                        base_url=player.get("base_url"),
-                        system_prompt=player.get("system_prompt"),
-                    ))
+                    self.pilot_players.append(
+                        PilotPlayer(
+                            name=name,
+                            deck=deck,
+                            model=player.get("model"),
+                            base_url=player.get("base_url"),
+                            system_prompt=player.get("system_prompt"),
+                        )
+                    )
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
                 elif player_type == "staller":
@@ -237,18 +239,18 @@ class Config:
             result["gameType"] = self.game_type
         if self.deck_type:
             result["deckType"] = self.deck_type
-        return json.dumps(result, separators=(',', ':'))
+        return json.dumps(result, separators=(",", ":"))
 
     def resolve_random_decks(self, project_root: Path) -> None:
         """Replace any deck="random" with a randomly chosen Commander .dck file."""
         all_players = (
-            self.potato_players +
-            self.staller_players +
-            self.sleepwalker_players +
-            self.chatterbox_players +
-            self.pilot_players +
-            self.cpu_players +
-            self.skeleton_players
+            self.potato_players
+            + self.staller_players
+            + self.sleepwalker_players
+            + self.chatterbox_players
+            + self.pilot_players
+            + self.cpu_players
+            + self.skeleton_players
         )
         if not any(p.deck == "random" for p in all_players):
             return

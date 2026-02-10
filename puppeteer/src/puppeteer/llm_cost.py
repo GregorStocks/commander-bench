@@ -69,9 +69,7 @@ def load_prices() -> dict[str, tuple[float, float]]:
     return prices
 
 
-def get_model_price(
-    model: str, prices: dict[str, tuple[float, float]]
-) -> tuple[float, float] | None:
+def get_model_price(model: str, prices: dict[str, tuple[float, float]]) -> tuple[float, float] | None:
     """Get (input, output) price per 1M tokens, or None if unknown."""
     if model in prices:
         return prices[model]
