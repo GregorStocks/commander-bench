@@ -68,11 +68,11 @@ make run-dumb OUTPUT=/path/to/video.mov
 make run-dumb ARGS="--config myconfig.json"
 ```
 
-Recordings are saved to `~/commander-bench-logs/` by default.
+Recordings are saved to `~/mage-bench-logs/` by default.
 
 ## Logging
 
-Game logs go to `~/commander-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
+Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
 ## Issues
 

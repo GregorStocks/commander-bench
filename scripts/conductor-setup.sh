@@ -7,7 +7,7 @@ set -e
 mkdir -p ~/.m2/build-cache
 
 # Ensure shared images directory exists
-SHARED_IMAGES=~/.commander-bench/images
+SHARED_IMAGES=~/.mage-bench/images
 mkdir -p "$SHARED_IMAGES"
 
 # Symlink plugins/images to shared location for each client module
@@ -31,6 +31,6 @@ for CLIENT_MODULE in Mage.Client Mage.Client.Streaming; do
     fi
 done
 
-echo "commander-bench workspace ready."
+echo "mage-bench workspace ready."
 echo "  Build cache: ~/.m2/build-cache"
-echo "  Images: ~/.commander-bench/images (symlinked from */plugins/images)"
+echo "  Images: ~/.mage-bench/images (symlinked from */plugins/images)"
