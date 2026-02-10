@@ -235,8 +235,9 @@ public class McpServer {
         Map<String, Object> passPriorityTool = new HashMap<>();
         passPriorityTool.put("name", "pass_priority");
         passPriorityTool.put("description",
-                "Auto-pass priority until you can play cards or a non-priority decision is needed. " +
-                "Returns action_pending, action_type, actions_passed, has_playable_cards. " +
+                "Auto-pass priority until you need to make a decision: playable cards, combat " +
+                "(declare attackers/blockers), or non-priority actions. " +
+                "Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. " +
                 "On timeout: action_pending=false, timeout=true.");
         Map<String, Object> passPrioritySchema = new HashMap<>();
         passPrioritySchema.put("type", "object");
@@ -322,8 +323,9 @@ public class McpServer {
         getChoicesTool.put("description",
                 "Get available choices for the current pending action. Call before choose_action. " +
                 "Includes context (phase/turn) and players (life totals). " +
-                "response_type: select (cards to play), boolean (yes/no), index (target/ability), " +
-                "amount, pile, or multi_amount.");
+                "response_type: select (cards to play, attackers, blockers), boolean (yes/no), " +
+                "index (target/ability), amount, pile, or multi_amount. " +
+                "During combat: combat_phase indicates declare_attackers or declare_blockers.");
         Map<String, Object> getChoicesSchema = new HashMap<>();
         getChoicesSchema.put("type", "object");
         getChoicesSchema.put("properties", new HashMap<>());
@@ -335,8 +337,9 @@ public class McpServer {
         Map<String, Object> chooseActionTool = new HashMap<>();
         chooseActionTool.put("name", "choose_action");
         chooseActionTool.put("description",
-                "Respond to pending action. Use index to pick a choice, answer for yes/no or pass, " +
-                "amount/amounts for numeric, pile for pile choice. Call get_action_choices first.");
+                "Respond to pending action. Use index to pick a choice (card, attacker, blocker, " +
+                "target, ability, mana source). Use answer for yes/no, pass priority, or confirm " +
+                "combat (true=confirm attackers/blockers). Call get_action_choices first.");
         Map<String, Object> chooseActionSchema = new HashMap<>();
         chooseActionSchema.put("type", "object");
         Map<String, Object> chooseActionProps = new HashMap<>();
@@ -348,7 +351,8 @@ public class McpServer {
         answerProp.put("type", "boolean");
         answerProp.put("description", "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. " +
                 "For mulligan: true = YES MULLIGAN (discard hand, draw new cards), false = NO KEEP (keep this hand). " +
-                "For GAME_SELECT: false = pass priority (done playing cards this phase). " +
+                "For GAME_SELECT: false = pass priority (done playing cards this phase), " +
+                "true = confirm combat (done declaring attackers/blockers). " +
                 "Also false to cancel target/mana selection.");
         chooseActionProps.put("answer", answerProp);
         Map<String, Object> amountProp = new HashMap<>();

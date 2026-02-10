@@ -605,6 +605,117 @@ public class SkeletonCallbackHandler {
                     }
                 }
 
+                // Check for combat selections (declare attackers / declare blockers)
+                if (data instanceof GameClientMessage) {
+                    GameClientMessage gcm = (GameClientMessage) data;
+                    Map<String, Serializable> options = gcm.getOptions();
+                    if (options != null) {
+                        @SuppressWarnings("unchecked")
+                        List<UUID> possibleAttackerIds = (List<UUID>) options.get("possibleAttackers");
+                        @SuppressWarnings("unchecked")
+                        List<UUID> possibleBlockerIds = (List<UUID>) options.get("possibleBlockers");
+
+                        if (possibleAttackerIds != null && !possibleAttackerIds.isEmpty()) {
+                            result.put("combat_phase", "declare_attackers");
+
+                            // Show which creatures are already attacking
+                            List<String> alreadyAttacking = new ArrayList<>();
+                            if (gameView != null && gameView.getCombat() != null) {
+                                for (CombatGroupView group : gameView.getCombat()) {
+                                    for (CardView attacker : group.getAttackers().values()) {
+                                        StringBuilder desc = new StringBuilder();
+                                        desc.append(attacker.getDisplayName());
+                                        if (attacker.getPower() != null) {
+                                            desc.append(" ").append(attacker.getPower())
+                                                .append("/").append(attacker.getToughness());
+                                        }
+                                        alreadyAttacking.add(desc.toString());
+                                    }
+                                }
+                            }
+                            if (!alreadyAttacking.isEmpty()) {
+                                result.put("already_attacking", alreadyAttacking);
+                            }
+
+                            int idx = choiceList.size();
+                            for (UUID attackerId : possibleAttackerIds) {
+                                PermanentView perm = findPermanentViewById(attackerId, gameView);
+                                if (perm == null) continue;
+
+                                Map<String, Object> choiceEntry = new HashMap<>();
+                                choiceEntry.put("index", idx);
+                                StringBuilder desc = new StringBuilder();
+                                desc.append(perm.getDisplayName());
+                                if (perm.getPower() != null) {
+                                    desc.append(" ").append(perm.getPower())
+                                        .append("/").append(perm.getToughness());
+                                }
+                                desc.append(" [Attack]");
+                                choiceEntry.put("description", desc.toString());
+                                choiceEntry.put("choice_type", "attacker");
+                                choiceList.add(choiceEntry);
+                                indexToUuid.add(attackerId);
+                                idx++;
+                            }
+
+                            // Add "All attack" special option if available
+                            if (options.containsKey("specialButton")) {
+                                Map<String, Object> allAttackEntry = new HashMap<>();
+                                allAttackEntry.put("index", idx);
+                                allAttackEntry.put("description", "All attack");
+                                allAttackEntry.put("choice_type", "special");
+                                choiceList.add(allAttackEntry);
+                                indexToUuid.add("special");
+                                idx++;
+                            }
+                        }
+
+                        if (possibleBlockerIds != null && !possibleBlockerIds.isEmpty()) {
+                            result.put("combat_phase", "declare_blockers");
+
+                            // Show attacking creatures for context
+                            List<Map<String, Object>> incomingAttackers = new ArrayList<>();
+                            if (gameView != null && gameView.getCombat() != null) {
+                                for (CombatGroupView group : gameView.getCombat()) {
+                                    for (CardView attacker : group.getAttackers().values()) {
+                                        Map<String, Object> aInfo = new HashMap<>();
+                                        aInfo.put("name", attacker.getDisplayName());
+                                        if (attacker.getPower() != null) {
+                                            aInfo.put("power", attacker.getPower());
+                                            aInfo.put("toughness", attacker.getToughness());
+                                        }
+                                        incomingAttackers.add(aInfo);
+                                    }
+                                }
+                            }
+                            if (!incomingAttackers.isEmpty()) {
+                                result.put("incoming_attackers", incomingAttackers);
+                            }
+
+                            int idx = choiceList.size();
+                            for (UUID blockerId : possibleBlockerIds) {
+                                PermanentView perm = findPermanentViewById(blockerId, gameView);
+                                if (perm == null) continue;
+
+                                Map<String, Object> choiceEntry = new HashMap<>();
+                                choiceEntry.put("index", idx);
+                                StringBuilder desc = new StringBuilder();
+                                desc.append(perm.getDisplayName());
+                                if (perm.getPower() != null) {
+                                    desc.append(" ").append(perm.getPower())
+                                        .append("/").append(perm.getToughness());
+                                }
+                                desc.append(" [Block]");
+                                choiceEntry.put("description", desc.toString());
+                                choiceEntry.put("choice_type", "blocker");
+                                choiceList.add(choiceEntry);
+                                indexToUuid.add(blockerId);
+                                idx++;
+                            }
+                        }
+                    }
+                }
+
                 if (!choiceList.isEmpty()) {
                     result.put("response_type", "select");
                     result.put("choices", choiceList);
@@ -891,11 +1002,22 @@ public class SkeletonCallbackHandler {
                             pendingAction = action;
                             return result;
                         }
-                        session.sendPlayerUUID(gameId, (UUID) choices.get(index));
-                        result.put("action_taken", "play_card_" + index);
+                        Object chosen = choices.get(index);
+                        if (chosen instanceof UUID) {
+                            session.sendPlayerUUID(gameId, (UUID) chosen);
+                            result.put("action_taken", "selected_" + index);
+                        } else if (chosen instanceof String) {
+                            session.sendPlayerString(gameId, (String) chosen);
+                            result.put("action_taken", "special_" + chosen);
+                        } else {
+                            result.put("success", false);
+                            result.put("error", "Unexpected choice type at index " + index);
+                            pendingAction = action;
+                            return result;
+                        }
                     } else if (answer != null) {
                         session.sendPlayerBoolean(gameId, answer);
-                        result.put("action_taken", "passed_priority");
+                        result.put("action_taken", answer ? "confirmed" : "passed_priority");
                     } else {
                         result.put("success", false);
                         result.put("error", "Provide 'index' to play a card or 'answer: false' to pass priority");
@@ -1217,6 +1339,17 @@ public class SkeletonCallbackHandler {
                             failedManaCasts.clear();
                         }
                     }
+                }
+
+                // Combat selections (declare attackers/blockers) always need LLM input
+                String combatType = detectCombatSelect(action);
+                if (combatType != null) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("action_pending", true);
+                    result.put("action_type", method.name());
+                    result.put("actions_passed", actionsPassed);
+                    result.put("combat_phase", combatType);
+                    return result;
                 }
 
                 // Check if there are playable cards (non-mana-only, excluding failed casts)
@@ -1869,6 +2002,42 @@ public class SkeletonCallbackHandler {
             }
         }
 
+        return null;
+    }
+
+    /**
+     * Check if a pending GAME_SELECT is a combat selection (declare attackers or blockers)
+     * by inspecting the options map for possibleAttackers/possibleBlockers keys.
+     * Returns "attackers", "blockers", or null.
+     */
+    private String detectCombatSelect(PendingAction action) {
+        if (action == null || action.getMethod() != ClientCallbackMethod.GAME_SELECT) {
+            return null;
+        }
+        Object data = action.getData();
+        if (data instanceof GameClientMessage) {
+            Map<String, Serializable> options = ((GameClientMessage) data).getOptions();
+            if (options != null) {
+                if (options.containsKey("possibleAttackers")) {
+                    return "attackers";
+                }
+                if (options.containsKey("possibleBlockers")) {
+                    return "blockers";
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Look up a PermanentView by UUID from all players' battlefields.
+     */
+    private PermanentView findPermanentViewById(UUID objectId, GameView gameView) {
+        if (gameView == null) return null;
+        for (PlayerView player : gameView.getPlayers()) {
+            PermanentView perm = player.getBattlefield().get(objectId);
+            if (perm != null) return perm;
+        }
         return null;
     }
 

@@ -74,7 +74,7 @@
       }
     },
     "name": "pass_priority",
-    "description": "Auto-pass priority until you can play cards or a non-priority decision is needed. Returns action_pending, action_type, actions_passed, has_playable_cards. On timeout: action_pending\u003dfalse, timeout\u003dtrue."
+    "description": "Auto-pass priority until you need to make a decision: playable cards, combat (declare attackers/blockers), or non-priority actions. Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. On timeout: action_pending\u003dfalse, timeout\u003dtrue."
   },
   {
     "inputSchema": {
@@ -135,7 +135,7 @@
       "properties": {}
     },
     "name": "get_action_choices",
-    "description": "Get available choices for the current pending action. Call before choose_action. Includes context (phase/turn) and players (life totals). response_type: select (cards to play), boolean (yes/no), index (target/ability), amount, pile, or multi_amount."
+    "description": "Get available choices for the current pending action. Call before choose_action. Includes context (phase/turn) and players (life totals). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
   },
   {
     "inputSchema": {
@@ -147,7 +147,7 @@
           "type": "integer"
         },
         "answer": {
-          "description": "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. For mulligan: true \u003d YES MULLIGAN (discard hand, draw new cards), false \u003d NO KEEP (keep this hand). For GAME_SELECT: false \u003d pass priority (done playing cards this phase). Also false to cancel target/mana selection.",
+          "description": "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. For mulligan: true \u003d YES MULLIGAN (discard hand, draw new cards), false \u003d NO KEEP (keep this hand). For GAME_SELECT: false \u003d pass priority (done playing cards this phase), true \u003d confirm combat (done declaring attackers/blockers). Also false to cancel target/mana selection.",
           "type": "boolean"
         },
         "amounts": {
@@ -168,7 +168,7 @@
       }
     },
     "name": "choose_action",
-    "description": "Respond to pending action. Use index to pick a choice, answer for yes/no or pass, amount/amounts for numeric, pile for pile choice. Call get_action_choices first."
+    "description": "Respond to pending action. Use index to pick a choice (card, attacker, blocker, target, ability, mana source). Use answer for yes/no, pass priority, or confirm combat (true\u003dconfirm attackers/blockers). Call get_action_choices first."
   },
   {
     "inputSchema": {
