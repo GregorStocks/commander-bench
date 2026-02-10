@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from puppeteer.config import Config, PilotPlayer
-from puppeteer.harness import _ensure_game_over_event, _missing_llm_api_keys, _write_error_log
+from puppeteer.harness import _ensure_game_over_event, _missing_llm_api_keys, _print_game_summary, _write_error_log
 
 
 def test_missing_llm_api_keys_none():
@@ -82,6 +82,69 @@ def test_ensure_game_over_event_no_file():
         event = json.loads(events_file.read_text().strip())
         assert event["type"] == "game_over"
         assert event["seq"] == 1
+
+
+def test_print_game_summary_from_events_jsonl(capsys):
+    """CPU-only games should read the result from game_events.jsonl."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(
+            json.dumps({"ts": "2024-01-01T00:05:00", "type": "game_over", "message": "Player1 wins"}) + "\n"
+        )
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "Player1 wins" in output
+        assert "did not finish" not in output
+
+
+def test_print_game_summary_from_pilot_log(capsys):
+    """Headless client logs take priority over game_events.jsonl."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        (game_dir / "ace_pilot.log").write_text("INFO Game over: Player1 won the game\n")
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "Player1 won the game" in output
+        assert "did not finish" not in output
+
+
+def test_print_game_summary_no_logs(capsys):
+    """No logs at all should print 'did not finish'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "did not finish" in output
+
+
+def test_print_game_summary_synthetic_game_over(capsys):
+    """A synthetic game_over (timeout_or_killed) should still show 'did not finish'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(
+            json.dumps(
+                {
+                    "ts": "2024-01-01T00:05:00",
+                    "type": "game_over",
+                    "message": "Game ended (no GAME_OVER received)",
+                    "reason": "timeout_or_killed",
+                }
+            )
+            + "\n"
+        )
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "did not finish" in output
 
 
 def test_write_error_log_combines():
