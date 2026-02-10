@@ -45,6 +45,16 @@ make mcp-tools
 
 This updates `website/src/data/mcp-tools.json`. Include the regenerated file in your commit.
 
+## Testing
+
+When changing Python code in `puppeteer/`, add or update tests in `puppeteer/tests/`. Run tests with:
+
+```bash
+make test
+```
+
+Tests run in CI alongside lint and typecheck. Keep tests fast and self-contained — use `tempfile` for file I/O, `unittest.mock.patch` for external dependencies.
+
 ## Python
 
 Always use `uv` for Python. Never use system Python directly.
