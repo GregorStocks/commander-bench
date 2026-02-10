@@ -96,6 +96,8 @@ public class SkeletonCallbackHandler {
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
+    private volatile int consecutiveCombatSelects = 0; // Track repeated combat prompts to detect loops
+    private static final int MAX_COMBAT_SELECTS_BEFORE_AUTO_CONFIRM = 5; // Auto-confirm after this many
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
@@ -1512,15 +1514,33 @@ public class SkeletonCallbackHandler {
                     }
                 }
 
-                // Combat selections (declare attackers/blockers) always need LLM input
+                // Combat selections (declare attackers/blockers) always need LLM input,
+                // but detect infinite loops (e.g. model repeatedly clicking "All attack")
                 String combatType = detectCombatSelect(action);
                 if (combatType != null) {
+                    consecutiveCombatSelects++;
+                    if (consecutiveCombatSelects > MAX_COMBAT_SELECTS_BEFORE_AUTO_CONFIRM) {
+                        // Stuck in a combat declaration loop — auto-confirm to break out
+                        logger.warn("[" + client.getUsername() + "] Combat loop detected ("
+                            + consecutiveCombatSelects + " consecutive combat selects), auto-confirming");
+                        synchronized (actionLock) {
+                            if (pendingAction == action) {
+                                pendingAction = null;
+                            }
+                        }
+                        session.sendPlayerBoolean(action.getGameId(), true);
+                        consecutiveCombatSelects = 0;
+                        actionsPassed++;
+                        continue;
+                    }
                     Map<String, Object> result = new HashMap<>();
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
                     result.put("combat_phase", combatType);
                     return result;
+                } else {
+                    consecutiveCombatSelects = 0;
                 }
 
                 // Check if there are playable cards (non-mana-only, excluding failed casts)

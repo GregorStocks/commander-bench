@@ -82,13 +82,13 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         elif event_type == "game_action":
             actions.append(
                 {
-                    "seq": event["seq"],
+                    "seq": event.get("seq", 0),
                     "message": _strip_html(event.get("message", "")),
                 }
             )
         elif event_type == "game_over":
             game_over = {
-                "seq": event["seq"],
+                "seq": event.get("seq", 0),
                 "message": _strip_html(event.get("message", "")),
             }
 
