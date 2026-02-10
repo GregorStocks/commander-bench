@@ -106,8 +106,10 @@ def test_merge_game_log():
         # Write game_events.jsonl with two events
         events = game_dir / "game_events.jsonl"
         events.write_text(
-            json.dumps({"ts": "2024-06-15T10:00:01.000-07:00", "type": "game_start"}) + "\n"
-            + json.dumps({"ts": "2024-06-15T10:00:03.000-07:00", "type": "game_over"}) + "\n"
+            json.dumps({"ts": "2024-06-15T10:00:01.000-07:00", "type": "game_start"})
+            + "\n"
+            + json.dumps({"ts": "2024-06-15T10:00:03.000-07:00", "type": "game_over"})
+            + "\n"
         )
 
         # Write a player LLM log with an event between the two game events

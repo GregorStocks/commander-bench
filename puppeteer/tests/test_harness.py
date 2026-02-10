@@ -41,8 +41,10 @@ def test_ensure_game_over_event_already_present():
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
         events_file.write_text(
-            json.dumps({"ts": "2024-01-01T00:00:00", "type": "game_start"}) + "\n"
-            + json.dumps({"ts": "2024-01-01T00:05:00", "type": "game_over"}) + "\n"
+            json.dumps({"ts": "2024-01-01T00:00:00", "type": "game_start"})
+            + "\n"
+            + json.dumps({"ts": "2024-01-01T00:05:00", "type": "game_over"})
+            + "\n"
         )
 
         _ensure_game_over_event(game_dir)
@@ -57,9 +59,7 @@ def test_ensure_game_over_event_appended():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
-        events_file.write_text(
-            json.dumps({"ts": "2024-01-01T00:00:00", "type": "game_start"}) + "\n"
-        )
+        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "type": "game_start"}) + "\n")
 
         _ensure_game_over_event(game_dir)
 

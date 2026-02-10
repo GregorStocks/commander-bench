@@ -63,8 +63,10 @@ def test_find_available_port():
 
 def test_find_available_port_exhausted():
     """Should raise RuntimeError when no ports are available."""
-    with patch("puppeteer.port.can_bind_port", return_value=False), \
-            pytest.raises(RuntimeError, match="No available port found"):
+    with (
+        patch("puppeteer.port.can_bind_port", return_value=False),
+        pytest.raises(RuntimeError, match="No available port found"),
+    ):
         find_available_port("localhost", 19000, max_attempts=5)
 
 
@@ -83,9 +85,8 @@ def test_wait_for_port_immediate():
 
 def test_wait_for_port_timeout():
     """Should return False after timeout when port never opens."""
-    with patch("puppeteer.port.is_port_in_use", return_value=False), \
-            patch("puppeteer.port.time") as mock_time:
-            # Simulate time passing: first call returns 0, second returns timeout+1
-            mock_time.time.side_effect = [0, 0, 2]
-            mock_time.sleep = lambda x: None
-            assert wait_for_port("127.0.0.1", 19999, timeout=1) is False
+    with patch("puppeteer.port.is_port_in_use", return_value=False), patch("puppeteer.port.time") as mock_time:
+        # Simulate time passing: first call returns 0, second returns timeout+1
+        mock_time.time.side_effect = [0, 0, 2]
+        mock_time.sleep = lambda x: None
+        assert wait_for_port("127.0.0.1", 19999, timeout=1) is False
