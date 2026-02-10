@@ -454,6 +454,102 @@ const { slug } = Astro.params;
       grid-template-columns: 100px 1fr;
     }
   }
+
+  /* Diff highlight animations */
+  @keyframes card-enter-glow {
+    0% {
+      border-color: #4caf50;
+      box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+    }
+    100% {
+      border-color: rgba(150, 195, 205, 0.2);
+      box-shadow: none;
+    }
+  }
+
+  .card-chip.card-entered,
+  .card-thumb.card-entered {
+    animation: card-enter-glow 1.5s ease-out;
+  }
+
+  @keyframes card-ghost-fade {
+    0% {
+      opacity: 0.7;
+      border-color: #e94560;
+      box-shadow: 0 0 6px rgba(233, 69, 96, 0.4);
+    }
+    70% {
+      opacity: 0.3;
+    }
+    100% {
+      opacity: 0;
+      max-width: 0;
+      padding: 0;
+      margin: 0;
+      border-width: 0;
+      overflow: hidden;
+    }
+  }
+
+  .card-chip.card-ghost {
+    animation: card-ghost-fade 2s ease-out forwards;
+    border-color: #e94560;
+    text-decoration: line-through;
+    pointer-events: none;
+  }
+
+  .card-thumb.card-ghost {
+    animation: card-ghost-fade 2s ease-out forwards;
+    border-color: #e94560;
+    pointer-events: none;
+    filter: grayscale(0.5);
+  }
+
+  @keyframes life-pulse-up {
+    0% { color: #4caf50; transform: scale(1.15); }
+    100% { color: #a0a0b8; transform: scale(1); }
+  }
+
+  @keyframes life-pulse-down {
+    0% { color: #e94560; transform: scale(1.15); }
+    100% { color: #a0a0b8; transform: scale(1); }
+  }
+
+  .life-changed-up {
+    animation: life-pulse-up 1.2s ease-out;
+    display: inline-block;
+  }
+
+  .life-changed-down {
+    animation: life-pulse-down 1.2s ease-out;
+    display: inline-block;
+  }
+
+  .life-up {
+    color: #4caf50;
+    font-weight: 600;
+  }
+
+  .life-down {
+    color: #e94560;
+    font-weight: 600;
+  }
+
+  @keyframes tap-highlight {
+    0% {
+      box-shadow: 0 0 6px rgba(168, 217, 165, 0.6);
+      border-color: #a8d9a5;
+    }
+    100% {
+      box-shadow: none;
+      border-color: rgba(150, 195, 205, 0.2);
+    }
+  }
+
+  .card-chip.card-tap-changed,
+  .card-thumb.card-tap-changed {
+    animation: tap-highlight 1.2s ease-out;
+  }
 </style>
 
 <script>
@@ -496,6 +592,104 @@ const { slug } = Astro.params;
     let game = null;
     let currentIndex = 0;
     let autoPlayInterval = null;
+
+    // --- Diff computation ---
+
+    function diffStringBag(prevList, currList) {
+      var prevBag = {};
+      var currBag = {};
+      prevList.forEach(function (n) { prevBag[n] = (prevBag[n] || 0) + 1; });
+      currList.forEach(function (n) { currBag[n] = (currBag[n] || 0) + 1; });
+      var entered = [];
+      var left = [];
+      var allNames = {};
+      Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
+      Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
+      Object.keys(allNames).forEach(function (name) {
+        var diff = (currBag[name] || 0) - (prevBag[name] || 0);
+        for (var i = 0; i < Math.abs(diff); i++) {
+          if (diff > 0) entered.push(name);
+          else left.push(name);
+        }
+      });
+      return { entered: entered, left: left };
+    }
+
+    function diffBattlefield(prevCards, currCards) {
+      var prevBag = {};
+      var currBag = {};
+      var prevTapped = {};
+      var currTapped = {};
+      prevCards.forEach(function (c) {
+        var n = c.name || "Unknown";
+        prevBag[n] = (prevBag[n] || 0) + 1;
+        if (!prevTapped[n]) prevTapped[n] = [];
+        prevTapped[n].push(!!c.tapped);
+      });
+      currCards.forEach(function (c) {
+        var n = c.name || "Unknown";
+        currBag[n] = (currBag[n] || 0) + 1;
+        if (!currTapped[n]) currTapped[n] = [];
+        currTapped[n].push(!!c.tapped);
+      });
+      var entered = [];
+      var left = [];
+      var tapChanged = [];
+      var allNames = {};
+      Object.keys(prevBag).forEach(function (n) { allNames[n] = true; });
+      Object.keys(currBag).forEach(function (n) { allNames[n] = true; });
+      Object.keys(allNames).forEach(function (name) {
+        var pc = prevBag[name] || 0;
+        var cc = currBag[name] || 0;
+        var diff = cc - pc;
+        if (diff > 0) {
+          for (var i = 0; i < diff; i++) entered.push(name);
+        } else if (diff < 0) {
+          for (var i = 0; i < -diff; i++) {
+            var cardObj = prevCards.find(function (c) { return (c.name || "Unknown") === name; });
+            left.push(cardObj || { name: name, tapped: false });
+          }
+        }
+        if (pc > 0 && cc > 0) {
+          var minCount = Math.min(pc, cc);
+          var pt = (prevTapped[name] || []).slice(0, minCount);
+          var ct = (currTapped[name] || []).slice(0, minCount);
+          for (var i = 0; i < minCount; i++) {
+            if (pt[i] !== ct[i]) {
+              tapChanged.push(name);
+              break;
+            }
+          }
+        }
+      });
+      return { entered: entered, left: left, tapChanged: tapChanged };
+    }
+
+    function computeDiff(prevSnap, currSnap) {
+      if (!prevSnap || !currSnap) return null;
+      var diffs = {};
+      var prevPlayers = {};
+      (prevSnap.players || []).forEach(function (p) { prevPlayers[p.name] = p; });
+      (currSnap.players || []).forEach(function (curr) {
+        var prev = prevPlayers[curr.name];
+        if (!prev) return;
+        var prevHandNames = (prev.hand || []).map(function (c) {
+          return typeof c === "string" ? c : (c.name || "Unknown");
+        });
+        var currHandNames = (curr.hand || []).map(function (c) {
+          return typeof c === "string" ? c : (c.name || "Unknown");
+        });
+        diffs[curr.name] = {
+          lifeChange: (curr.life || 0) - (prev.life || 0),
+          handCountChange: (curr.hand_count || 0) - (prev.hand_count || 0),
+          battlefield: diffBattlefield(prev.battlefield || [], curr.battlefield || []),
+          graveyard: diffStringBag(prev.graveyard || [], curr.graveyard || []),
+          exile: diffStringBag(prev.exile || [], curr.exile || []),
+          hand: diffStringBag(prevHandNames, currHandNames),
+        };
+      });
+      return diffs;
+    }
 
     function showError(msg) {
       loadingEl.classList.add("hidden");
@@ -598,7 +792,7 @@ const { slug } = Astro.params;
       return wrapper;
     }
 
-    function makeZone(title, cards, cardImages, countOverride, useThumbnails) {
+    function makeZone(title, cards, cardImages, countOverride, useThumbnails, diffInfo) {
       const zone = document.createElement("div");
       zone.className = "zone";
 
@@ -620,13 +814,32 @@ const { slug } = Astro.params;
           hidden.textContent = count + " card" + (count !== 1 ? "s" : "");
           row.appendChild(hidden);
         }
+        // Still render ghost cards even if current cards list is empty
+        if (diffInfo && diffInfo.ghostCards) {
+          diffInfo.ghostCards.forEach(function (ghost) {
+            var gName = typeof ghost === "string" ? ghost : (ghost.name || "Unknown");
+            var gObj = typeof ghost === "string" ? null : ghost;
+            var gTapped = gObj ? !!gObj.tapped : false;
+            var el;
+            if (useThumbnails) {
+              el = makeCardThumbnail(gName, gObj, cardImages, gTapped);
+            } else {
+              el = makeCardChip(gName, gObj, cardImages, gTapped);
+            }
+            el.classList.add("card-ghost");
+            row.appendChild(el);
+          });
+        }
         return zone;
       }
+
+      // Track entered names to consume (splice) so duplicates are handled correctly
+      var enteredBag = diffInfo ? diffInfo.enteredNames.slice() : [];
+      var tapChangedSet = diffInfo ? diffInfo.tapChangedNames : [];
 
       cards.forEach(function (card) {
         let name, obj, tapped;
         if (typeof card === "string") {
-          // Graveyard/commander entries are just strings
           name = card;
           obj = null;
           tapped = false;
@@ -635,12 +848,44 @@ const { slug } = Astro.params;
           obj = card;
           tapped = !!card.tapped;
         }
+        var el;
         if (useThumbnails) {
-          row.appendChild(makeCardThumbnail(name, obj, cardImages, tapped));
+          el = makeCardThumbnail(name, obj, cardImages, tapped);
         } else {
-          row.appendChild(makeCardChip(name, obj, cardImages, tapped));
+          el = makeCardChip(name, obj, cardImages, tapped);
         }
+
+        // Apply diff highlights
+        if (diffInfo) {
+          var enteredIdx = enteredBag.indexOf(name);
+          if (enteredIdx !== -1) {
+            el.classList.add("card-entered");
+            enteredBag.splice(enteredIdx, 1);
+          }
+          if (tapChangedSet.indexOf(name) !== -1) {
+            el.classList.add("card-tap-changed");
+          }
+        }
+
+        row.appendChild(el);
       });
+
+      // Render ghost cards (cards that left this zone)
+      if (diffInfo && diffInfo.ghostCards) {
+        diffInfo.ghostCards.forEach(function (ghost) {
+          var gName = typeof ghost === "string" ? ghost : (ghost.name || "Unknown");
+          var gObj = typeof ghost === "string" ? null : ghost;
+          var gTapped = gObj ? !!gObj.tapped : false;
+          var el;
+          if (useThumbnails) {
+            el = makeCardThumbnail(gName, gObj, cardImages, gTapped);
+          } else {
+            el = makeCardChip(gName, gObj, cardImages, gTapped);
+          }
+          el.classList.add("card-ghost");
+          row.appendChild(el);
+        });
+      }
 
       return zone;
     }
@@ -648,6 +893,10 @@ const { slug } = Astro.params;
     function renderSnapshot(index) {
       const snap = game.snapshots[index];
       if (!snap) return;
+
+      // Compute diff against previous snapshot
+      var prevSnap = index > 0 ? game.snapshots[index - 1] : null;
+      var diffs = computeDiff(prevSnap, snap);
 
       // Turn info
       const phase = snap.phase || "";
@@ -661,6 +910,8 @@ const { slug } = Astro.params;
       // Players
       playersGrid.innerHTML = "";
       (snap.players || []).forEach(function (player) {
+        var playerDiff = diffs ? diffs[player.name] : null;
+
         const card = document.createElement("article");
         card.className = "player-card";
         if (player.has_left) card.classList.add("eliminated");
@@ -678,6 +929,13 @@ const { slug } = Astro.params;
         const lifeEl = document.createElement("div");
         lifeEl.className = "player-life";
         lifeEl.textContent = "Life " + (player.life ?? "?") + " | Lib " + (player.library_count ?? "?");
+        if (playerDiff && playerDiff.lifeChange !== 0) {
+          var lifeSpan = document.createElement("span");
+          lifeSpan.className = playerDiff.lifeChange > 0 ? "life-up" : "life-down";
+          lifeSpan.textContent = " (" + (playerDiff.lifeChange > 0 ? "+" : "") + playerDiff.lifeChange + ")";
+          lifeEl.appendChild(lifeSpan);
+          lifeEl.classList.add(playerDiff.lifeChange > 0 ? "life-changed-up" : "life-changed-down");
+        }
         header.appendChild(lifeEl);
 
         card.appendChild(header);
@@ -691,13 +949,36 @@ const { slug } = Astro.params;
           card.appendChild(countersEl);
         }
 
-        // Zones
+        // Zones — pass diff info where available
+        var bfDiff = playerDiff ? {
+          enteredNames: (playerDiff.battlefield.entered || []).slice(),
+          tapChangedNames: playerDiff.battlefield.tapChanged || [],
+          ghostCards: playerDiff.battlefield.left || [],
+        } : null;
         card.appendChild(makeZone("Commander", player.commanders, game.cardImages));
-        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages, null, true));
-        card.appendChild(makeZone("Hand", player.hand, game.cardImages, player.hand_count));
-        card.appendChild(makeZone("Graveyard", player.graveyard, game.cardImages));
+        card.appendChild(makeZone("Battlefield", player.battlefield, game.cardImages, null, true, bfDiff));
+
+        var handDiff = playerDiff ? {
+          enteredNames: (playerDiff.hand.entered || []).slice(),
+          tapChangedNames: [],
+          ghostCards: [],
+        } : null;
+        card.appendChild(makeZone("Hand", player.hand, game.cardImages, player.hand_count, false, handDiff));
+
+        var gyDiff = playerDiff ? {
+          enteredNames: (playerDiff.graveyard.entered || []).slice(),
+          tapChangedNames: [],
+          ghostCards: [],
+        } : null;
+        card.appendChild(makeZone("Graveyard", player.graveyard, game.cardImages, null, false, gyDiff));
+
         if (player.exile && player.exile.length > 0) {
-          card.appendChild(makeZone("Exile", player.exile, game.cardImages));
+          var exDiff = playerDiff ? {
+            enteredNames: (playerDiff.exile.entered || []).slice(),
+            tapChangedNames: [],
+            ghostCards: [],
+          } : null;
+          card.appendChild(makeZone("Exile", player.exile, game.cardImages, null, false, exDiff));
         }
 
         playersGrid.appendChild(card);
