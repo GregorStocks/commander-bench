@@ -101,6 +101,9 @@ public class SkeletonCallbackHandler {
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
+    private volatile String lastChatMessage = null; // For deduplicating outgoing chat
+    private volatile long lastChatTimeMs = 0; // Timestamp of last outgoing chat
+    private static final long CHAT_DEDUP_WINDOW_MS = 30_000; // Suppress identical messages within 30s
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -1059,10 +1062,10 @@ public class SkeletonCallbackHandler {
         ClientCallbackMethod method = action.getMethod();
         Object data = action.getData();
 
-        // Auto-populate choices if the model skipped get_action_choices
-        // (but only if no answer was also provided — models that send all params with
-        // defaults shouldn't trigger auto-populate since index=0 is likely a default)
-        if (index != null && lastChoices == null && answer == null) {
+        // Auto-populate choices if the model skipped get_action_choices.
+        // Some models send all params with defaults (e.g. index=0, answer=false);
+        // we still need choices populated so the index path can work.
+        if (index != null && lastChoices == null) {
             logger.info("[" + client.getUsername() + "] choose_action: auto-populating choices (get_action_choices was not called)");
             getActionChoices();
         }
@@ -1505,6 +1508,14 @@ public class SkeletonCallbackHandler {
             logger.warn("[" + client.getUsername() + "] Cannot send chat: no chat ID for game " + gameId);
             return false;
         }
+        // Suppress duplicate messages within the dedup window
+        long now = System.currentTimeMillis();
+        if (message.equals(lastChatMessage) && (now - lastChatTimeMs) < CHAT_DEDUP_WINDOW_MS) {
+            logger.info("[" + client.getUsername() + "] Suppressing duplicate chat message");
+            return true; // Pretend success so the model doesn't retry
+        }
+        lastChatMessage = message;
+        lastChatTimeMs = now;
         return session.sendChatMessage(chatId, message);
     }
 

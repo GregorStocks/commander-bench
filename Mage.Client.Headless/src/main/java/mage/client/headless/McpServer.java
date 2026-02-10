@@ -54,6 +54,12 @@ public class McpServer {
         this.stdout = new PrintWriter(System.out, true);
     }
 
+    /** Safely get a string from a JsonObject, returning null if the key is missing or the value is JSON null. */
+    private static String getStringOrNull(JsonObject obj, String key) {
+        if (!obj.has(key) || obj.get(key).isJsonNull()) return null;
+        return obj.get(key).getAsString();
+    }
+
     /**
      * Start the MCP server. Blocks until shutdown.
      */
@@ -400,7 +406,10 @@ public class McpServer {
     }
 
     private Map<String, Object> handleToolsCall(JsonObject params) {
-        String toolName = params.get("name").getAsString();
+        String toolName = getStringOrNull(params, "name");
+        if (toolName == null) {
+            throw new RuntimeException("Missing required 'name' parameter");
+        }
         JsonObject arguments = params.has("arguments") ? params.getAsJsonObject("arguments") : new JsonObject();
 
         Map<String, Object> toolResult;
@@ -415,7 +424,7 @@ public class McpServer {
                 break;
 
             case "get_game_log":
-                int maxChars = arguments.has("max_chars") ? arguments.get("max_chars").getAsInt() : 0;
+                int maxChars = arguments.has("max_chars") && !arguments.get("max_chars").isJsonNull() ? arguments.get("max_chars").getAsInt() : 0;
                 String log = callbackHandler.getGameLog(maxChars);
                 int totalLength = callbackHandler.getGameLogLength();
                 toolResult = new HashMap<>();
@@ -425,25 +434,28 @@ public class McpServer {
                 break;
 
             case "send_chat_message":
-                String message = arguments.get("message").getAsString();
+                String message = getStringOrNull(arguments, "message");
+                if (message == null) {
+                    throw new RuntimeException("Missing required 'message' parameter");
+                }
                 boolean success = callbackHandler.sendChatMessage(message);
                 toolResult = new HashMap<>();
                 toolResult.put("success", success);
                 break;
 
             case "wait_for_action":
-                int timeoutMs = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 15000;
+                int timeoutMs = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 15000;
                 toolResult = callbackHandler.waitForAction(timeoutMs);
                 break;
 
             case "pass_priority":
-                int passPriorityTimeout = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 30000;
+                int passPriorityTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 30000;
                 toolResult = callbackHandler.passPriority(passPriorityTimeout);
                 break;
 
             case "auto_pass_until_event":
-                int minNewChars = arguments.has("min_new_chars") ? arguments.get("min_new_chars").getAsInt() : 50;
-                int autoPassTimeout = arguments.has("timeout_ms") ? arguments.get("timeout_ms").getAsInt() : 10000;
+                int minNewChars = arguments.has("min_new_chars") && !arguments.get("min_new_chars").isJsonNull() ? arguments.get("min_new_chars").getAsInt() : 50;
+                int autoPassTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 10000;
                 toolResult = callbackHandler.autoPassUntilEvent(minNewChars, autoPassTimeout);
                 break;
 
@@ -452,14 +464,15 @@ public class McpServer {
                 break;
 
             case "get_oracle_text":
-                String cardName = arguments.has("card_name") ? arguments.get("card_name").getAsString() : null;
-                String objectId = arguments.has("object_id") ? arguments.get("object_id").getAsString() : null;
+                String cardName = getStringOrNull(arguments, "card_name");
+                String objectId = getStringOrNull(arguments, "object_id");
                 String[] cardNames = null;
-                if (arguments.has("card_names")) {
+                if (arguments.has("card_names") && !arguments.get("card_names").isJsonNull()) {
                     JsonArray namesArr = arguments.getAsJsonArray("card_names");
                     cardNames = new String[namesArr.size()];
                     for (int i = 0; i < namesArr.size(); i++) {
-                        cardNames[i] = namesArr.get(i).getAsString();
+                        JsonElement elem = namesArr.get(i);
+                        cardNames[i] = elem.isJsonNull() ? null : elem.getAsString();
                     }
                 }
                 toolResult = callbackHandler.getOracleText(cardName, objectId, cardNames);
@@ -470,21 +483,21 @@ public class McpServer {
                 break;
 
             case "choose_action":
-                Integer choiceIndex = arguments.has("index") ? arguments.get("index").getAsInt() : null;
-                Boolean choiceAnswer = arguments.has("answer") ? arguments.get("answer").getAsBoolean() : null;
-                Integer choiceAmount = arguments.has("amount") ? arguments.get("amount").getAsInt() : null;
+                Integer choiceIndex = arguments.has("index") && !arguments.get("index").isJsonNull() ? arguments.get("index").getAsInt() : null;
+                Boolean choiceAnswer = arguments.has("answer") && !arguments.get("answer").isJsonNull() ? arguments.get("answer").getAsBoolean() : null;
+                Integer choiceAmount = arguments.has("amount") && !arguments.get("amount").isJsonNull() ? arguments.get("amount").getAsInt() : null;
                 int[] choiceAmounts = null;
-                if (arguments.has("amounts")) {
+                if (arguments.has("amounts") && !arguments.get("amounts").isJsonNull()) {
                     JsonArray arr = arguments.getAsJsonArray("amounts");
                     if (arr.size() > 0) {
                         choiceAmounts = new int[arr.size()];
                         for (int i = 0; i < arr.size(); i++) {
-                            choiceAmounts[i] = arr.get(i).getAsInt();
+                            choiceAmounts[i] = arr.get(i).isJsonNull() ? 0 : arr.get(i).getAsInt();
                         }
                     }
                 }
-                Integer choicePile = arguments.has("pile") ? arguments.get("pile").getAsInt() : null;
-                String choiceText = arguments.has("text") ? arguments.get("text").getAsString() : null;
+                Integer choicePile = arguments.has("pile") && !arguments.get("pile").isJsonNull() ? arguments.get("pile").getAsInt() : null;
+                String choiceText = getStringOrNull(arguments, "text");
                 // Treat empty string as "not provided" (some models send all params with defaults)
                 if (choiceText != null && choiceText.isEmpty()) choiceText = null;
                 toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile, choiceText);
