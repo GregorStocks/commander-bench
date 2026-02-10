@@ -21,7 +21,7 @@ import mage.view.CardsView;
 /**
  * Streaming-mode exile panel with wider cards, a zone label, and a
  * semi-transparent reddish tint over cards to visually distinguish
- * exile from graveyard (echoing the paper convention of exiling sideways).
+ * exile from graveyard.  Fixed size — cards compress to always fit.
  */
 public class StreamingExilePanel extends JPanel {
 
@@ -29,8 +29,12 @@ public class StreamingExilePanel extends JPanel {
     private static final int CARD_WIDTH = 80;
     private static final int CARD_HEIGHT = (int) (CARD_WIDTH * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
 
-    // How much of each card is visible when stacked
-    private static final int STACK_OFFSET = 24;
+    // Maximum peek offset between stacked cards (shrinks as pile grows)
+    private static final int MAX_STACK_OFFSET = 24;
+    private static final int MIN_STACK_OFFSET = 5;
+
+    // Fixed content area height (room for card stacking)
+    private static final int CONTENT_HEIGHT = CARD_HEIGHT * 2;
 
     // Panel margin
     private static final int MARGIN = 5;
@@ -43,9 +47,11 @@ public class StreamingExilePanel extends JPanel {
     private static final Color LABEL_COLOR = new Color(200, 130, 130);
     private static final int LABEL_HEIGHT = 14;
 
+    private static final int PANEL_WIDTH = CARD_WIDTH + 2 * MARGIN;
+    private static final int PANEL_HEIGHT = LABEL_HEIGHT + CONTENT_HEIGHT;
+
     private final Map<UUID, MageCard> cards = new LinkedHashMap<>();
     private JPanel cardArea;
-    private JScrollPane jScrollPane;
     private BigCard bigCard;
     private UUID gameId;
 
@@ -70,15 +76,6 @@ public class StreamingExilePanel extends JPanel {
         cardArea.setBackground(new Color(0, 0, 0, 0));
         cardArea.setOpaque(false);
 
-        jScrollPane = new JScrollPane(cardArea);
-        jScrollPane.getViewport().setBackground(new Color(0, 0, 0, 0));
-        jScrollPane.setOpaque(false);
-        jScrollPane.setBorder(EMPTY_BORDER);
-        jScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-        jScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        jScrollPane.getVerticalScrollBar().setUnitIncrement(STACK_OFFSET);
-        jScrollPane.setViewportBorder(EMPTY_BORDER);
-
         JLabel label = new JLabel("EXILE");
         label.setFont(LABEL_FONT);
         label.setForeground(LABEL_COLOR);
@@ -90,11 +87,11 @@ public class StreamingExilePanel extends JPanel {
         setBorder(EMPTY_BORDER);
         setLayout(new BorderLayout());
         add(label, BorderLayout.NORTH);
-        add(jScrollPane, BorderLayout.CENTER);
+        add(cardArea, BorderLayout.CENTER);
 
-        int panelWidth = CARD_WIDTH + 2 * MARGIN;
-        setPreferredSize(new Dimension(panelWidth, LABEL_HEIGHT + CARD_HEIGHT));
-        setMinimumSize(new Dimension(panelWidth, 50));
+        setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
+        setMinimumSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
+        setMaximumSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
     }
 
     public void cleanUp() {
@@ -132,8 +129,6 @@ public class StreamingExilePanel extends JPanel {
         layoutCards();
         cardArea.revalidate();
         cardArea.repaint();
-        revalidate();
-        repaint();
     }
 
     private void addCard(CardView cardView) {
@@ -159,29 +154,34 @@ public class StreamingExilePanel extends JPanel {
     }
 
     private void layoutCards() {
-        int totalHeight;
         if (cards.isEmpty()) {
-            totalHeight = CARD_HEIGHT;
-        } else {
-            List<MageCard> cardList = new ArrayList<>(cards.values());
-            int y = 0;
-            for (int i = 0; i < cardList.size(); i++) {
-                MageCard card = cardList.get(i);
-                card.setCardBounds(0, y, CARD_WIDTH, CARD_HEIGHT);
-                cardArea.setComponentZOrder(card, cardList.size() - 1 - i);
-                y += STACK_OFFSET;
-            }
-            totalHeight = (cardList.size() - 1) * STACK_OFFSET + CARD_HEIGHT;
+            return;
         }
 
-        int panelWidth = CARD_WIDTH + 2 * MARGIN;
-        Dimension cardAreaSize = new Dimension(panelWidth, Math.max(totalHeight, CARD_HEIGHT));
-        cardArea.setPreferredSize(cardAreaSize);
+        List<MageCard> cardList = new ArrayList<>(cards.values());
+        int n = cardList.size();
 
-        Dimension panelSize = new Dimension(panelWidth, LABEL_HEIGHT + Math.max(totalHeight, CARD_HEIGHT));
-        setPreferredSize(panelSize);
-        setMinimumSize(panelSize);
-        revalidate();
+        // Dynamically compute stack offset so all cards fit in CONTENT_HEIGHT
+        int offset;
+        if (n <= 1) {
+            offset = 0;
+        } else {
+            int availableForOffsets = CONTENT_HEIGHT - CARD_HEIGHT;
+            offset = Math.min(MAX_STACK_OFFSET, availableForOffsets / (n - 1));
+            offset = Math.max(MIN_STACK_OFFSET, offset);
+        }
+
+        int y = 0;
+        for (int i = 0; i < n; i++) {
+            MageCard card = cardList.get(i);
+            card.setCardBounds(0, y, CARD_WIDTH, CARD_HEIGHT);
+            cardArea.setComponentZOrder(card, n - 1 - i);
+            if (i < n - 1) {
+                y += offset;
+            }
+        }
+
+        cardArea.setPreferredSize(new Dimension(PANEL_WIDTH, CONTENT_HEIGHT));
     }
 
     public int getCardCount() {

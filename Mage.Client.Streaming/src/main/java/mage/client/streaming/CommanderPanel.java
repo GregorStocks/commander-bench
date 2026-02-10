@@ -70,11 +70,13 @@ public class CommanderPanel extends JPanel {
         add(label, BorderLayout.NORTH);
         add(cardArea, BorderLayout.CENTER);
 
-        // Size for 1 commander slot (always visible)
+        // Fixed size — always visible, does not grow/shrink
         int panelWidth = CARD_WIDTH + 2 * MARGIN;
         int panelHeight = LABEL_HEIGHT + CARD_HEIGHT + 4;
-        setPreferredSize(new Dimension(panelWidth, panelHeight));
-        setMinimumSize(new Dimension(panelWidth, 50));
+        Dimension size = new Dimension(panelWidth, panelHeight);
+        setPreferredSize(size);
+        setMinimumSize(size);
+        setMaximumSize(size);
     }
 
     public void cleanUp() {
@@ -153,19 +155,7 @@ public class CommanderPanel extends JPanel {
             card.setCardBounds(x, 2, CARD_WIDTH, CARD_HEIGHT);
             x += CARD_WIDTH + CARD_GAP;
         }
-
-        // Calculate total size based on number of commanders (min 1 for placeholder)
-        int numCards = Math.max(1, cards.size());
-        int width = numCards * CARD_WIDTH + (numCards - 1) * CARD_GAP + 2 * MARGIN;
-        int panelHeight = LABEL_HEIGHT + CARD_HEIGHT + 4;
-
-        Dimension cardAreaSize = new Dimension(width, CARD_HEIGHT + 4);
-        cardArea.setPreferredSize(cardAreaSize);
-
-        Dimension panelSize = new Dimension(width, panelHeight);
-        setPreferredSize(panelSize);
-        setMinimumSize(panelSize);
-        revalidate();
+        // Panel size is fixed — set in initComponents, not updated here
     }
 
     /**
