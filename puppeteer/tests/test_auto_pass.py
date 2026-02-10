@@ -29,6 +29,13 @@ async def test_game_over_exits_immediately():
 
 
 @pytest.mark.asyncio
+async def test_player_dead_exits_immediately():
+    session = _make_session([json.dumps({"player_dead": True})])
+    await auto_pass_loop(session, None, "test", "test")
+    assert session.call_tool.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_consecutive_errors_cause_exit():
     max_errors = 3
     responses = [json.dumps({"error": "something broke"})] * (max_errors + 1)
