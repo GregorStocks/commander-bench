@@ -100,9 +100,11 @@ public class StreamingGamePanel extends GamePanel {
     private final Map<UUID, Set<UUID>> lastHandCardIds = new HashMap<>();
     private boolean handPanelsInitialized = false;
 
-    // Commander panels injected into each player's play area
+    // Zone panels injected into each player's west panel (replacing upstream panels)
     private final Map<UUID, CommanderPanel> commanderPanels = new HashMap<>();
-    private boolean commanderPanelsInjected = false;
+    private final Map<UUID, StreamingGraveyardPanel> streamingGraveyardPanels = new HashMap<>();
+    private final Map<UUID, StreamingExilePanel> streamingExilePanels = new HashMap<>();
+    private boolean zonePanelsInjected = false;
 
     // Commander avatar replacement (player UUID -> commander UUID that was used)
     private final Map<UUID, UUID> playerCommanderAvatars = new HashMap<>();
@@ -215,12 +217,12 @@ public class StreamingGamePanel extends GamePanel {
         requestHandPermissions(game);
         // Distribute hands to each player's PlayAreaPanel
         distributeHands(game);
-        // Distribute graveyards to each player's PlayAreaPanel
+        // Inject streaming zone panels (commander, graveyard, exile) into west panel
+        // Must happen before distributing cards to those panels
+        injectZonePanels(game);
+        // Distribute zone cards to the streaming panels
         distributeGraveyards(game);
-        // Distribute exile to each player's PlayAreaPanel
         distributeExile(game);
-        // Inject and distribute commanders to each player's PlayAreaPanel
-        injectCommanderPanels(game);
         distributeCommanders(game);
         // Replace default avatars with commander card art
         replaceAvatarsWithCommanderArt(game);
@@ -929,29 +931,28 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Distribute graveyard cards to each player's PlayAreaPanel.
+     * Distribute graveyard cards to each player's streaming graveyard panel.
      */
     private void distributeGraveyards(GameView game) {
         if (game == null || game.getPlayers() == null) {
             return;
         }
 
-        Map<UUID, PlayAreaPanel> players = getPlayers();
-
         for (PlayerView player : game.getPlayers()) {
-            PlayAreaPanel playArea = players.get(player.getPlayerId());
-            if (playArea == null) {
+            StreamingGraveyardPanel panel = streamingGraveyardPanels.get(player.getPlayerId());
+            if (panel == null) {
                 continue;
             }
 
-            // Get graveyard cards for this player (always available, no permissions needed)
             CardsView graveyardCards = player.getGraveyard();
-            playArea.loadGraveyardCards(graveyardCards, getBigCard(), getGameId());
+            if (graveyardCards != null && !graveyardCards.isEmpty()) {
+                panel.loadCards(graveyardCards, getBigCard(), getGameId());
+            }
         }
     }
 
     /**
-     * Distribute exile cards to each player's PlayAreaPanel.
+     * Distribute exile cards to each player's streaming exile panel.
      * PlayerView.getExile() already filters cards by ownership.
      */
     private void distributeExile(GameView game) {
@@ -959,36 +960,27 @@ public class StreamingGamePanel extends GamePanel {
             return;
         }
 
-        Map<UUID, PlayAreaPanel> players = getPlayers();
-
         for (PlayerView player : game.getPlayers()) {
-            PlayAreaPanel playArea = players.get(player.getPlayerId());
-            if (playArea == null) {
-                logger.debug("No play area for player: " + player.getName());
+            StreamingExilePanel panel = streamingExilePanels.get(player.getPlayerId());
+            if (panel == null) {
                 continue;
             }
 
-            // Get exile cards for this player (filtered by ownership in PlayerView)
             CardsView exileCards = player.getExile();
             if (exileCards != null && !exileCards.isEmpty()) {
                 logger.info("Player " + player.getName() + " has " + exileCards.size() + " exiled cards");
+                panel.loadCards(exileCards, getBigCard(), getGameId());
             }
-
-            ExilePanel exilePanel = playArea.getExilePanel();
-            if (exilePanel == null) {
-                logger.warn("No exile panel for player: " + player.getName());
-            }
-
-            playArea.loadExileCards(exileCards, getBigCard(), getGameId());
         }
     }
 
     /**
-     * Inject CommanderPanel into each player's west panel via reflection.
-     * This is called once after play areas are created.
+     * Inject streaming zone panels (commander, graveyard, exile) into each
+     * player's west panel, replacing the upstream graveyard/exile panels with
+     * wider, labeled versions.  Called once after play areas are created.
      */
-    private void injectCommanderPanels(GameView game) {
-        if (commanderPanelsInjected || game == null || game.getPlayers() == null) {
+    private void injectZonePanels(GameView game) {
+        if (zonePanelsInjected || game == null || game.getPlayers() == null) {
             return;
         }
 
@@ -1012,23 +1004,43 @@ public class StreamingGamePanel extends GamePanel {
                     continue;
                 }
 
-                // Create commander panel
-                CommanderPanel commanderPanel = new CommanderPanel();
-                commanderPanels.put(player.getPlayerId(), commanderPanel);
+                UUID playerId = player.getPlayerId();
 
-                // Add commander panel after player panel (index 1)
+                // Remove upstream graveyard and exile panels from the west panel
+                GraveyardPanel oldGy = playArea.getGraveyardPanel();
+                if (oldGy != null) {
+                    westPanel.remove(oldGy);
+                }
+                ExilePanel oldEx = playArea.getExilePanel();
+                if (oldEx != null) {
+                    westPanel.remove(oldEx);
+                }
+
+                // Create and inject our streaming zone panels
+                CommanderPanel commanderPanel = new CommanderPanel();
+                commanderPanels.put(playerId, commanderPanel);
+
+                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel();
+                streamingGraveyardPanels.put(playerId, graveyardPanel);
+
+                StreamingExilePanel exilePanel = new StreamingExilePanel();
+                streamingExilePanels.put(playerId, exilePanel);
+
                 // Layout: playerPanel (0), commanderPanel (1), graveyardPanel (2), exilePanel (3)
                 westPanel.add(commanderPanel, 1);
+                westPanel.add(graveyardPanel, 2);
+                westPanel.add(exilePanel, 3);
+
                 westPanel.revalidate();
                 westPanel.repaint();
 
-                logger.info("Injected commander panel for player: " + player.getName());
+                logger.info("Injected zone panels for player: " + player.getName());
             } catch (Exception e) {
-                logger.warn("Failed to inject commander panel for player: " + player.getName(), e);
+                logger.warn("Failed to inject zone panels for player: " + player.getName(), e);
             }
         }
 
-        commanderPanelsInjected = true;
+        zonePanelsInjected = true;
     }
 
     /**
@@ -1837,9 +1849,16 @@ public class StreamingGamePanel extends GamePanel {
                     playArea.getBattlefieldPanel().getPermanentPanels()
             );
             addCardRectsFromHandPanel(snapshot, playerId, playArea.getHandPanel());
-            addCardRectsFromPanelField(snapshot, playerId, "graveyard", playArea.getGraveyardPanel());
-            addCardRectsFromPanelField(snapshot, playerId, "exile", playArea.getExilePanel());
 
+            // Use streaming zone panels (with public getCardPanels) instead of reflection
+            StreamingGraveyardPanel gyPanel = streamingGraveyardPanels.get(playerId);
+            if (gyPanel != null) {
+                addCardRectsFromMap(snapshot, playerId, "graveyard", gyPanel.getCardPanels());
+            }
+            StreamingExilePanel exPanel = streamingExilePanels.get(playerId);
+            if (exPanel != null) {
+                addCardRectsFromMap(snapshot, playerId, "exile", exPanel.getCardPanels());
+            }
             CommanderPanel commanderPanel = commanderPanels.get(playerId);
             if (commanderPanel != null) {
                 addCardRectsFromMap(snapshot, playerId, "commanders", commanderPanel.getCardPanels());
@@ -1866,23 +1885,7 @@ public class StreamingGamePanel extends GamePanel {
         }
     }
 
-    private void addCardRectsFromPanelField(OverlayLayoutSnapshot snapshot, UUID playerId, String zone, JPanel panel) {
-        if (panel == null) {
-            return;
-        }
-        if (!(panel instanceof GraveyardPanel || panel instanceof ExilePanel)) {
-            return;
-        }
-        try {
-            Field cardsField = panel.getClass().getDeclaredField("cards");
-            cardsField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Map<UUID, MageCard> cardMap = (Map<UUID, MageCard>) cardsField.get(panel);
-            addCardRectsFromMap(snapshot, playerId, zone, cardMap);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            // Best effort only; if this fails, non-positional overlay still works.
-        }
-    }
+
 
     private void addStackCardRects(OverlayLayoutSnapshot snapshot) {
         try {
