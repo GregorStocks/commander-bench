@@ -101,6 +101,7 @@ public class SkeletonCallbackHandler {
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
+    private volatile boolean playerDead = false; // Set when we see "{name} has lost the game" in chat
     private volatile String lastChatMessage = null; // For deduplicating outgoing chat
     private volatile long lastChatTimeMs = 0; // Timestamp of last outgoing chat
     private static final long CHAT_DEDUP_WINDOW_MS = 30_000; // Suppress identical messages within 30s
@@ -1536,6 +1537,9 @@ public class SkeletonCallbackHandler {
      * Drain unseen chat messages and attach to result map (if any).
      */
     private void attachUnseenChat(Map<String, Object> result) {
+        if (playerDead) {
+            result.put("player_dead", true);
+        }
         synchronized (unseenChat) {
             if (!unseenChat.isEmpty()) {
                 result.put("recent_chat", new ArrayList<>(unseenChat));
@@ -1715,6 +1719,7 @@ public class SkeletonCallbackHandler {
                         result.put("new_log", changes);
                         result.put("actions_taken", actionsHandled);
                         result.put("game_over", activeGames.isEmpty());
+                        if (playerDead) result.put("player_dead", true);
                         return result;
                     }
                 }
@@ -1728,6 +1733,7 @@ public class SkeletonCallbackHandler {
                 result.put("new_log", getGameLogSince(startLogLength));
                 result.put("actions_taken", actionsHandled);
                 result.put("game_over", activeGames.isEmpty());
+                if (playerDead) result.put("player_dead", true);
                 return result;
             }
 
@@ -1755,6 +1761,7 @@ public class SkeletonCallbackHandler {
         result.put("new_log", fullLog);
         result.put("actions_taken", actionsHandled);
         result.put("game_over", activeGames.isEmpty());
+        if (playerDead) result.put("player_dead", true);
         return result;
     }
 
@@ -2534,6 +2541,12 @@ public class SkeletonCallbackHandler {
             String logEntry = null;
             if (chatMsg.getMessageType() == ChatMessage.MessageType.GAME) {
                 logEntry = chatMsg.getMessage();
+                // Detect when our player has lost the game
+                if (!playerDead && logEntry != null && logEntry.contains("has lost the game")
+                        && logEntry.contains(client.getUsername())) {
+                    playerDead = true;
+                    logger.info("[" + client.getUsername() + "] Player death detected from game log");
+                }
             } else if (chatMsg.getMessageType() == ChatMessage.MessageType.TALK) {
                 // Include player chat so LLM pilots can see each other's messages
                 String user = chatMsg.getUsername();

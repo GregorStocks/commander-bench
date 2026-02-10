@@ -300,6 +300,12 @@ async def run_pilot_loop(
                     elif fn.name == "pass_priority":
                         try:
                             result_data = json.loads(result_text)
+                            if result_data.get("player_dead"):
+                                _log("[pilot] Player is dead, switching to auto-pass")
+                                if game_log:
+                                    game_log.emit("auto_pilot_mode", reason="player_dead")
+                                await auto_pass_loop(session, game_dir, username, "pilot")
+                                return
                             if result_data.get("action_pending"):
                                 turn_had_actionable_opportunity = True
                             # timeout=true means nothing to do — don't penalize
