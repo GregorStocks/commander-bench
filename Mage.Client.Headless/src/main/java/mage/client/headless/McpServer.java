@@ -476,13 +476,17 @@ public class McpServer {
                 int[] choiceAmounts = null;
                 if (arguments.has("amounts")) {
                     JsonArray arr = arguments.getAsJsonArray("amounts");
-                    choiceAmounts = new int[arr.size()];
-                    for (int i = 0; i < arr.size(); i++) {
-                        choiceAmounts[i] = arr.get(i).getAsInt();
+                    if (arr.size() > 0) {
+                        choiceAmounts = new int[arr.size()];
+                        for (int i = 0; i < arr.size(); i++) {
+                            choiceAmounts[i] = arr.get(i).getAsInt();
+                        }
                     }
                 }
                 Integer choicePile = arguments.has("pile") ? arguments.get("pile").getAsInt() : null;
                 String choiceText = arguments.has("text") ? arguments.get("text").getAsString() : null;
+                // Treat empty string as "not provided" (some models send all params with defaults)
+                if (choiceText != null && choiceText.isEmpty()) choiceText = null;
                 toolResult = callbackHandler.chooseAction(choiceIndex, choiceAnswer, choiceAmount, choiceAmounts, choicePile, choiceText);
                 break;
 
