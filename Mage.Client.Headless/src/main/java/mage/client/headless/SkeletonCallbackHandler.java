@@ -2966,12 +2966,26 @@ public class SkeletonCallbackHandler {
                 if (objectId.equals(payingForId)) {
                     continue;
                 }
+                // Don't re-tap a source whose activation cost already failed to pay
+                if (failedManaCasts.contains(objectId)) {
+                    continue;
+                }
                 PlayableObjectStats stats = entry.getValue();
-                // Only auto-tap mana abilities that use {T} — non-tap mana abilities
-                // (sacrifice, discard, etc.) have strategic cost and need manual selection
+                // Only auto-tap mana abilities that use {T} with no additional mana cost.
+                // Non-tap mana abilities (sacrifice, discard, etc.) have strategic cost.
+                // Abilities like "{1}, {T}: Add {B}{R}" (Shadowblood Ridge) cost mana to
+                // activate — tapping them triggers a sub-payment that can loop infinitely.
                 boolean hasTapManaAbility = false;
                 for (String name : stats.getAllManaAbilityNames()) {
                     if (name.contains("{T}")) {
+                        // Check that the activation cost (before ':') doesn't require mana
+                        int colonPos = name.indexOf(':');
+                        if (colonPos > 0) {
+                            String costPart = name.substring(0, colonPos);
+                            if (costPart.matches(".*\\{[0-9WUBRGC]\\}.*")) {
+                                continue; // Non-free activation cost — skip
+                            }
+                        }
                         hasTapManaAbility = true;
                         break;
                     }
