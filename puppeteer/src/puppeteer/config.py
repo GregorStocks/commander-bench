@@ -59,6 +59,7 @@ class PilotPlayer:
     model: str | None = None  # LLM model (e.g., "google/gemini-2.0-flash-001")
     base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
     system_prompt: str | None = None  # Custom system prompt
+    max_interactions_per_turn: int | None = None  # Loop detection threshold (default 25 in Java)
 
 
 @dataclass

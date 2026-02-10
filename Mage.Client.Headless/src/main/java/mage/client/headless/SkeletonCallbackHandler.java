@@ -95,9 +95,9 @@ public class SkeletonCallbackHandler {
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
+    private volatile int interactionsThisTurn = 0; // Generic loop detection: count model interactions per turn
+    private volatile int maxInteractionsPerTurn = 25; // Configurable per-model; after this many, auto-pass rest of turn
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
-    private volatile int consecutiveCombatSelects = 0; // Track repeated combat prompts to detect loops
-    private static final int MAX_COMBAT_SELECTS_BEFORE_AUTO_CONFIRM = 5; // Auto-confirm after this many
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
     private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
@@ -243,6 +243,11 @@ public class SkeletonCallbackHandler {
 
     public void setDeckList(DeckCardLists deckList) {
         this.deckList = deckList;
+    }
+
+    public void setMaxInteractionsPerTurn(int max) {
+        this.maxInteractionsPerTurn = Math.max(5, max);
+        logger.info("[" + client.getUsername() + "] maxInteractionsPerTurn set to " + this.maxInteractionsPerTurn);
     }
 
     public void reset() {
@@ -554,12 +559,13 @@ public class SkeletonCallbackHandler {
                 List<Object> indexToUuid = new ArrayList<>();
 
                 if (playable != null && !playable.isEmpty()) {
-                    // Clear failed casts on turn change
+                    // Clear failed casts and loop counter on turn change
                     if (gameView != null) {
                         int turn = gameView.getTurn();
                         if (turn != lastTurnNumber) {
                             lastTurnNumber = turn;
                             failedManaCasts.clear();
+                            interactionsThisTurn = 0;
                         }
                     }
 
@@ -1020,12 +1026,24 @@ public class SkeletonCallbackHandler {
      * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
      */
     public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile, String text) {
+        interactionsThisTurn++;
         Map<String, Object> result = new HashMap<>();
         PendingAction action = pendingAction;
 
         if (action == null) {
             result.put("success", false);
             result.put("error", "No pending action");
+            return result;
+        }
+
+        // Loop detection: model has made too many interactions this turn — auto-handle
+        if (interactionsThisTurn > maxInteractionsPerTurn) {
+            logger.warn("[" + client.getUsername() + "] Loop detected (" + interactionsThisTurn
+                + " interactions this turn), auto-handling " + action.getMethod().name());
+            executeDefaultAction();
+            result.put("success", true);
+            result.put("action_taken", "auto_passed_loop_detected");
+            result.put("warning", "Too many interactions this turn (" + interactionsThisTurn + "). Auto-passing until next turn.");
             return result;
         }
 
@@ -1521,6 +1539,7 @@ public class SkeletonCallbackHandler {
      * any non-GAME_SELECT action (mulligan, target, blocker, etc.).
      */
     public Map<String, Object> passPriority(int timeoutMs) {
+        interactionsThisTurn++;
         long startTime = System.currentTimeMillis();
         int actionsPassed = 0;
 
@@ -1528,6 +1547,15 @@ public class SkeletonCallbackHandler {
             PendingAction action = pendingAction;
             if (action != null) {
                 ClientCallbackMethod method = action.getMethod();
+
+                // Generic loop detection: too many interactions this turn — auto-pass everything
+                if (interactionsThisTurn > maxInteractionsPerTurn) {
+                    logger.warn("[" + client.getUsername() + "] Loop detected (" + interactionsThisTurn
+                        + " interactions on turn " + lastTurnNumber + "), auto-passing " + method.name());
+                    executeDefaultAction();
+                    actionsPassed++;
+                    continue;
+                }
 
                 // GAME_PLAY_MANA: auto-tapper couldn't handle it, cancel the spell
                 if (method == ClientCallbackMethod.GAME_PLAY_MANA || method == ClientCallbackMethod.GAME_PLAY_XMANA) {
@@ -1560,34 +1588,19 @@ public class SkeletonCallbackHandler {
                     GameView gv = ((GameClientMessage) action.getData()).getGameView();
                     if (gv != null) {
                         lastGameView = gv;
-                        // Clear failed casts when the turn changes (new mana available)
+                        // Clear failed casts and loop counter when the turn changes
                         int turn = gv.getTurn();
                         if (turn != lastTurnNumber) {
                             lastTurnNumber = turn;
                             failedManaCasts.clear();
+                            interactionsThisTurn = 0;
                         }
                     }
                 }
 
-                // Combat selections (declare attackers/blockers) always need LLM input,
-                // but detect infinite loops (e.g. model repeatedly clicking "All attack")
+                // Combat selections (declare attackers/blockers) always need LLM input
                 String combatType = detectCombatSelect(action);
                 if (combatType != null) {
-                    consecutiveCombatSelects++;
-                    if (consecutiveCombatSelects > MAX_COMBAT_SELECTS_BEFORE_AUTO_CONFIRM) {
-                        // Stuck in a combat declaration loop — auto-confirm to break out
-                        logger.warn("[" + client.getUsername() + "] Combat loop detected ("
-                            + consecutiveCombatSelects + " consecutive combat selects), auto-confirming");
-                        synchronized (actionLock) {
-                            if (pendingAction == action) {
-                                pendingAction = null;
-                            }
-                        }
-                        session.sendPlayerBoolean(action.getGameId(), true);
-                        consecutiveCombatSelects = 0;
-                        actionsPassed++;
-                        continue;
-                    }
                     Map<String, Object> result = new HashMap<>();
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
@@ -1595,8 +1608,6 @@ public class SkeletonCallbackHandler {
                     result.put("combat_phase", combatType);
                     attachUnseenChat(result);
                     return result;
-                } else {
-                    consecutiveCombatSelects = 0;
                 }
 
                 // Check if there are playable cards (non-mana-only, excluding failed casts)

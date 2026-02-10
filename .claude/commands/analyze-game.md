@@ -1,35 +1,48 @@
-# Create Issues for Game Problems
+# Analyze Game Logs and File Issues
 
-Analyze the most recent game log and create issue files for every problem found.
+Analyze recent game logs, identify bugs and problems, and file issues for each one.
 
 ## Workflow
 
-1. Find the most recent game log:
+1. Find recent game logs:
    ```bash
    GAME_DIR=$(readlink ~/mage-bench-logs/last || ls -dt ~/mage-bench-logs/game_* | head -1)
    echo "Analyzing: $GAME_DIR"
+   ls "$GAME_DIR"
    ```
 
-2. Read all relevant log files from that directory:
-   - `errors.log` — global errors
-   - `*_errors.log` — per-player errors
-   - `*_pilot.log` — per-player LLM decision logs
-   - `game_events.jsonl` — game event stream
-   - `config.json` — game configuration (players, models, decks)
-   - `*_skeleton.jsonl` — raw MCP tool call logs
+2. Read `config.json` and `game_meta.json` first — understand who played, what models/decks were used, and the game outcome (winner, turn count, life totals).
 
-3. Analyze for problems across these categories:
-   - **MCP/tooling bugs**: wrong tool behavior, crashes, index errors
-   - **LLM decision failures**: models misusing tools, sending wrong parameters, loops
-   - **Game flow issues**: infinite loops, stalling, missing events, auto-pass triggers
-   - **Prompt/instruction gaps**: models not understanding how to use tools correctly
-   - **Context/resource issues**: context trimming, token waste, excessive polling
+3. Check existing issues to avoid duplicates:
+   ```bash
+   for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r .title "$f")"; done
+   ```
 
-4. For each problem found, create a JSON issue file in `issues/`:
+4. **Use parallel agents** to analyze different log types simultaneously:
+
+   - **Error logs**: Read `*_errors.log` files. Look for Java exceptions (NPE, IndexOutOfBounds, ClassCast), MCP tool failures, and stack traces. Note the exact filename and line numbers.
+   - **Pilot logs**: Read `*_pilot.log` files. Look for LLM decision failures, repeated tool call patterns (loops), models sending wrong parameters, empty responses, and context trimming warnings.
+   - **Skeleton logs**: Read `*_skeleton.jsonl` files. Look for repeated identical MCP calls (loop signatures), failed actions, "Index out of range" errors, and action sequences that suggest confusion (e.g., cast → cancel → cast → cancel).
+   - **Game events**: Read `game_events.jsonl`. Look for stalls (long gaps between events), excessive auto-passes, turn timeouts, and game flow anomalies.
+
+5. **Cross-reference findings** — a single bug often shows up across multiple log files. For example, an NPE in error logs corresponds to a failed tool call in skeleton logs and a confused retry loop in pilot logs. Group these into one issue, not three.
+
+6. **Distinguish code bugs from model issues**:
+   - **Code bugs** (file issues): NPEs, wrong tool behavior, missing error handling, incorrect game state reporting — these need code fixes in Java or Python.
+   - **Model behavior** (note but don't file unless extreme): Passive play, bad threat assessment, suboptimal targeting — these are model quality issues. Only file if a model is completely non-functional (e.g., never plays spells, always passes).
+   - **Already handled** (skip): Transient API errors with successful retries, empty responses caught by retry logic, one-off mistakes the model recovers from.
+
+7. For each code bug, **trace it to source code**. Read the relevant Java/Python files to identify the exact line and root cause. Include in the issue:
+   - The game log path: `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`
+   - Specific log files and approximate line numbers where the bug manifests
+   - The source code file and line where the fix should go (e.g., `SkeletonCallbackHandler.java:1407`)
+   - A brief description of the root cause and suggested fix direction
+
+8. Create issue files in `issues/`:
    ```json
    {
      "title": "Short summary",
-     "description": "Full description with evidence from logs.\n\nGame log: ~/mage-bench-logs/game_YYYYMMDD_HHMMSS/",
+     "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/mage-bench-logs/game_.../Player_errors.log: NPE at line 42\n- ~/mage-bench-logs/game_.../Player_skeleton.jsonl: repeated cast-cancel pattern\n\nSource: SkeletonCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
      "status": "open",
      "priority": N,
      "type": "task",
@@ -40,17 +53,13 @@ Analyze the most recent game log and create issue files for every problem found.
    ```
 
    Priority guide:
-   - **P1**: Bugs that break core functionality (spells fizzle, actions cancelled)
-   - **P2**: Bugs that cause major waste (infinite loops, stalling, repeated errors)
-   - **P3**: Suboptimal behavior or missing features (passive play, bad targeting, missing events)
-   - **P4**: Minor issues (transient API errors, cosmetic)
+   - **P1**: Crashes or bugs that break core game actions (NPEs during targeting, spells fizzling due to code bugs)
+   - **P2**: Bugs causing major waste (infinite loops, stalling, repeated errors that block a player)
+   - **P3**: Suboptimal tool behavior or missing features (bad descriptions, missing info in prompts)
+   - **P4**: Minor issues (cosmetic, transient, or rare edge cases)
 
    Labels: `headless-client`, `puppeteer`, `pilot`, `streaming-client`
 
-   Filename: kebab-case summary (e.g., `mana-pool-loop.json`)
+9. **Optionally check multiple recent games** — if the most recent game is clean, look at 2-3 recent games to find patterns. Bugs that reproduce across games are higher priority.
 
-5. **Always include the game log path** in each issue description so we can find the evidence later.
-
-6. Check existing issues first (`ls issues/`) to avoid duplicates. If an existing issue covers the same problem, skip it or note it's a repeat occurrence.
-
-7. Present a summary of all issues created, grouped by priority.
+10. Present a summary of all issues created, grouped by priority. For model-only issues, mention them in the summary but note they don't need code fixes.
