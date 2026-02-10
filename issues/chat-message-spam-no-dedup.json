@@ -1,0 +1,10 @@
+{
+  "title": "No deduplication or rate limiting on LLM chat messages",
+  "description": "LLMs can spam identical chat messages with no throttling. Neither the Java MCP layer nor the Python pilot checks for duplicate or rapid-fire messages.\n\nEvidence:\n- ~/mage-bench-logs/game_20260209_233247/Gemini2.5Flash_pilot.log: The exact same message (\"Devstral playing some serious mind games with this delay...\") was sent 30+ times consecutively\n- Burns LLM tokens on repeated send_chat_message tool calls\n- Clutters game log and chat for other players/observers\n\nSource: SkeletonCallbackHandler.java:1497-1509 (sendChatMessage) — no dedup logic. SessionImpl.java:1103-1113 (sendChatMessage) — also no dedup.\n\nSuggested fix: Add deduplication in SkeletonCallbackHandler.sendChatMessage(). Track the last message text and timestamp; suppress exact duplicates within a short time window (e.g. 30s). Could also add a per-turn message cap. Java side is preferred per AGENTS.md (MCP layer absorbs complexity).",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-09T23:50:00.000000-08:00",
+  "updated_at": "2026-02-09T23:50:00.000000-08:00"
+}

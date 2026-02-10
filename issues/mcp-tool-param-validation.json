@@ -1,8 +1,8 @@
 {
   "title": "MCP server NPEs on malformed tool requests",
-  "description": "In McpServer.java handleToolsCall(), params.get(\"name\").getAsString() (line 403) will NPE if the \"name\" key is missing. Similarly, send_chat_message does arguments.get(\"message\").getAsString() (line 428) without null-checking the key. An LLM sending malformed JSON crashes the MCP server thread. Should add null checks and return proper MCP error responses for missing/invalid params.",
+  "description": "In McpServer.java handleToolsCall(), params.get(\"name\").getAsString() (line 403) will NPE if the \"name\" key is missing. Similarly, send_chat_message does arguments.get(\"message\").getAsString() (line 428) without null-checking the key. An LLM sending malformed JSON crashes the MCP server thread. Should add null checks and return proper MCP error responses for missing/invalid params.\n\nAdditional variant: NPE also triggers when keys exist but have JSON null values. Gson's JsonNull.getAsString() calls String.length() on null internally, producing: \"Cannot invoke String.length() because str is null\". The pattern `arguments.has(key) ? arguments.get(key).getAsString() : null` is unsafe because has() returns true for null values. Affected lines: 428, 455-456, 462, 487.\n\nEvidence:\n- ~/mage-bench-logs/game_20260209_215316/GPT-4.1-mini_errors.log: 7 occurrences of \"MCP request failed (tools/call): Cannot invoke String.length()\"",
   "status": "open",
-  "priority": 3,
+  "priority": 2,
   "type": "bug",
   "labels": ["headless-client"],
   "created_at": "2026-02-09T00:00:00.000000-08:00",

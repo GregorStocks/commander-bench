@@ -1,0 +1,10 @@
+{
+  "title": "choose_action auto-populate skipped when model sends both index and answer",
+  "description": "When an LLM sends both `index` and `answer` parameters to `choose_action`, the auto-populate of cached choices is skipped, causing \"Index N out of range\" failures.\n\nRoot cause: SkeletonCallbackHandler.java:1065 has the condition:\n```java\nif (index != null && lastChoices == null && answer == null)\n```\nThe `answer == null` guard prevents auto-populate when models send all params with defaults (e.g. `index=0, answer=false`). With auto-populate skipped, `lastChoices` stays null, and the index validation at line 1097 fails.\n\nEvidence:\n- ~/mage-bench-logs/game_20260209_215316/GPT-4.1-mini_errors.log: 70+ \"Index 0 out of range\" errors over 30 minutes\n- ~/mage-bench-logs/game_20260209_233247/Devstral_errors.log: 5 \"Index 1 out of range\" errors\n- Reproduces across multiple games and multiple models (GPT-4.1-mini, Devstral)\n- In the worst case, the model enters a loop of failed choose_action calls, triggering stall detection repeatedly\n\nSource: SkeletonCallbackHandler.java:1065\n\nSuggested fix: Remove the `answer == null` guard from the auto-populate condition. The downstream switch cases (GAME_SELECT at line 1090, GAME_ASK at line 1074, etc.) already correctly handle the priority between index and answer, so auto-populating choices when answer is also present is safe.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-09T23:50:00.000000-08:00",
+  "updated_at": "2026-02-09T23:50:00.000000-08:00"
+}
