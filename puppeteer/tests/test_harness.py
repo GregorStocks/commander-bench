@@ -55,11 +55,11 @@ def test_ensure_game_over_event_already_present():
 
 
 def test_ensure_game_over_event_appended():
-    """Should append a game_over event if one is missing."""
+    """Should append a game_over event with correct seq if one is missing."""
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
-        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "type": "game_start"}) + "\n")
+        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 42, "type": "game_start"}) + "\n")
 
         _ensure_game_over_event(game_dir)
 
@@ -68,6 +68,7 @@ def test_ensure_game_over_event_appended():
         last_event = json.loads(lines[-1])
         assert last_event["type"] == "game_over"
         assert last_event["reason"] == "timeout_or_killed"
+        assert last_event["seq"] == 43
 
 
 def test_ensure_game_over_event_no_file():
@@ -80,6 +81,7 @@ def test_ensure_game_over_event_no_file():
         assert events_file.exists()
         event = json.loads(events_file.read_text().strip())
         assert event["type"] == "game_over"
+        assert event["seq"] == 1
 
 
 def test_write_error_log_combines():

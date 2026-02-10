@@ -79,6 +79,7 @@ def _ensure_game_over_event(game_dir: Path) -> None:
     """
     events_file = game_dir / "game_events.jsonl"
     has_game_over = False
+    max_seq = 0
     if events_file.exists():
         try:
             with open(events_file) as f:
@@ -90,6 +91,9 @@ def _ensure_game_over_event(game_dir: Path) -> None:
                         event = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    seq = event.get("seq", 0)
+                    if isinstance(seq, int) and seq > max_seq:
+                        max_seq = seq
                     if event.get("type") == "game_over":
                         has_game_over = True
                         break
@@ -100,6 +104,7 @@ def _ensure_game_over_event(game_dir: Path) -> None:
         ts = datetime.now().isoformat(timespec="milliseconds")
         event = {
             "ts": ts,
+            "seq": max_seq + 1,
             "type": "game_over",
             "message": "Game ended (no GAME_OVER received)",
             "reason": "timeout_or_killed",
