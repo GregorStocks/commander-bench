@@ -59,9 +59,7 @@ def test_ensure_game_over_event_appended():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
-        events_file.write_text(
-            json.dumps({"ts": "2024-01-01T00:00:00", "seq": 42, "type": "game_start"}) + "\n"
-        )
+        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 42, "type": "game_start"}) + "\n")
 
         _ensure_game_over_event(game_dir)
 
