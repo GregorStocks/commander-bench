@@ -12,6 +12,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
 
+from puppeteer.auto_pass import auto_pass_loop
 from puppeteer.llm_cost import (
     DEFAULT_BASE_URL,
     get_model_price,
@@ -24,8 +25,6 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 256
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
-MAX_AUTO_PASS_ITERATIONS = 500  # ~80+ min at 10s/iteration
-MAX_CONSECUTIVE_ERRORS = 20  # 20 * 5s = ~100s of continuous failure
 
 
 def _log(msg: str) -> None:
@@ -252,50 +251,7 @@ async def run_llm_loop(
                     username,
                     "[chatterbox] Credits exhausted, switching to pass-only mode",
                 )
-                consecutive_errors = 0
-                for _ in range(MAX_AUTO_PASS_ITERATIONS):
-                    try:
-                        result_text = await execute_tool(session, "auto_pass_until_event", {})
-                        try:
-                            result_data = json.loads(result_text)
-                        except (json.JSONDecodeError, TypeError):
-                            result_data = {}
-                        if result_data.get("game_over"):
-                            _log("[chatterbox] Game over detected, exiting auto-pass loop")
-                            return
-                        if "error" in result_data:
-                            consecutive_errors += 1
-                            _log_error(
-                                game_dir,
-                                username,
-                                f"[chatterbox] Auto-pass error: {result_data['error']}",
-                            )
-                            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                                _log_error(
-                                    game_dir,
-                                    username,
-                                    "[chatterbox] Too many consecutive errors, exiting",
-                                )
-                                return
-                            await asyncio.sleep(5)
-                        else:
-                            consecutive_errors = 0
-                    except Exception as pass_err:
-                        consecutive_errors += 1
-                        _log_error(game_dir, username, f"[chatterbox] Auto-pass exception: {pass_err}")
-                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                            _log_error(
-                                game_dir,
-                                username,
-                                "[chatterbox] Too many consecutive errors, exiting",
-                            )
-                            return
-                        await asyncio.sleep(5)
-                _log_error(
-                    game_dir,
-                    username,
-                    "[chatterbox] Auto-pass loop reached max iterations, exiting",
-                )
+                await auto_pass_loop(session, game_dir, username, "chatterbox")
                 return
 
             # Transient error - keep actions flowing while waiting to retry

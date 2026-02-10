@@ -60,7 +60,7 @@ module = ["puppeteer.harness", "puppeteer.config"]
 disable_error_code = ["assignment", "attr-defined", "arg-type"]
 
 [[tool.mypy.overrides]]
-module = ["puppeteer.sleepwalker", "puppeteer.chatterbox", "puppeteer.pilot"]
+module = ["puppeteer.sleepwalker", "puppeteer.chatterbox", "puppeteer.pilot", "puppeteer.auto_pass"]
 disable_error_code = ["assignment", "attr-defined", "union-attr", "call-overload", "arg-type"]
 
 [[tool.mypy.overrides]]
