@@ -1203,65 +1203,65 @@ public class SkeletonCallbackHandler {
                     break;
                 }
 
-                case GAME_TARGET:
+                case GAME_TARGET: {
+                    GameClientMessage targetMsg = (GameClientMessage) data;
+                    boolean required = targetMsg.isFlag();
+
                     // Index takes priority over answer:false (models sometimes send both)
                     if (index != null) {
                         if (answer != null) {
                             logger.warn("[" + client.getUsername() + "] choose_action: ignoring answer=" + answer + " because index was also provided for GAME_TARGET");
                         }
                         List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
-                        if (choices == null || index < 0 || index >= choices.size()) {
+                        if (choices != null && index >= 0 && index < choices.size()) {
+                            session.sendPlayerUUID(gameId, (UUID) choices.get(index));
+                            result.put("action_taken", "selected_target_" + index);
+                            break;
+                        }
+                        // Index out of range. For required targets, auto-select to avoid
+                        // infinite retry loops. For optional targets, return an error so
+                        // the model can retry with a valid index or answer=false.
+                        if (!required) {
                             result.put("success", false);
                             result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                             pendingAction = action;
                             return result;
                         }
-                        session.sendPlayerUUID(gameId, (UUID) choices.get(index));
-                        result.put("action_taken", "selected_target_" + index);
+                        logger.warn("[" + client.getUsername() + "] choose_action: index " + index
+                            + " out of range for required GAME_TARGET (choices="
+                            + (choices == null ? "null" : choices.size()) + "), auto-selecting");
                     } else if (answer != null && !answer) {
-                        // Cancel — only for optional targets
-                        GameClientMessage targetMsg = (GameClientMessage) data;
-                        if (targetMsg.isFlag()) {
-                            // Required target — auto-select first valid target to prevent infinite loops
-                            // (models sometimes send answer=false for mandatory targets like Sylvan Library triggers)
-                            Set<UUID> autoTargets = findValidTargets(targetMsg);
-                            if (autoTargets != null && !autoTargets.isEmpty()) {
-                                UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
-                                logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (model sent answer=false)");
-                                session.sendPlayerUUID(gameId, firstTarget);
-                                result.put("action_taken", "auto_selected_required_target");
-                                result.put("warning", "Required target auto-selected because answer=false is invalid for mandatory targets. Use index=N next time.");
-                            } else {
-                                logger.error("[" + client.getUsername() + "] Required GAME_TARGET has no valid targets — cancelling to avoid infinite loop");
-                                session.sendPlayerBoolean(gameId, false);
-                                result.put("action_taken", "cancelled_no_valid_targets");
-                            }
+                        // Explicit cancel via answer=false
+                        if (!required) {
+                            session.sendPlayerBoolean(gameId, false);
+                            result.put("action_taken", "cancelled");
                             break;
                         }
-                        session.sendPlayerBoolean(gameId, false);
-                        result.put("action_taken", "cancelled");
-                    } else {
-                        GameClientMessage targetMsg2 = (GameClientMessage) data;
-                        if (targetMsg2.isFlag()) {
-                            // Required target with no valid response — auto-select to prevent loops
-                            Set<UUID> autoTargets = findValidTargets(targetMsg2);
-                            if (autoTargets != null && !autoTargets.isEmpty()) {
-                                UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
-                                logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET (no index or answer provided)");
-                                session.sendPlayerUUID(gameId, firstTarget);
-                                result.put("action_taken", "auto_selected_required_target");
-                                result.put("warning", "Required target auto-selected. Use index=N to choose a specific target.");
-                                break;
-                            }
-                        }
+                        // Required target — can't cancel, fall through to auto-select
+                        logger.warn("[" + client.getUsername() + "] choose_action: answer=false invalid for required GAME_TARGET, auto-selecting");
+                    } else if (!required) {
+                        // No index, no answer=false — return error for optional targets
                         result.put("success", false);
-                        result.put("error", targetMsg2.isFlag()
-                            ? "Integer 'index' required for this mandatory target selection"
-                            : "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
+                        result.put("error", "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
                         pendingAction = action;
                         return result;
                     }
+
+                    // Auto-select for required targets when index was invalid/missing
+                    Set<UUID> autoTargets = findValidTargets(targetMsg);
+                    if (autoTargets != null && !autoTargets.isEmpty()) {
+                        UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
+                        logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET");
+                        session.sendPlayerUUID(gameId, firstTarget);
+                        result.put("action_taken", "auto_selected_required_target");
+                        result.put("warning", "Required target auto-selected. Use get_action_choices first, then index=N.");
+                    } else {
+                        logger.error("[" + client.getUsername() + "] Required GAME_TARGET has no valid targets — cancelling to avoid infinite loop");
+                        session.sendPlayerBoolean(gameId, false);
+                        result.put("action_taken", "cancelled_no_valid_targets");
+                    }
                     break;
+                }
 
                 case GAME_CHOOSE_ABILITY: {
                     if (index == null) {
@@ -1563,6 +1563,25 @@ public class SkeletonCallbackHandler {
             if (action != null) {
                 ClientCallbackMethod method = action.getMethod();
 
+                // Update game view and reset loop counter on turn change.
+                // This MUST run before the loop detection check below, otherwise
+                // the `continue` in the loop detection branch skips it and the
+                // counter never resets, permanently disabling the player.
+                // Check any callback carrying GameView, not just GAME_SELECT —
+                // a new turn can start with upkeep triggers (GAME_TARGET, GAME_ASK, etc.).
+                if (action.getData() instanceof GameClientMessage) {
+                    GameView gv = ((GameClientMessage) action.getData()).getGameView();
+                    if (gv != null) {
+                        lastGameView = gv;
+                        int turn = gv.getTurn();
+                        if (turn != lastTurnNumber) {
+                            lastTurnNumber = turn;
+                            failedManaCasts.clear();
+                            interactionsThisTurn = 0;
+                        }
+                    }
+                }
+
                 // Generic loop detection: too many interactions this turn — auto-pass everything
                 if (interactionsThisTurn > maxInteractionsPerTurn) {
                     logger.warn("[" + client.getUsername() + "] Loop detected (" + interactionsThisTurn
@@ -1596,21 +1615,6 @@ public class SkeletonCallbackHandler {
                     result.put("actions_passed", actionsPassed);
                     attachUnseenChat(result);
                     return result;
-                }
-
-                // GAME_SELECT: update game view from callback data
-                if (action.getData() instanceof GameClientMessage) {
-                    GameView gv = ((GameClientMessage) action.getData()).getGameView();
-                    if (gv != null) {
-                        lastGameView = gv;
-                        // Clear failed casts and loop counter when the turn changes
-                        int turn = gv.getTurn();
-                        if (turn != lastTurnNumber) {
-                            lastTurnNumber = turn;
-                            failedManaCasts.clear();
-                            interactionsThisTurn = 0;
-                        }
-                    }
                 }
 
                 // Combat selections (declare attackers/blockers) always need LLM input
