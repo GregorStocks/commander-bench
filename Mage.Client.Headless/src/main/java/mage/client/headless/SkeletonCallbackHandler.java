@@ -811,7 +811,7 @@ public class SkeletonCallbackHandler {
                     for (UUID targetId : targets) {
                         Map<String, Object> choiceEntry = new HashMap<>();
                         choiceEntry.put("index", idx);
-                        choiceEntry.put("description", describeTarget(targetId, cardsView));
+                        choiceEntry.put("description", describeTarget(targetId, cardsView, msg.getGameView()));
                         choiceList.add(choiceEntry);
                         indexToUuid.add(targetId);
                         idx++;
@@ -1296,25 +1296,25 @@ public class SkeletonCallbackHandler {
         return result;
     }
 
-    private String describeTarget(UUID targetId, CardsView cardsView) {
+    private String describeTarget(UUID targetId, CardsView cardsView, GameView gameView) {
+        GameView view = gameView != null ? gameView : lastGameView;
         // Try cardsView first (cards presented in the targeting UI)
         if (cardsView != null) {
             CardView cv = cardsView.get(targetId);
             if (cv != null) {
-                return buildCardDescription(cv) + controllerSuffix(targetId);
+                return buildCardDescription(cv) + controllerSuffix(targetId, view);
             }
         }
         // Fall back to game state lookup
-        CardView cv = findCardViewById(targetId);
+        CardView cv = findCardViewById(targetId, view);
         if (cv != null) {
-            return buildCardDescription(cv) + controllerSuffix(targetId);
+            return buildCardDescription(cv) + controllerSuffix(targetId, view);
         }
         // Check if the target is a player
-        GameView gameView = lastGameView;
-        if (gameView != null) {
+        if (view != null) {
             UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
             UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
-            for (PlayerView player : gameView.getPlayers()) {
+            for (PlayerView player : view.getPlayers()) {
                 if (player.getPlayerId().equals(targetId)) {
                     String desc = player.getName();
                     if (player.getPlayerId().equals(myPlayerId)) {
@@ -1332,7 +1332,10 @@ public class SkeletonCallbackHandler {
      * the permanent with the given ID. Returns "" if not found on any battlefield.
      */
     private String controllerSuffix(UUID objectId) {
-        GameView gameView = lastGameView;
+        return controllerSuffix(objectId, lastGameView);
+    }
+
+    private String controllerSuffix(UUID objectId, GameView gameView) {
         if (gameView == null) return "";
         UUID gameId = currentGameId;
         UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
@@ -2092,10 +2095,11 @@ public class SkeletonCallbackHandler {
     }
 
     private CardView findCardViewById(UUID objectId) {
-        GameView gameView = lastGameView;
-        if (gameView == null) {
-            return null;
-        }
+        return findCardViewById(objectId, lastGameView);
+    }
+
+    private CardView findCardViewById(UUID objectId, GameView gameView) {
+        if (gameView == null) return null;
 
         // Check player's hand
         CardView found = gameView.getMyHand().get(objectId);

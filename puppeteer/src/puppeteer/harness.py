@@ -87,10 +87,18 @@ def _ensure_game_over_event(game_dir: Path) -> None:
     has_game_over = False
     if events_file.exists():
         try:
-            for line in events_file.read_text().splitlines():
-                if '"game_over"' in line:
-                    has_game_over = True
-                    break
+            with open(events_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("type") == "game_over":
+                        has_game_over = True
+                        break
         except OSError:
             pass
 
