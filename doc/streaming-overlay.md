@@ -1,6 +1,7 @@
 # Twitch + OBS Overlay Guide
 
-This repo now exposes a local overlay web server from `Mage.Client.Streaming`.
+The live game viewer runs in the website and polls the overlay API server
+from `Mage.Client.Streaming`.
 
 ## Start streaming observer
 
@@ -26,13 +27,31 @@ make run-staller
 make run-staller PORT=18080
 ```
 
-By default, overlay endpoints are:
+## URLs
 
-- `http://127.0.0.1:17888/` (full overlay page)
-- `http://127.0.0.1:17888/video_overlay.html` (transparent video overlay style, pixel-position mode)
-- `http://127.0.0.1:17888/?mock=1` (mock data mode for local testing)
+The overlay API server defaults to `http://127.0.0.1:17888`. If that port is
+already in use, it automatically moves to the next available port and prints
+the chosen URL.
 
-If `17888` is already in use, the harness/client will automatically move to the next available port and print the chosen URL.
+To view a live game, start the website dev server and open the live page:
+
+```bash
+cd website && npm run dev
+```
+
+- **Live viewer**: `http://localhost:4321/games/live?api=http://127.0.0.1:17888`
+- **OBS source** (positioned mode, transparent): `http://localhost:4321/games/live?api=http://127.0.0.1:17888&positions=1&obs=1`
+- **Mock data** (no running game needed): `http://localhost:4321/games/live?api=http://127.0.0.1:17888&mock=1`
+
+Query parameters:
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `api` | `http://127.0.0.1:17888` | Overlay API server URL |
+| `pollMs` | `700` | Polling interval in milliseconds |
+| `positions` | off | `1` to enable pixel-positioned card hotspots (for OBS) |
+| `obs` | off | `1` to hide nav/footer + transparent background |
+| `mock` | off | `1` to use mock data |
 
 ## Staller personality
 
@@ -57,23 +76,24 @@ Optional JVM override for staller delay:
 ## OBS setup
 
 1. Keep XMage streaming client running (`make run-dumb`).
-2. In OBS, add your game/window capture source for XMage.
-3. Add a Browser Source:
-   - URL: `http://127.0.0.1:17888/video_overlay.html` (or the fallback URL printed by harness)
+2. Start the website dev server (`cd website && npm run dev`).
+3. In OBS, add your game/window capture source for XMage.
+4. Add a Browser Source:
+   - URL: `http://localhost:4321/games/live?api=http://127.0.0.1:17888&positions=1&obs=1`
    - Width/Height: match your canvas (for example `1920x1080`)
    - Refresh browser when scene becomes active: enabled
-4. If you want to test layout/hover interactions before a real game starts, switch URL to:
-   - `http://127.0.0.1:17888/?mock=1`
+5. If you want to test layout/hover interactions before a real game starts, add `&mock=1` to the URL.
 
 ## Overlay behavior
 
-- The overlay publishes live game state from the streaming observer (`/api/state`).
-- `video_overlay.html` uses exported card rectangles from the Swing UI and scales them to the browser source size.
+- The API server publishes live game state from the streaming observer (`/api/state`).
+- When `positions=1` is set, the live viewer uses exported card rectangles from the Swing UI and scales them to the browser source size.
 - Cards are hoverable; hover opens a preview panel with card text and image.
 - Card image URLs are built from Scryfall metadata in the game state.
+- The live viewer also supports diff animations between polling updates (cards entering/leaving zones are highlighted).
 
 ## Twitch extension note
 
-`video_overlay.html` is designed to be Twitch-extension-friendly UI-wise and can be tested locally in OBS.
+The live viewer with `obs=1` is designed to be Twitch-extension-friendly UI-wise and can be tested locally in OBS.
 
 For a production Twitch extension (viewer-side interactive extension), you still need a hosted relay backend that distributes state to all viewers (viewer browsers cannot read the broadcaster's `localhost` overlay endpoint directly).

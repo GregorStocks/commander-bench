@@ -35,8 +35,12 @@ typecheck:
 test:
 	uv run --project puppeteer pytest puppeteer/
 
+.PHONY: test-js
+test-js:
+	cd website && npx vitest run
+
 .PHONY: check
-check: lint format-check typecheck test
+check: lint format-check typecheck test test-js
 
 
 .PHONY: build

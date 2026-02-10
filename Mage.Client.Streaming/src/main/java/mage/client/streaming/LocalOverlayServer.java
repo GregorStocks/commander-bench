@@ -14,8 +14,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Lightweight local HTTP server used by OBS/Twitch overlay pages.
- * Serves static overlay assets and live game state JSON.
+ * Lightweight local HTTP server that exposes live game state JSON.
+ * The actual overlay UI lives in the website (games/live page).
  */
 public final class LocalOverlayServer {
 
@@ -124,9 +124,7 @@ public final class LocalOverlayServer {
         running = true;
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop, "xmage-overlay-http-shutdown"));
-        LOGGER.info("Overlay server listening at " + getBaseUrl() + "/");
-        LOGGER.info("OBS Browser Source URL: " + getBaseUrl() + "/");
-        LOGGER.info("Local mock test URL: " + getBaseUrl() + "/?mock=1");
+        LOGGER.info("Overlay API server listening at " + getBaseUrl() + "/api/state");
     }
 
     private synchronized void stop() {
@@ -170,30 +168,36 @@ public final class LocalOverlayServer {
         }
 
         String path = exchange.getRequestURI().getPath();
-        if (path == null || path.isEmpty() || "/".equals(path)) {
-            path = "/index.html";
-        }
 
-        if (path.contains("..")) {
-            respondText(exchange, 400, "Bad request");
+        // Serve mock-state.json if requested directly
+        if ("/mock-state.json".equals(path)) {
+            handleMockState(exchange);
             return;
         }
 
-        if (path.startsWith("/api/")) {
+        if (path != null && path.startsWith("/api/")) {
             respondText(exchange, 404, "Not found");
             return;
         }
 
-        byte[] bytes = readResourceBytes("/overlay" + path);
-        if (bytes == null) {
-            respondText(exchange, 404, "Not found");
-            return;
-        }
-
+        // Serve a simple info page pointing to the website live viewer
+        String apiUrl = getBaseUrl();
+        String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+                + "<title>Mage-Bench Overlay API</title>"
+                + "<style>body{font-family:system-ui;background:#1a1a2e;color:#e0e0e0;padding:2rem;}"
+                + "a{color:#e94560;}</style></head><body>"
+                + "<h1>Mage-Bench Overlay API</h1>"
+                + "<p>This server provides live game state at <code>" + apiUrl + "/api/state</code></p>"
+                + "<p>Open the live viewer in the website:</p>"
+                + "<pre>http://localhost:4321/games/live?api=" + apiUrl + "</pre>"
+                + "<p>For OBS (positioned mode, transparent background):</p>"
+                + "<pre>http://localhost:4321/games/live?api=" + apiUrl + "&amp;positions=1&amp;obs=1</pre>"
+                + "</body></html>";
+        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
         Headers headers = exchange.getResponseHeaders();
         addCorsHeaders(headers);
+        headers.set("Content-Type", "text/html; charset=utf-8");
         headers.set("Cache-Control", "no-store");
-        headers.set("Content-Type", detectContentType(path));
         exchange.sendResponseHeaders(200, bytes.length);
         exchange.getResponseBody().write(bytes);
         exchange.close();
