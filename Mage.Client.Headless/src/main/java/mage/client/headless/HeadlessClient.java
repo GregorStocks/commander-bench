@@ -126,7 +126,7 @@ public class HeadlessClient {
                 UserGroup.PLAYER,
                 0, // avatarId
                 true, // allowRequestShowHandCards - important for streaming observers
-                true, // confirmEmptyManaPool
+                false, // confirmEmptyManaPool — suppress "mana left in pool" GAME_ASK prompts
                 new UserSkipPrioritySteps(),
                 "world", // flagName
                 false, // askMoveToGraveOrder

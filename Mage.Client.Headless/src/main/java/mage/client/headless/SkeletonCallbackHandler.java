@@ -977,6 +977,12 @@ public class SkeletonCallbackHandler {
         ClientCallbackMethod method = action.getMethod();
         Object data = action.getData();
 
+        // Auto-populate choices if the model skipped get_action_choices
+        if (index != null && lastChoices == null) {
+            logger.info("[" + client.getUsername() + "] choose_action: auto-populating choices (get_action_choices was not called)");
+            getActionChoices();
+        }
+
         result.put("success", true);
 
         try {
@@ -1075,8 +1081,22 @@ public class SkeletonCallbackHandler {
                     break;
 
                 case GAME_TARGET:
-                    // Support cancelling with answer=false (only for optional targets)
-                    if (answer != null && !answer) {
+                    // Index takes priority over answer:false (models sometimes send both)
+                    if (index != null) {
+                        if (answer != null) {
+                            logger.warn("[" + client.getUsername() + "] choose_action: ignoring answer=" + answer + " because index was also provided for GAME_TARGET");
+                        }
+                        List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                        if (choices == null || index < 0 || index >= choices.size()) {
+                            result.put("success", false);
+                            result.put("error", "Index " + index + " out of range (call get_action_choices first)");
+                            pendingAction = action;
+                            return result;
+                        }
+                        session.sendPlayerUUID(gameId, (UUID) choices.get(index));
+                        result.put("action_taken", "selected_target_" + index);
+                    } else if (answer != null && !answer) {
+                        // Cancel — only for optional targets
                         GameClientMessage targetMsg = (GameClientMessage) data;
                         if (targetMsg.isFlag()) {
                             // Required target — cannot cancel, must pick one
@@ -1087,9 +1107,7 @@ public class SkeletonCallbackHandler {
                         }
                         session.sendPlayerBoolean(gameId, false);
                         result.put("action_taken", "cancelled");
-                        break;
-                    }
-                    if (index == null) {
+                    } else {
                         GameClientMessage targetMsg2 = (GameClientMessage) data;
                         result.put("success", false);
                         result.put("error", targetMsg2.isFlag()
@@ -1098,52 +1116,45 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
-                    if (choices == null || index < 0 || index >= choices.size()) {
-                        result.put("success", false);
-                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                        pendingAction = action;
-                        return result;
-                    }
-                    session.sendPlayerUUID(gameId, (UUID) choices.get(index));
-                    result.put("action_taken", "selected_target_" + index);
                     break;
 
-                case GAME_CHOOSE_ABILITY:
+                case GAME_CHOOSE_ABILITY: {
                     if (index == null) {
                         result.put("success", false);
                         result.put("error", "Integer 'index' required for GAME_CHOOSE_ABILITY");
                         pendingAction = action;
                         return result;
                     }
-                    choices = lastChoices; // snapshot volatile to prevent TOCTOU race
-                    if (choices == null || index < 0 || index >= choices.size()) {
+                    List<Object> abilityChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                    if (abilityChoices == null || index < 0 || index >= abilityChoices.size()) {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerUUID(gameId, (UUID) choices.get(index));
+                    session.sendPlayerUUID(gameId, (UUID) abilityChoices.get(index));
                     result.put("action_taken", "selected_ability_" + index);
                     break;
+                }
 
-                case GAME_CHOOSE_CHOICE:
+                case GAME_CHOOSE_CHOICE: {
                     if (index == null) {
                         result.put("success", false);
                         result.put("error", "Integer 'index' required for GAME_CHOOSE_CHOICE");
                         pendingAction = action;
                         return result;
                     }
-                    choices = lastChoices; // snapshot volatile to prevent TOCTOU race
-                    if (choices == null || index < 0 || index >= choices.size()) {
+                    List<Object> choiceChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                    if (choiceChoices == null || index < 0 || index >= choiceChoices.size()) {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerString(gameId, (String) choices.get(index));
+                    session.sendPlayerString(gameId, (String) choiceChoices.get(index));
                     result.put("action_taken", "selected_choice_" + index);
                     break;
+                }
 
                 case GAME_CHOOSE_PILE:
                     if (pile == null) {
