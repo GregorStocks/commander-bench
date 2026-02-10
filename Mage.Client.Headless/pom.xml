@@ -51,5 +51,6 @@
 
     <properties>
         <root.dir>${project.basedir}/..</root.dir>
+        <maven.build.cache.skipCache>true</maven.build.cache.skipCache>
     </properties>
 </project>
