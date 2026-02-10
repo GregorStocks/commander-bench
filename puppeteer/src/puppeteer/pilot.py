@@ -91,7 +91,25 @@ HOW ACTIONS WORK:
 - GAME_ASK (boolean): Answer true/false based on what's being asked.
 - GAME_CHOOSE_ABILITY (index): Pick an ability by index.
 - GAME_TARGET (index): Pick a target by index.
-- GAME_PLAY_MANA (select): Pick a mana source by index, or answer=false to cancel.\
+- GAME_PLAY_MANA (select): Pick a mana source by index, or answer=false to cancel.
+
+COMBAT - ATTACKING:
+When you see combat_phase="declare_attackers" in get_action_choices:
+- Choices with [Attack] are creatures you can declare as attackers. \
+  Select one with choose_action(index=N) to toggle it as an attacker.
+- After selecting, call get_action_choices again to select more attackers.
+- "All attack" declares all your creatures as attackers at once.
+- When done selecting attackers, call choose_action(answer=true) to confirm.
+- To skip attacking, call choose_action(answer=false).
+- You should usually attack with your creatures when opponents are open!
+
+COMBAT - BLOCKING:
+When you see combat_phase="declare_blockers" in get_action_choices:
+- "incoming_attackers" shows enemy creatures attacking you.
+- Choices with [Block] are your creatures that can block.
+- Select a blocker with choose_action(index=N), then you may be asked which attacker to block.
+- When done selecting blockers, call choose_action(answer=true) to confirm.
+- To not block, call choose_action(answer=false).\
 """
 
 
