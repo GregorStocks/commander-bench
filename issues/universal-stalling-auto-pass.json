@@ -1,7 +1,7 @@
 {
   "title": "Universal stalling \u2014 30 auto-pass events across all players",
   "description": "All players in the game triggered auto-pass stall detection at least once, totaling 30 auto-pass events. This suggests models frequently get stuck in states where they neither take actions nor properly pass priority, requiring the harness to force-pass for them.\n\nEvidence from game_20260209_184021: 30 auto-pass stall events spread across all 4 players. This wastes game time and causes models to miss opportunities.\n\nPossible fixes:\n- Investigate what states cause stalling \u2014 is it waiting for actions that never come, or failing to process callbacks?\n- Reduce the stall detection timeout to minimize wasted time\n- Add logging to capture exactly what callback/state the model was stuck on when auto-pass fires\n\nGame log: ~/mage-bench-logs/game_20260209_184021/",
-  "status": "open",
+  "status": "resolved",
   "priority": 2,
   "type": "task",
   "labels": [
