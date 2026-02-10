@@ -1039,7 +1039,9 @@ public class SkeletonCallbackHandler {
         Object data = action.getData();
 
         // Auto-populate choices if the model skipped get_action_choices
-        if (index != null && lastChoices == null) {
+        // (but only if no answer was also provided — models that send all params with
+        // defaults shouldn't trigger auto-populate since index=0 is likely a default)
+        if (index != null && lastChoices == null && answer == null) {
             logger.info("[" + client.getUsername() + "] choose_action: auto-populating choices (get_action_choices was not called)");
             getActionChoices();
         }
@@ -1049,97 +1051,132 @@ public class SkeletonCallbackHandler {
         try {
             switch (method) {
                 case GAME_ASK:
+                    // GAME_ASK is boolean-only; ignore index if also provided
+                    // (some models send all params with defaults)
                     if (answer == null) {
                         result.put("success", false);
                         result.put("error", "Boolean 'answer' required for " + method);
                         pendingAction = action;
                         return result;
                     }
+                    if (index != null) {
+                        logger.warn("[" + client.getUsername() + "] choose_action: ignoring index=" + index + " for GAME_ASK (boolean-only)");
+                    }
                     session.sendPlayerBoolean(gameId, answer);
                     result.put("action_taken", answer ? "yes" : "no");
                     break;
 
-                case GAME_SELECT:
-                    // Support both index (play a card) and answer (pass priority)
+                case GAME_SELECT: {
+                    // Support both index (play a card) and answer (pass priority).
+                    // When both are provided (some models send all params with defaults),
+                    // try index first but fall through to answer if index is invalid.
+                    boolean usedIndex = false;
                     if (index != null) {
                         List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
                         if (choices == null || index < 0 || index >= choices.size()) {
-                            result.put("success", false);
-                            result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                            pendingAction = action;
-                            return result;
-                        }
-                        Object chosen = choices.get(index);
-                        if (chosen instanceof UUID) {
-                            session.sendPlayerUUID(gameId, (UUID) chosen);
-                            result.put("action_taken", "selected_" + index);
-                        } else if (chosen instanceof String) {
-                            session.sendPlayerString(gameId, (String) chosen);
-                            result.put("action_taken", "special_" + chosen);
-                        } else {
-                            result.put("success", false);
-                            result.put("error", "Unexpected choice type at index " + index);
-                            pendingAction = action;
-                            return result;
-                        }
-                    } else if (answer != null) {
-                        session.sendPlayerBoolean(gameId, answer);
-                        result.put("action_taken", answer ? "confirmed" : "passed_priority");
-                    } else {
-                        result.put("success", false);
-                        result.put("error", "Provide 'index' to play a card or 'answer: false' to pass priority");
-                        pendingAction = action;
-                        return result;
-                    }
-                    break;
-
-                case GAME_PLAY_MANA:
-                case GAME_PLAY_XMANA:
-                    // index = tap a mana source OR spend a mana type from pool, answer=false = cancel
-                    if (index != null) {
-                        List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
-                        if (choices == null || index < 0 || index >= choices.size()) {
-                            result.put("success", false);
-                            result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                            pendingAction = action;
-                            return result;
-                        }
-                        Object manaChoice = choices.get(index);
-                        if (manaChoice instanceof UUID) {
-                            session.sendPlayerUUID(gameId, (UUID) manaChoice);
-                            result.put("action_taken", "tapped_mana_" + index);
-                        } else if (manaChoice instanceof ManaType) {
-                            UUID manaPlayerId = getManaPoolPlayerId(gameId, lastGameView);
-                            if (manaPlayerId == null) {
+                            // Index is invalid — if answer is also available, fall through
+                            if (answer != null) {
+                                logger.warn("[" + client.getUsername() + "] choose_action: index " + index
+                                    + " out of range, falling through to answer=" + answer + " for GAME_SELECT");
+                            } else {
                                 result.put("success", false);
-                                result.put("error", "Could not resolve player ID for mana pool selection");
+                                result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                                 pendingAction = action;
                                 return result;
                             }
-                            ManaType manaType = (ManaType) manaChoice;
-                            session.sendPlayerManaType(gameId, manaPlayerId, manaType);
-                            result.put("action_taken", "used_pool_" + manaType.toString());
+                        } else {
+                            Object chosen = choices.get(index);
+                            if (chosen instanceof UUID) {
+                                session.sendPlayerUUID(gameId, (UUID) chosen);
+                                result.put("action_taken", "selected_" + index);
+                                usedIndex = true;
+                            } else if (chosen instanceof String) {
+                                session.sendPlayerString(gameId, (String) chosen);
+                                result.put("action_taken", "special_" + chosen);
+                                usedIndex = true;
+                            } else {
+                                result.put("success", false);
+                                result.put("error", "Unexpected choice type at index " + index);
+                                pendingAction = action;
+                                return result;
+                            }
+                        }
+                    }
+                    if (!usedIndex) {
+                        if (answer != null) {
+                            session.sendPlayerBoolean(gameId, answer);
+                            result.put("action_taken", answer ? "confirmed" : "passed_priority");
                         } else {
                             result.put("success", false);
-                            result.put("error", "Unsupported mana choice type at index " + index);
+                            result.put("error", "Provide 'index' to play a card or 'answer: false' to pass priority");
                             pendingAction = action;
                             return result;
                         }
-                    } else if (answer != null && !answer) {
-                        // Mark spell as failed to prevent infinite retry loop
-                        UUID payingForId = extractPayingForId(action.getMessage());
-                        if (payingForId != null) {
-                            failedManaCasts.add(payingForId);
-                        }
-                        session.sendPlayerBoolean(gameId, false);
-                        result.put("action_taken", "cancelled_spell");
-                    } else {
-                        result.put("success", false);
-                        result.put("error", "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel");
-                        pendingAction = action;
-                        return result;
                     }
                     break;
+                }
+
+                case GAME_PLAY_MANA:
+                case GAME_PLAY_XMANA: {
+                    // index = tap a mana source OR spend a mana type from pool, answer=false = cancel.
+                    // When both are provided and index is invalid, fall through to answer.
+                    boolean usedManaIndex = false;
+                    if (index != null) {
+                        List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
+                        if (choices == null || index < 0 || index >= choices.size()) {
+                            if (answer != null && !answer) {
+                                logger.warn("[" + client.getUsername() + "] choose_action: index " + index
+                                    + " out of range, falling through to cancel for GAME_PLAY_MANA");
+                            } else {
+                                result.put("success", false);
+                                result.put("error", "Index " + index + " out of range (call get_action_choices first)");
+                                pendingAction = action;
+                                return result;
+                            }
+                        } else {
+                            Object manaChoice = choices.get(index);
+                            if (manaChoice instanceof UUID) {
+                                session.sendPlayerUUID(gameId, (UUID) manaChoice);
+                                result.put("action_taken", "tapped_mana_" + index);
+                                usedManaIndex = true;
+                            } else if (manaChoice instanceof ManaType) {
+                                UUID manaPlayerId = getManaPoolPlayerId(gameId, lastGameView);
+                                if (manaPlayerId == null) {
+                                    result.put("success", false);
+                                    result.put("error", "Could not resolve player ID for mana pool selection");
+                                    pendingAction = action;
+                                    return result;
+                                }
+                                ManaType manaType = (ManaType) manaChoice;
+                                session.sendPlayerManaType(gameId, manaPlayerId, manaType);
+                                result.put("action_taken", "used_pool_" + manaType.toString());
+                                usedManaIndex = true;
+                            } else {
+                                result.put("success", false);
+                                result.put("error", "Unsupported mana choice type at index " + index);
+                                pendingAction = action;
+                                return result;
+                            }
+                        }
+                    }
+                    if (!usedManaIndex) {
+                        if (answer != null && !answer) {
+                            // Mark spell as failed to prevent infinite retry loop
+                            UUID payingForId = extractPayingForId(action.getMessage());
+                            if (payingForId != null) {
+                                failedManaCasts.add(payingForId);
+                            }
+                            session.sendPlayerBoolean(gameId, false);
+                            result.put("action_taken", "cancelled_spell");
+                        } else {
+                            result.put("success", false);
+                            result.put("error", "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel");
+                            pendingAction = action;
+                            return result;
+                        }
+                    }
+                    break;
+                }
 
                 case GAME_TARGET:
                     // Index takes priority over answer:false (models sometimes send both)
@@ -1404,7 +1441,11 @@ public class SkeletonCallbackHandler {
     }
 
     private String buildCardDescription(CardView cv) {
-        StringBuilder sb = new StringBuilder(cv.getDisplayName());
+        String displayName = cv.getDisplayName();
+        if (displayName == null) {
+            displayName = cv.getName() != null ? cv.getName() : "Unknown";
+        }
+        StringBuilder sb = new StringBuilder(displayName);
         if (cv instanceof PermanentView) {
             PermanentView pv = (PermanentView) cv;
             if (pv.isCreature() && cv.getPower() != null && cv.getToughness() != null) {
