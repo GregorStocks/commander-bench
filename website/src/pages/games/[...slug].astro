@@ -37,6 +37,11 @@ const { slug } = Astro.params;
           <button id="btn-end" title="Last snapshot">&gt;|</button>
           <button id="btn-auto" title="Auto-play">Play</button>
         </div>
+        <div class="turn-nav">
+          <button id="btn-prev-turn" title="Previous turn ([)">&lt;T</button>
+          <select id="turn-select" title="Jump to turn"></select>
+          <button id="btn-next-turn" title="Next turn (])">T&gt;</button>
+        </div>
         <input type="range" id="slider" min="0" max="0" value="0" />
         <div id="snapshot-counter"></div>
       </div>
@@ -154,6 +159,40 @@ const { slug } = Astro.params;
     color: #fff;
   }
 
+  .turn-nav {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  .turn-nav button {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    border-radius: 4px;
+    padding: 0.35rem 0.5rem;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.8rem;
+    transition: background 0.15s;
+  }
+
+  .turn-nav button:hover {
+    background: #1a4a8a;
+  }
+
+  #turn-select {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
   #slider {
     flex: 1;
     min-width: 100px;
@@ -193,6 +232,20 @@ const { slug } = Astro.params;
     opacity: 0.5;
   }
 
+  /* Player accent colors */
+  .player-card.player-0 { border-left: 3px solid #3b82f6; }
+  .player-card.player-1 { border-left: 3px solid #ef4444; }
+  .player-card.player-2 { border-left: 3px solid #22c55e; }
+  .player-card.player-3 { border-left: 3px solid #f59e0b; }
+  .player-name.player-0 { color: #3b82f6; }
+  .player-name.player-1 { color: #ef4444; }
+  .player-name.player-2 { color: #22c55e; }
+  .player-name.player-3 { color: #f59e0b; }
+  .action-player-0 { color: #3b82f6; font-weight: 600; }
+  .action-player-1 { color: #ef4444; font-weight: 600; }
+  .action-player-2 { color: #22c55e; font-weight: 600; }
+  .action-player-3 { color: #f59e0b; font-weight: 600; }
+
   .player-header {
     display: flex;
     justify-content: space-between;
@@ -209,7 +262,8 @@ const { slug } = Astro.params;
   }
 
   .player-name.active-player {
-    color: #e94560;
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .player-life {
@@ -550,6 +604,20 @@ const { slug } = Astro.params;
   .card-thumb.card-tap-changed {
     animation: tap-highlight 1.2s ease-out;
   }
+
+  /* Mana symbols */
+  .mana-icon {
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+    display: inline-block;
+    margin: 0 1px;
+  }
+
+  .card-type .mana-icon {
+    width: 18px;
+    height: 18px;
+  }
 </style>
 
 <script>
@@ -589,9 +657,17 @@ const { slug } = Astro.params;
     const previewStats = document.getElementById("preview-stats");
     const previewRules = document.getElementById("preview-rules");
 
+    // Turn navigation
+    const turnSelect = document.getElementById("turn-select");
+    const btnPrevTurn = document.getElementById("btn-prev-turn");
+    const btnNextTurn = document.getElementById("btn-next-turn");
+
     let game = null;
     let currentIndex = 0;
     let autoPlayInterval = null;
+    var playerColorMap = {};
+    var turnStartIndices = [];
+    var PLAYER_COLORS = ["player-0", "player-1", "player-2", "player-3"];
 
     // --- Diff computation ---
 
@@ -709,6 +785,26 @@ const { slug } = Astro.params;
       );
     }
 
+    function renderManaCost(manaCostStr) {
+      var frag = document.createDocumentFragment();
+      if (!manaCostStr) return frag;
+      var re = /\{([^}]+)\}/g;
+      var match;
+      while ((match = re.exec(manaCostStr)) !== null) {
+        var symbol = match[1].replace(/\//g, "");
+        var img = document.createElement("img");
+        img.className = "mana-icon";
+        img.src = "https://svgs.scryfall.io/card-symbols/" + encodeURIComponent(symbol) + ".svg";
+        img.alt = match[0];
+        img.title = match[0];
+        frag.appendChild(img);
+      }
+      if (!frag.hasChildNodes()) {
+        frag.appendChild(document.createTextNode(manaCostStr));
+      }
+      return frag;
+    }
+
     function showPreview(cardName, cardObj, cardImages) {
       previewName.textContent = cardName;
 
@@ -722,7 +818,8 @@ const { slug } = Astro.params;
           previewStats.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
         }
         if (cardObj.mana_cost) {
-          previewType.textContent = cardObj.mana_cost;
+          previewType.textContent = "";
+          previewType.appendChild(renderManaCost(cardObj.mana_cost));
         }
       }
 
@@ -890,6 +987,22 @@ const { slug } = Astro.params;
       return zone;
     }
 
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function colorizePlayerNames(message) {
+      var escaped = escapeHtml(message);
+      var names = Object.keys(playerColorMap);
+      names.sort(function (a, b) { return b.length - a.length; });
+      names.forEach(function (name) {
+        var cls = "action-" + PLAYER_COLORS[playerColorMap[name]];
+        var escapedName = escapeHtml(name);
+        escaped = escaped.split(escapedName).join('<span class="' + cls + '">' + escapedName + '</span>');
+      });
+      return escaped;
+    }
+
     function renderSnapshot(index) {
       const snap = game.snapshots[index];
       if (!snap) return;
@@ -915,6 +1028,8 @@ const { slug } = Astro.params;
         const card = document.createElement("article");
         card.className = "player-card";
         if (player.has_left) card.classList.add("eliminated");
+        var pColorIdx = playerColorMap[player.name];
+        if (pColorIdx != null) card.classList.add(PLAYER_COLORS[pColorIdx]);
 
         // Header
         const header = document.createElement("div");
@@ -922,6 +1037,7 @@ const { slug } = Astro.params;
 
         const nameEl = document.createElement("div");
         nameEl.className = "player-name";
+        if (pColorIdx != null) nameEl.classList.add(PLAYER_COLORS[pColorIdx]);
         if (player.is_active) nameEl.classList.add("active-player");
         nameEl.textContent = player.name || "?";
         header.appendChild(nameEl);
@@ -1013,7 +1129,7 @@ const { slug } = Astro.params;
         relevantActions.forEach(function (action) {
           const line = document.createElement("div");
           line.className = "action-line";
-          line.textContent = action.message;
+          line.innerHTML = colorizePlayerNames(action.message);
           actionList.appendChild(line);
         });
       }
@@ -1021,6 +1137,17 @@ const { slug } = Astro.params;
       // Update transport
       slider.value = String(index);
       counterEl.textContent = (index + 1) + " / " + game.snapshots.length;
+
+      // Sync turn dropdown
+      if (turnStartIndices.length > 0) {
+        var currentTurn = snap.turn;
+        for (var ti = turnStartIndices.length - 1; ti >= 0; ti--) {
+          if (turnStartIndices[ti].turn <= currentTurn) {
+            turnSelect.selectedIndex = ti;
+            break;
+          }
+        }
+      }
     }
 
     function goTo(index) {
@@ -1065,6 +1192,28 @@ const { slug } = Astro.params;
         loadingEl.classList.add("hidden");
         gameUI.classList.remove("hidden");
 
+        // Build player color map
+        (game.players || []).forEach(function (p, i) {
+          playerColorMap[p.name] = i % 4;
+        });
+
+        // Build turn start indices
+        var lastTurn = -1;
+        game.snapshots.forEach(function (snap, i) {
+          if (snap.turn !== lastTurn) {
+            turnStartIndices.push({ turn: snap.turn, index: i });
+            lastTurn = snap.turn;
+          }
+        });
+
+        // Populate turn dropdown
+        turnStartIndices.forEach(function (t) {
+          var opt = document.createElement("option");
+          opt.value = String(t.index);
+          opt.textContent = "Turn " + t.turn;
+          turnSelect.appendChild(opt);
+        });
+
         // Title
         const playerNames = (game.players || []).map(function (p) {
           return p.commander || p.name;
@@ -1081,6 +1230,19 @@ const { slug } = Astro.params;
         btnAuto.addEventListener("click", toggleAutoPlay);
         slider.addEventListener("input", function () { goTo(Number(slider.value)); });
 
+        // Turn navigation
+        turnSelect.addEventListener("change", function () { goTo(Number(turnSelect.value)); });
+        btnPrevTurn.addEventListener("click", function () {
+          var idx = Math.max(0, turnSelect.selectedIndex - 1);
+          turnSelect.selectedIndex = idx;
+          goTo(Number(turnSelect.value));
+        });
+        btnNextTurn.addEventListener("click", function () {
+          var idx = Math.min(turnStartIndices.length - 1, turnSelect.selectedIndex + 1);
+          turnSelect.selectedIndex = idx;
+          goTo(Number(turnSelect.value));
+        });
+
         document.addEventListener("keydown", function (e) {
           if (e.key === "ArrowRight") { e.preventDefault(); goTo(currentIndex + 1); }
           if (e.key === "ArrowLeft") { e.preventDefault(); goTo(currentIndex - 1); }
@@ -1088,6 +1250,8 @@ const { slug } = Astro.params;
           if (e.key === "End") { e.preventDefault(); goTo(game.snapshots.length - 1); }
           if (e.key === " ") { e.preventDefault(); toggleAutoPlay(); }
           if (e.key === "Escape") { hidePreview(); }
+          if (e.key === "[") { e.preventDefault(); btnPrevTurn.click(); }
+          if (e.key === "]") { e.preventDefault(); btnNextTurn.click(); }
         });
 
         // Render first snapshot

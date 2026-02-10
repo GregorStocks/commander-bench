@@ -1,7 +1,7 @@
 {
   "title": "Render mana symbols as icons in visualizer",
   "description": "Mana costs like {2}{U}{B} are currently shown as raw text. Render them as the actual mana symbol images (available from Scryfall or mana.andrewgioia.com). This applies to the card preview panel and anywhere mana costs appear. Makes the visualizer look much more like a real Magic interface.",
-  "status": "open",
+  "status": "resolved",
   "priority": 3,
   "type": "task",
   "labels": [
