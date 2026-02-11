@@ -36,7 +36,7 @@ def _extract_commander(player: dict) -> str | None:
 def _build_title(meta: dict) -> str:
     """Generate video title from game metadata.
 
-    Format: "Mage-Bench: Name (Commander) vs Name (Commander) vs ..."
+    Format: "mage-bench: Name (Commander) vs Name (Commander) vs ..."
     Truncated to 100 chars (YouTube limit).
     """
     players = meta.get("players", [])
@@ -50,7 +50,7 @@ def _build_title(meta: dict) -> str:
             parts.append(name)
 
     matchup = " vs ".join(parts)
-    title = f"Mage-Bench: {matchup}"
+    title = f"mage-bench: {matchup}"
 
     # Truncate to fit YouTube's 100-char limit
     if len(title) > 100:
@@ -63,7 +63,7 @@ def _build_description(meta: dict, game_dir: Path) -> str:
     game_id = game_dir.name
     game_url = f"https://mage-bench.com/games/{game_id}"
 
-    lines = ["AI models play Commander (Magic: The Gathering) via Mage-Bench.", ""]
+    lines = ["AI models play Commander (Magic: The Gathering) via mage-bench.", ""]
 
     players = meta.get("players", [])
     for p in players:
