@@ -11,8 +11,8 @@ class GameLogWriter:
 
     _TZ = ZoneInfo("America/Los_Angeles")
 
-    def __init__(self, game_dir: Path, player_name: str):
-        self._path = game_dir / f"{player_name}_llm.jsonl"
+    def __init__(self, game_dir: Path, player_name: str, suffix: str = "llm"):
+        self._path = game_dir / f"{player_name}_{suffix}.jsonl"
         self._player = player_name
         self._seq = 0
         self._last_cumulative_cost_usd = 0.0

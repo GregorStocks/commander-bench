@@ -316,6 +316,7 @@ async def run_pilot_loop(
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
     game_log: GameLogWriter | None = None,
+    trace_log: GameLogWriter | None = None,
     reasoning_effort: str = "",
 ) -> None:
     """Run the LLM-driven game-playing loop."""
@@ -362,6 +363,14 @@ async def run_pilot_loop(
             )
             consecutive_timeouts = 0
             choice = response.choices[0]
+
+            # Log full LLM request/response to trace file
+            if trace_log:
+                trace_log.emit(
+                    "llm_call",
+                    request=create_kwargs,
+                    response=response.model_dump(),
+                )
 
             # Track token usage and cost
             call_cost = 0.0
@@ -446,7 +455,7 @@ async def run_pilot_loop(
                             call_id=tool_call.id,
                             tool=fn.name,
                             arguments=args,
-                            result=result_text[:20000],
+                            result=result_text,
                             latency_ms=tool_latency_ms,
                         )
 
@@ -722,8 +731,10 @@ async def run_pilot(
     _log("[pilot] Spawning skeleton client...")
 
     game_log = None
+    trace_log = None
     if game_dir:
         game_log = GameLogWriter(game_dir, username)
+        trace_log = GameLogWriter(game_dir, username, suffix="llm_trace")
 
     try:
         async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
@@ -739,7 +750,7 @@ async def run_pilot(
                 game_log.emit(
                     "game_start",
                     model=model,
-                    system_prompt=system_prompt[:500],
+                    system_prompt=system_prompt,
                     available_tools=tool_names,
                     deck_path=str(deck_path) if deck_path else None,
                 )
@@ -755,12 +766,15 @@ async def run_pilot(
                 game_dir=game_dir,
                 prices=prices,
                 game_log=game_log,
+                trace_log=trace_log,
                 reasoning_effort=reasoning_effort,
             )
     finally:
         if game_log:
             game_log.emit("game_end", total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
             game_log.close()
+        if trace_log:
+            trace_log.close()
 
 
 def main() -> int:
