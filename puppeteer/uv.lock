@@ -881,16 +881,12 @@ name = "puppeteer"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "mcp" },
-    { name = "openai" },
-    { name = "psutil" },
-]
-
-[package.optional-dependencies]
-youtube = [
     { name = "google-api-python-client" },
     { name = "google-auth-httplib2" },
     { name = "google-auth-oauthlib" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "psutil" },
 ]
 
 [package.dev-dependencies]
@@ -903,14 +899,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "google-api-python-client", marker = "extra == 'youtube'", specifier = ">=2.0.0" },
-    { name = "google-auth-httplib2", marker = "extra == 'youtube'", specifier = ">=0.2.0" },
-    { name = "google-auth-oauthlib", marker = "extra == 'youtube'", specifier = ">=1.0.0" },
+    { name = "google-api-python-client", specifier = ">=2.0.0" },
+    { name = "google-auth-httplib2", specifier = ">=0.2.0" },
+    { name = "google-auth-oauthlib", specifier = ">=1.0.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "openai", specifier = ">=1.0.0" },
     { name = "psutil", specifier = ">=5.9.0" },
 ]
-provides-extras = ["youtube"]
 
 [package.metadata.requires-dev]
 dev = [

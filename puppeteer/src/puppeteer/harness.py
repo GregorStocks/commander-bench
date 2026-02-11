@@ -801,7 +801,7 @@ def _maybe_upload_to_youtube(game_dir: Path, project_root: Path) -> None:
             _update_website_youtube_url(game_dir, url, project_root)
     except ImportError:
         print("  Warning: YouTube upload requires google-api-python-client and google-auth-oauthlib")
-        print("  Install with: uv add --project puppeteer google-api-python-client google-auth-oauthlib")
+        print("  Run: cd puppeteer && uv sync")
     except Exception as e:
         print(f"  Warning: YouTube upload failed: {e}")
 
