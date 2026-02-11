@@ -169,14 +169,16 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             # Keep all fields except type (preserve ts + seq for timeline matching)
             snap = {k: v for k, v in event.items() if k != "type"}
             snapshots.append(snap)
-        elif event_type == "game_action":
-            actions.append(
-                {
-                    "ts": event.get("ts", ""),
-                    "seq": event.get("seq", 0),
-                    "message": _strip_html(event.get("message", "")),
-                }
-            )
+        elif event_type in ("game_action", "player_chat"):
+            entry = {
+                "ts": event.get("ts", ""),
+                "seq": event.get("seq", 0),
+                "message": _strip_html(event.get("message", "")),
+            }
+            if event_type == "player_chat":
+                entry["type"] = "chat"
+                entry["from"] = event.get("from", "")
+            actions.append(entry)
         elif event_type == "game_over":
             game_over = {
                 "seq": event.get("seq", 0),

@@ -14,13 +14,27 @@ import Base from '../../layouts/Base.astro';
         <div id="turn-info"></div>
       </div>
 
-      <!-- Board: 2x2 player grid -->
-      <div id="players-grid"></div>
+      <!-- Main content: board left, log right -->
+      <div id="game-content">
+        <div id="game-left">
+          <!-- Board: 2x2 player grid -->
+          <div id="players-grid"></div>
 
-      <!-- Stack -->
-      <div id="stack-section" class="hidden">
-        <div class="section-title">Stack</div>
-        <div id="stack-cards" class="cards-row"></div>
+          <!-- Stack -->
+          <div id="stack-section" class="hidden">
+            <div class="section-title">Stack</div>
+            <div id="stack-cards" class="cards-row"></div>
+          </div>
+        </div>
+
+        <div id="game-right">
+          <div class="game-log">
+            <div class="game-log-header">
+              <span class="section-title">Game Log</span>
+            </div>
+            <div id="log-list" class="game-log-list"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Position layer for OBS positioned mode -->
@@ -79,6 +93,33 @@ import Base from '../../layouts/Base.astro';
     color: #a0a0b8;
     text-align: right;
   }
+
+  /* Two-column layout */
+  #game-content {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  #game-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  #game-right {
+    width: 320px;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 900px) {
+    #game-content {
+      flex-direction: column;
+    }
+
+    #game-right {
+      width: 100%;
+    }
+  }
 </style>
 
 <script is:inline src="/game-renderer.js"></script>
@@ -112,6 +153,7 @@ import Base from '../../layouts/Base.astro';
     var stackCards = document.getElementById("stack-cards");
     var positionLayer = document.getElementById("position-layer");
     var visualizer = document.getElementById("live-visualizer");
+    var logList = document.getElementById("log-list");
 
     var previewEls = {
       container: document.getElementById("card-preview"),
@@ -126,6 +168,7 @@ import Base from '../../layouts/Base.astro';
     var playerColorMap = {};
     var playersInitialized = false;
     var prevState = null;
+    var lastEventSeq = 0;
 
     function initPlayerColors(players) {
       if (playersInitialized) return;
@@ -133,6 +176,49 @@ import Base from '../../layouts/Base.astro';
         playerColorMap[p.name] = i % 4;
       });
       playersInitialized = true;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function colorizePlayerNames(message) {
+      var escaped = escapeHtml(message);
+      var names = Object.keys(playerColorMap);
+      names.sort(function (a, b) { return b.length - a.length; });
+      names.forEach(function (name) {
+        var cls = "action-" + R.PLAYER_COLORS[playerColorMap[name]];
+        var escapedName = escapeHtml(name);
+        escaped = escaped.split(escapedName).join('<span class="' + cls + '">' + escapedName + '</span>');
+      });
+      return escaped;
+    }
+
+    function appendEvent(evt) {
+      if (evt.type === "player_chat") {
+        var line = document.createElement("div");
+        line.className = "chat-line";
+        var fromIdx = playerColorMap[evt.from];
+        var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
+        line.innerHTML = '<span class="chat-from ' + fromCls + '">' + escapeHtml(evt.from || "") + ':</span> ' + escapeHtml(evt.message || "");
+        logList.appendChild(line);
+      } else {
+        var line = document.createElement("div");
+        line.className = "action-line";
+        line.innerHTML = colorizePlayerNames(evt.message || "");
+        logList.appendChild(line);
+      }
+    }
+
+    function processEvents(events) {
+      if (!events || events.length === 0) return;
+      var newEvents = events.filter(function (e) { return e.seq > lastEventSeq; });
+      if (newEvents.length === 0) return;
+      newEvents.sort(function (a, b) { return a.seq - b.seq; });
+      newEvents.forEach(appendEvent);
+      lastEventSeq = newEvents[newEvents.length - 1].seq;
+      // Auto-scroll to bottom
+      logList.scrollTop = logList.scrollHeight;
     }
 
     async function tick() {
@@ -162,6 +248,9 @@ import Base from '../../layouts/Base.astro';
         }
 
         initPlayerColors(state.players);
+
+        // Process game events (from raw, before normalization strips them)
+        processEvents(raw.events);
 
         // Compute diff against previous state for animations
         var diffs = prevState ? R.computeDiff(prevState, state) : null;
