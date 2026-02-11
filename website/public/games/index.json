@@ -1,6 +1,7 @@
 [
   {
     "id": "game_20260210_170138",
+    "youtubeUrl": "https://www.youtube.com/watch?v=ahdfiDMS3wI",
     "timestamp": "20260210_170138",
     "totalTurns": 12,
     "winner": null,
@@ -37,6 +38,7 @@
   },
   {
     "id": "game_20260210_090609",
+    "youtubeUrl": "https://www.youtube.com/watch?v=7Sihgpktr4A",
     "timestamp": "20260210_090609",
     "totalTurns": 6,
     "winner": null,
@@ -73,6 +75,7 @@
   },
   {
     "id": "game_20260210_074307",
+    "youtubeUrl": "https://www.youtube.com/watch?v=I2ewOu7j8YY",
     "timestamp": "20260210_074307",
     "totalTurns": 61,
     "winner": "Gem3Flash",
