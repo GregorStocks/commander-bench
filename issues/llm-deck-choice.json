@@ -1,0 +1,10 @@
+{
+  "title": "Let LLMs choose their own deck from premade decks legal in the format",
+  "description": "Currently decks are either hardcoded per-player in the config or randomly assigned. Add a deck assignment mode where the LLM is presented with the list of premade decks that are legal in the game's format (e.g. Commander decks for Commander games) and gets to pick which one it wants to play.\n\nThis is a lighter-weight alternative to full deck construction (see llm-deck-construction). The LLM would see deck names (and ideally decklists or summaries) and choose one that fits its personality or strategy.\n\nImplementation sketch:\n- New deck value in config, e.g. `\"deck\": \"choice\"`, that triggers LLM selection\n- Before game start, scan the sample-decks directory for decks legal in the configured deckType\n- Present the deck options to the LLM via a tool call or prompt and let it pick\n- Could include deck name, colors, and a brief card list summary to help the LLM decide",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}
