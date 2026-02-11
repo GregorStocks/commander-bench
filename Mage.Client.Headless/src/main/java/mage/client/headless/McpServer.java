@@ -328,7 +328,7 @@ public class McpServer {
         getChoicesTool.put("name", "get_action_choices");
         getChoicesTool.put("description",
                 "Get available choices for the current pending action. Call before choose_action. " +
-                "Includes context (phase/turn) and players (life totals). " +
+                "Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). " +
                 "response_type: select (cards to play, attackers, blockers), boolean (yes/no), " +
                 "index (target/ability), amount, pile, or multi_amount. " +
                 "During combat: combat_phase indicates declare_attackers or declare_blockers.");
