@@ -82,7 +82,16 @@ import Base from '../../layouts/Base.astro';
         a.className = "game-card";
 
         const commanders = (game.players || [])
-          .map(function (p) { return p.commander || p.name; })
+          .map(function (p) {
+            var label = p.commander || p.name;
+            if (p.model) {
+              var model = p.model;
+              var slash = model.indexOf("/");
+              if (slash !== -1) model = model.substring(slash + 1);
+              label += " (" + model + ")";
+            }
+            return label;
+          })
           .join(" vs ");
 
         const title = document.createElement("div");

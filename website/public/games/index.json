@@ -1,5 +1,41 @@
 [
   {
+    "id": "game_20260210_090609",
+    "timestamp": "20260210_090609",
+    "totalTurns": 6,
+    "winner": null,
+    "players": [
+      {
+        "name": "Gem3Flash",
+        "type": "pilot",
+        "commander": "Breena, the Demagogue",
+        "model": "google/gemini-3-flash-preview",
+        "totalCostUsd": 2.3633
+      },
+      {
+        "name": "GPT-4.1-mini",
+        "type": "pilot",
+        "commander": "Willowdusk, Essence Seer",
+        "model": "openai/gpt-4.1-mini",
+        "totalCostUsd": 0.96
+      },
+      {
+        "name": "Gemini2.5Flash",
+        "type": "pilot",
+        "commander": "Kathril, Aspect Warper",
+        "model": "google/gemini-2.5-flash",
+        "totalCostUsd": 1.5291
+      },
+      {
+        "name": "Devstral",
+        "type": "pilot",
+        "commander": "Teferi, Temporal Archmage",
+        "model": "mistralai/devstral-small",
+        "totalCostUsd": 0.1905
+      }
+    ]
+  },
+  {
     "id": "game_20260208_220934",
     "timestamp": "20260208_220934",
     "totalTurns": 10,

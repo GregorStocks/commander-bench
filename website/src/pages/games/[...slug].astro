@@ -63,7 +63,12 @@ const { slug } = Astro.params;
 
       <!-- Action log -->
       <div id="action-log">
-        <div class="section-title">Actions</div>
+        <div class="action-log-header">
+          <span class="section-title">Actions</span>
+          <label id="llm-toggle-label" class="hidden">
+            <input type="checkbox" id="llm-toggle" checked /> Show LLM thinking
+          </label>
+        </div>
         <div id="action-list"></div>
       </div>
 
@@ -240,8 +245,27 @@ const { slug } = Astro.params;
     margin-bottom: 0.75rem;
   }
 
+  .action-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.4rem;
+  }
+
+  #llm-toggle-label {
+    font-size: 0.72rem;
+    color: #888;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  #llm-toggle {
+    margin-right: 4px;
+    accent-color: #e94560;
+  }
+
   #action-list {
-    max-height: 12rem;
+    max-height: 24rem;
     overflow-y: auto;
     font-size: 0.8rem;
     line-height: 1.5;
@@ -313,8 +337,18 @@ const { slug } = Astro.params;
     var currentIndex = 0;
     var autoPlayInterval = null;
     var playerColorMap = {};
+    var playerMeta = {};
     var turnStartIndices = [];
     var lifeData = null;
+    var showLlm = true;
+
+    // LLM toggle
+    var llmToggleLabel = document.getElementById("llm-toggle-label");
+    var llmToggle = document.getElementById("llm-toggle");
+    llmToggle.addEventListener("change", function () {
+      showLlm = llmToggle.checked;
+      renderSnapshot(currentIndex);
+    });
 
     function showError(msg) {
       loadingEl.classList.add("hidden");
@@ -338,6 +372,148 @@ const { slug } = Astro.params;
       return escaped;
     }
 
+    function playerColorClass(playerName) {
+      var idx = playerColorMap[playerName];
+      return idx != null ? "llm-player-" + idx : "";
+    }
+
+    function playerSpan(playerName) {
+      var idx = playerColorMap[playerName];
+      var cls = idx != null ? "action-" + R.PLAYER_COLORS[idx] : "";
+      return '<span class="llm-player ' + cls + '">' + escapeHtml(playerName) + '</span>';
+    }
+
+    function formatToolArgs(args) {
+      if (!args || typeof args !== "object") return "";
+      var keys = Object.keys(args);
+      if (keys.length === 0) return "";
+      var parts = [];
+      keys.forEach(function (k) {
+        var v = args[k];
+        if (typeof v === "string" && v.length > 40) v = v.substring(0, 40) + "...";
+        else if (typeof v === "object") v = JSON.stringify(v).substring(0, 40) + (JSON.stringify(v).length > 40 ? "..." : "");
+        parts.push(k + "=" + v);
+      });
+      return parts.join(", ");
+    }
+
+    function tryFormatJson(str) {
+      if (!str || typeof str !== "string") return str || "";
+      try {
+        return JSON.stringify(JSON.parse(str), null, 2);
+      } catch (e) {
+        return str;
+      }
+    }
+
+    function renderLlmEvent(event) {
+      var type = event.type;
+
+      if (type === "llm_response") {
+        var hasReasoning = event.reasoning && event.reasoning.trim();
+        var hasThinking = event.thinking && event.thinking.trim();
+        var hasToolCalls = event.toolCalls && event.toolCalls.length > 0;
+
+        if (hasReasoning || hasThinking) {
+          // Full thought block with reasoning and/or extended thinking
+          var div = document.createElement("div");
+          div.className = "llm-event llm-thought " + playerColorClass(event.player);
+
+          var header = playerSpan(event.player);
+          if (event.costUsd != null) {
+            header += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
+          }
+          var headerEl = document.createElement("div");
+          headerEl.innerHTML = header;
+          div.appendChild(headerEl);
+
+          // Extended thinking (chain-of-thought) in a collapsible block
+          if (hasThinking) {
+            var thinkDetails = document.createElement("details");
+            thinkDetails.className = "llm-thinking-block";
+            var thinkSummary = document.createElement("summary");
+            thinkSummary.textContent = "Thinking (" + event.thinking.length + " chars)";
+            thinkDetails.appendChild(thinkSummary);
+            var thinkPre = document.createElement("pre");
+            thinkPre.className = "llm-thinking-text";
+            thinkPre.textContent = event.thinking;
+            thinkDetails.appendChild(thinkPre);
+            div.appendChild(thinkDetails);
+          }
+
+          if (hasReasoning) {
+            var reasoningEl = document.createElement("div");
+            reasoningEl.className = "llm-reasoning";
+            reasoningEl.textContent = event.reasoning;
+            div.appendChild(reasoningEl);
+          }
+
+          if (hasToolCalls) {
+            var tcEl = document.createElement("div");
+            tcEl.className = "llm-tool-calls";
+            tcEl.textContent = event.toolCalls.map(function (tc) {
+              return tc.name + "(" + formatToolArgs(typeof tc.arguments === "string" ? (function () { try { return JSON.parse(tc.arguments); } catch (e) { return {}; } })() : tc.arguments) + ")";
+            }).join(", ");
+            div.appendChild(tcEl);
+          }
+
+          return div;
+        } else if (hasToolCalls) {
+          // Compact tool-call-only line
+          var div = document.createElement("div");
+          div.className = "llm-event llm-compact";
+          var toolNames = event.toolCalls.map(function (tc) { return tc.name; }).join(", ");
+          div.innerHTML = playerSpan(event.player) + " " + escapeHtml(toolNames);
+          if (event.costUsd != null) {
+            div.innerHTML += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
+          }
+          return div;
+        }
+        return null; // Empty response, skip
+      }
+
+      if (type === "tool_call") {
+        var details = document.createElement("details");
+        details.className = "llm-event llm-tool-result";
+
+        var summary = document.createElement("summary");
+        var argsSummary = formatToolArgs(event.args);
+        var latency = event.latencyMs != null ? " " + (event.latencyMs / 1000).toFixed(1) + "s" : "";
+        summary.innerHTML = playerSpan(event.player) + " " +
+          escapeHtml(event.tool) + "(" + escapeHtml(argsSummary) + ")" +
+          (latency ? '<span class="llm-cost">' + latency + '</span>' : "");
+        details.appendChild(summary);
+
+        if (event.result) {
+          var pre = document.createElement("pre");
+          pre.textContent = tryFormatJson(event.result);
+          details.appendChild(pre);
+        }
+
+        return details;
+      }
+
+      // Meta events: stall, llm_error, context_trim, context_reset, auto_pilot_mode
+      var div = document.createElement("div");
+      div.className = "llm-event llm-meta";
+
+      if (type === "stall") {
+        div.textContent = event.player + " stalled (" + (event.turnsWithoutProgress || 0) + " turns without progress)";
+      } else if (type === "llm_error") {
+        div.textContent = event.player + " error: " + (event.errorType || "") + " " + (event.errorMessage || "");
+      } else if (type === "context_trim") {
+        div.textContent = event.player + " context trimmed: " + (event.messagesBefore || 0) + " -> " + (event.messagesAfter || 0) + " messages";
+      } else if (type === "context_reset") {
+        div.textContent = event.player + " context reset: " + (event.reason || "");
+      } else if (type === "auto_pilot_mode") {
+        div.textContent = event.player + " switched to auto-pilot: " + (event.reason || "");
+      } else {
+        div.textContent = event.player + " " + type;
+      }
+
+      return div;
+    }
+
     function renderSnapshot(index) {
       var snap = game.snapshots[index];
       if (!snap) return;
@@ -359,6 +535,7 @@ const { slug } = Astro.params;
       R.renderPlayers(playersGrid, snap.players, {
         cardImages: game.cardImages,
         playerColorMap: playerColorMap,
+        playerMeta: playerMeta,
         diffs: diffs,
         previewEls: previewEls,
         priorityPlayerName: snap.priority_player,
@@ -375,17 +552,49 @@ const { slug } = Astro.params;
         return a.seq > prevSeq && a.seq <= curSeq;
       });
 
-      if (relevantActions.length === 0) {
+      // Find LLM events in this time window (using timestamps)
+      var hasLlmEvents = game.llmEvents && game.llmEvents.length > 0;
+      var relevantLlm = [];
+      if (hasLlmEvents && showLlm) {
+        var prevTs = prevSnap ? (prevSnap.ts || "") : "";
+        var curTs = snap.ts || "";
+        if (curTs) {
+          relevantLlm = game.llmEvents.filter(function (e) {
+            return e.ts > prevTs && e.ts <= curTs;
+          });
+        }
+      }
+
+      // Merge game actions and LLM events chronologically
+      var merged = [];
+      relevantActions.forEach(function (a) {
+        merged.push({ kind: "action", ts: a.ts || "", data: a });
+      });
+      relevantLlm.forEach(function (e) {
+        merged.push({ kind: "llm", ts: e.ts || "", data: e });
+      });
+      merged.sort(function (a, b) {
+        if (a.ts < b.ts) return -1;
+        if (a.ts > b.ts) return 1;
+        return 0;
+      });
+
+      if (merged.length === 0) {
         var empty = document.createElement("div");
         empty.className = "action-line";
         empty.textContent = "(no actions)";
         actionList.appendChild(empty);
       } else {
-        relevantActions.forEach(function (action) {
-          var line = document.createElement("div");
-          line.className = "action-line";
-          line.innerHTML = colorizePlayerNames(action.message);
-          actionList.appendChild(line);
+        merged.forEach(function (item) {
+          if (item.kind === "action") {
+            var line = document.createElement("div");
+            line.className = "action-line";
+            line.innerHTML = colorizePlayerNames(item.data.message);
+            actionList.appendChild(line);
+          } else {
+            var el = renderLlmEvent(item.data);
+            if (el) actionList.appendChild(el);
+          }
         });
       }
 
@@ -452,10 +661,18 @@ const { slug } = Astro.params;
         loadingEl.classList.add("hidden");
         gameUI.classList.remove("hidden");
 
-        // Build player color map
+        // Build player color map and meta
         (game.players || []).forEach(function (p, i) {
           playerColorMap[p.name] = i % 4;
+          if (p.model || p.totalCostUsd != null) {
+            playerMeta[p.name] = { model: p.model, totalCostUsd: p.totalCostUsd };
+          }
         });
+
+        // Show LLM toggle if we have LLM events
+        if (game.llmEvents && game.llmEvents.length > 0) {
+          llmToggleLabel.classList.remove("hidden");
+        }
 
         // Build turn start indices
         var lastTurn = -1;
