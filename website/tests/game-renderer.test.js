@@ -52,6 +52,22 @@ describe("normalizeLiveState", () => {
     expect(p.counters).toEqual([{ name: "poison", count: 3 }]);
   });
 
+  it("normalizes hasPriority to has_priority", () => {
+    const input = {
+      turn: 1,
+      activePlayer: "A",
+      priorityPlayer: "B",
+      players: [
+        { name: "A", life: 20, libraryCount: 30, handCount: 5, isActive: true, hasPriority: false, hasLeft: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+        { name: "B", life: 20, libraryCount: 30, handCount: 5, isActive: false, hasPriority: true, hasLeft: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+      ],
+      stack: [],
+    };
+    const result = R.normalizeLiveState(input);
+    expect(result.players[0].has_priority).toBe(false);
+    expect(result.players[1].has_priority).toBe(true);
+  });
+
   it("normalizes cards with camelCase fields", () => {
     const input = {
       turn: 1,
@@ -480,6 +496,67 @@ describe("makeZone", () => {
     });
     const ghosts = zone.querySelectorAll(".card-ghost");
     expect(ghosts.length).toBe(1);
+  });
+});
+
+// ── renderPlayers ──────────────────────────────────────────────
+
+describe("renderPlayers", () => {
+  const mockPreviewEls = {
+    container: document.createElement("div"),
+    image: document.createElement("img"),
+    name: document.createElement("div"),
+    type: document.createElement("div"),
+    stats: document.createElement("div"),
+    rules: document.createElement("pre"),
+  };
+
+  it("adds active-turn class to the active player card", () => {
+    const container = document.createElement("div");
+    const players = [
+      { name: "Alice", life: 20, library_count: 30, hand_count: 5, is_active: true, has_left: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+      { name: "Bob", life: 20, library_count: 30, hand_count: 5, is_active: false, has_left: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+    ];
+    R.renderPlayers(container, players, {
+      playerColorMap: { Alice: 0, Bob: 1 },
+      priorityPlayerName: "Bob",
+      previewEls: mockPreviewEls,
+    });
+    const cards = container.querySelectorAll(".player-card");
+    expect(cards[0].classList.contains("active-turn")).toBe(true);
+    expect(cards[1].classList.contains("active-turn")).toBe(false);
+  });
+
+  it("adds has-priority class to the priority player name", () => {
+    const container = document.createElement("div");
+    const players = [
+      { name: "Alice", life: 20, library_count: 30, hand_count: 5, is_active: true, has_left: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+      { name: "Bob", life: 20, library_count: 30, hand_count: 5, is_active: false, has_left: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+    ];
+    R.renderPlayers(container, players, {
+      playerColorMap: { Alice: 0, Bob: 1 },
+      priorityPlayerName: "Bob",
+      previewEls: mockPreviewEls,
+    });
+    const names = container.querySelectorAll(".player-name");
+    expect(names[0].classList.contains("has-priority")).toBe(false);
+    expect(names[1].classList.contains("has-priority")).toBe(true);
+  });
+
+  it("active-turn and has-priority can be on the same player", () => {
+    const container = document.createElement("div");
+    const players = [
+      { name: "Alice", life: 20, library_count: 30, hand_count: 5, is_active: true, has_left: false, counters: [], commanders: [], battlefield: [], hand: [], graveyard: [], exile: [] },
+    ];
+    R.renderPlayers(container, players, {
+      playerColorMap: { Alice: 0 },
+      priorityPlayerName: "Alice",
+      previewEls: mockPreviewEls,
+    });
+    const card = container.querySelector(".player-card");
+    const name = container.querySelector(".player-name");
+    expect(card.classList.contains("active-turn")).toBe(true);
+    expect(name.classList.contains("has-priority")).toBe(true);
   });
 });
 

@@ -94,6 +94,10 @@ Recordings are saved to `~/mage-bench-logs/` by default.
 
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
+## UI Terminology
+
+When the user talks about "the UI", they mean the **Java Swing UI** (`StreamingGamePanel`) by default, not the website visualizer.
+
 ## Screenshots
 
 When working on UI changes, take screenshots to verify your work. See `doc/screenshots.md` for full details.

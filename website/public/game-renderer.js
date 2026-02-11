@@ -34,6 +34,7 @@
       library_count: p.libraryCount,
       hand_count: p.handCount,
       is_active: p.isActive,
+      has_priority: p.hasPriority,
       has_left: p.hasLeft,
       counters: p.counters || [],
       commanders: (p.commanders || []).map(normalizeCard),
@@ -317,13 +318,14 @@
   var PLAYER_COLORS = ["player-0", "player-1", "player-2", "player-3"];
 
   function renderPlayers(container, players, opts) {
-    // opts: { cardImages, playerColorMap, diffs, previewEls, showTimer, showThumbnails }
+    // opts: { cardImages, playerColorMap, diffs, previewEls, showTimer, showThumbnails, priorityPlayerName }
     opts = opts || {};
     var cardImages = opts.cardImages || {};
     var playerColorMap = opts.playerColorMap || {};
     var diffs = opts.diffs || null;
     var previewEls = opts.previewEls;
     var showTimer = opts.showTimer || false;
+    var priorityPlayerName = opts.priorityPlayerName || "";
 
     container.innerHTML = "";
     if (!players || players.length === 0) return;
@@ -336,6 +338,7 @@
       if (player.has_left) card.classList.add("eliminated");
       var pColorIdx = playerColorMap[player.name];
       if (pColorIdx != null) card.classList.add(PLAYER_COLORS[pColorIdx]);
+      if (player.is_active) card.classList.add("active-turn");
 
       // Header
       var header = document.createElement("div");
@@ -344,7 +347,7 @@
       var nameEl = document.createElement("div");
       nameEl.className = "player-name";
       if (pColorIdx != null) nameEl.classList.add(PLAYER_COLORS[pColorIdx]);
-      if (player.is_active) nameEl.classList.add("active-player");
+      if (player.name === priorityPlayerName) nameEl.classList.add("has-priority");
       nameEl.textContent = player.name || "?";
       header.appendChild(nameEl);
 
