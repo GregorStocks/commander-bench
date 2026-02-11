@@ -108,6 +108,20 @@ public class SkeletonCallbackHandler {
     private volatile String lastChatMessage = null; // For deduplicating outgoing chat
     private volatile long lastChatTimeMs = 0; // Timestamp of last outgoing chat
     private static final long CHAT_DEDUP_WINDOW_MS = 30_000; // Suppress identical messages within 30s
+
+    // Lost response retry: track last response sent from chooseAction so we can
+    // re-send if the server discards it due to the waitResponseOpen race condition
+    // (see HumanPlayer.java:196). This happens when fireSelectTargetEvent blocks
+    // the game thread on a slow/disconnected player, and our response arrives before
+    // the game thread reaches waitForResponse().
+    private enum ResponseType { UUID, BOOLEAN, STRING, INTEGER, MANA_TYPE }
+    private volatile long lastResponseSentAt = 0;
+    private volatile UUID lastResponseGameId;
+    private volatile ResponseType lastResponseType;
+    private volatile Object lastResponseValue;      // UUID, Boolean, String, Integer, or ManaType
+    private volatile UUID lastResponseManaPlayerId; // only for MANA_TYPE
+    private volatile boolean lastResponseRetried = false;
+    private static final long LOST_RESPONSE_RETRY_MS = 25_000; // retry after 25s (server discards after 30s)
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -282,6 +296,46 @@ public class SkeletonCallbackHandler {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    // Lost response retry helpers
+
+    private void trackSentResponse(UUID gameId, ResponseType type, Object value, UUID manaPlayerId) {
+        lastResponseGameId = gameId;
+        lastResponseType = type;
+        lastResponseValue = value;
+        lastResponseManaPlayerId = manaPlayerId;
+        lastResponseRetried = false;
+        lastResponseSentAt = System.currentTimeMillis();
+    }
+
+    private void clearTrackedResponse() {
+        lastResponseSentAt = 0;
+    }
+
+    /**
+     * If we sent a response >25s ago and haven't received a new callback,
+     * the server may have discarded our response. Re-send it once.
+     * Returns true if a retry was attempted.
+     */
+    private boolean retryLastResponseIfLost() {
+        if (lastResponseSentAt == 0 || lastResponseRetried) return false;
+        long age = System.currentTimeMillis() - lastResponseSentAt;
+        if (age < LOST_RESPONSE_RETRY_MS) return false;
+
+        lastResponseRetried = true;
+        UUID gameId = lastResponseGameId;
+        logger.warn("[" + client.getUsername() + "] Retrying suspected lost response"
+            + " (age=" + age + "ms, type=" + lastResponseType + ")");
+
+        switch (lastResponseType) {
+            case UUID:      session.sendPlayerUUID(gameId, (java.util.UUID) lastResponseValue); break;
+            case BOOLEAN:   session.sendPlayerBoolean(gameId, (Boolean) lastResponseValue); break;
+            case STRING:    session.sendPlayerString(gameId, (String) lastResponseValue); break;
+            case INTEGER:   session.sendPlayerInteger(gameId, (Integer) lastResponseValue); break;
+            case MANA_TYPE: session.sendPlayerManaType(gameId, lastResponseManaPlayerId, (ManaType) lastResponseValue); break;
+        }
+        return true;
     }
 
     // MCP mode methods
@@ -1103,6 +1157,7 @@ public class SkeletonCallbackHandler {
                         logger.warn("[" + client.getUsername() + "] choose_action: ignoring index=" + index + " for GAME_ASK (boolean-only)");
                     }
                     session.sendPlayerBoolean(gameId, answer);
+                    trackSentResponse(gameId, ResponseType.BOOLEAN, answer, null);
                     result.put("action_taken", answer ? "yes" : "no");
                     break;
 
@@ -1128,10 +1183,12 @@ public class SkeletonCallbackHandler {
                             Object chosen = choices.get(index);
                             if (chosen instanceof UUID) {
                                 session.sendPlayerUUID(gameId, (UUID) chosen);
+                                trackSentResponse(gameId, ResponseType.UUID, chosen, null);
                                 result.put("action_taken", "selected_" + index);
                                 usedIndex = true;
                             } else if (chosen instanceof String) {
                                 session.sendPlayerString(gameId, (String) chosen);
+                                trackSentResponse(gameId, ResponseType.STRING, chosen, null);
                                 result.put("action_taken", "special_" + chosen);
                                 usedIndex = true;
                             } else {
@@ -1177,6 +1234,7 @@ public class SkeletonCallbackHandler {
                             Object manaChoice = choices.get(index);
                             if (manaChoice instanceof UUID) {
                                 session.sendPlayerUUID(gameId, (UUID) manaChoice);
+                                trackSentResponse(gameId, ResponseType.UUID, manaChoice, null);
                                 result.put("action_taken", "tapped_mana_" + index);
                                 usedManaIndex = true;
                             } else if (manaChoice instanceof ManaType) {
@@ -1189,6 +1247,7 @@ public class SkeletonCallbackHandler {
                                 }
                                 ManaType manaType = (ManaType) manaChoice;
                                 session.sendPlayerManaType(gameId, manaPlayerId, manaType);
+                                trackSentResponse(gameId, ResponseType.MANA_TYPE, manaType, manaPlayerId);
                                 result.put("action_taken", "used_pool_" + manaType.toString());
                                 usedManaIndex = true;
                             } else {
@@ -1229,7 +1288,9 @@ public class SkeletonCallbackHandler {
                         }
                         List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
                         if (choices != null && index >= 0 && index < choices.size()) {
-                            session.sendPlayerUUID(gameId, (UUID) choices.get(index));
+                            UUID targetUUID = (UUID) choices.get(index);
+                            session.sendPlayerUUID(gameId, targetUUID);
+                            trackSentResponse(gameId, ResponseType.UUID, targetUUID, null);
                             result.put("action_taken", "selected_target_" + index);
                             break;
                         }
@@ -1249,6 +1310,7 @@ public class SkeletonCallbackHandler {
                         // Explicit cancel via answer=false
                         if (!required) {
                             session.sendPlayerBoolean(gameId, false);
+                            trackSentResponse(gameId, ResponseType.BOOLEAN, false, null);
                             result.put("action_taken", "cancelled");
                             break;
                         }
@@ -1268,11 +1330,13 @@ public class SkeletonCallbackHandler {
                         UUID firstTarget = selectDeterministicTarget(autoTargets, lastChoices);
                         logger.warn("[" + client.getUsername() + "] choose_action: auto-selecting first target for required GAME_TARGET");
                         session.sendPlayerUUID(gameId, firstTarget);
+                        trackSentResponse(gameId, ResponseType.UUID, firstTarget, null);
                         result.put("action_taken", "auto_selected_required_target");
                         result.put("warning", "Required target auto-selected. Use get_action_choices first, then index=N.");
                     } else {
                         logger.error("[" + client.getUsername() + "] Required GAME_TARGET has no valid targets — cancelling to avoid infinite loop");
                         session.sendPlayerBoolean(gameId, false);
+                        trackSentResponse(gameId, ResponseType.BOOLEAN, false, null);
                         result.put("action_taken", "cancelled_no_valid_targets");
                     }
                     break;
@@ -1292,7 +1356,9 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerUUID(gameId, (UUID) abilityChoices.get(index));
+                    UUID abilityUUID = (UUID) abilityChoices.get(index);
+                    session.sendPlayerUUID(gameId, abilityUUID);
+                    trackSentResponse(gameId, ResponseType.UUID, abilityUUID, null);
                     result.put("action_taken", "selected_ability_" + index);
                     break;
                 }
@@ -1328,6 +1394,7 @@ public class SkeletonCallbackHandler {
                                 return result;
                             }
                             session.sendPlayerString(gameId, matchedKey);
+                            trackSentResponse(gameId, ResponseType.STRING, matchedKey, null);
                         } else {
                             // For plain choices, text must match a choice string
                             Set<String> choices = choiceObj.getChoices();
@@ -1347,6 +1414,7 @@ public class SkeletonCallbackHandler {
                                 return result;
                             }
                             session.sendPlayerString(gameId, matched);
+                            trackSentResponse(gameId, ResponseType.STRING, matched, null);
                         }
                         result.put("action_taken", "selected_choice_text_" + text);
                         break;
@@ -1364,7 +1432,9 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerString(gameId, (String) choiceChoices.get(index));
+                    String choiceStr = (String) choiceChoices.get(index);
+                    session.sendPlayerString(gameId, choiceStr);
+                    trackSentResponse(gameId, ResponseType.STRING, choiceStr, null);
                     result.put("action_taken", "selected_choice_" + index);
                     break;
                 }
@@ -1376,7 +1446,9 @@ public class SkeletonCallbackHandler {
                         pendingAction = action;
                         return result;
                     }
-                    session.sendPlayerBoolean(gameId, pile == 1);
+                    boolean pileChoice = pile == 1;
+                    session.sendPlayerBoolean(gameId, pileChoice);
+                    trackSentResponse(gameId, ResponseType.BOOLEAN, pileChoice, null);
                     result.put("action_taken", "selected_pile_" + pile);
                     break;
 
@@ -1390,6 +1462,7 @@ public class SkeletonCallbackHandler {
                     GameClientMessage msg = (GameClientMessage) data;
                     int clamped = Math.max(msg.getMin(), Math.min(msg.getMax(), amount));
                     session.sendPlayerInteger(gameId, clamped);
+                    trackSentResponse(gameId, ResponseType.INTEGER, clamped, null);
                     result.put("action_taken", "amount_" + clamped);
                     break;
                 }
@@ -1406,7 +1479,9 @@ public class SkeletonCallbackHandler {
                         if (i > 0) sb.append(",");
                         sb.append(amounts[i]);
                     }
-                    session.sendPlayerString(gameId, sb.toString());
+                    String multiAmountStr = sb.toString();
+                    session.sendPlayerString(gameId, multiAmountStr);
+                    trackSentResponse(gameId, ResponseType.STRING, multiAmountStr, null);
                     result.put("action_taken", "multi_amount");
                     break;
                 }
@@ -1695,6 +1770,15 @@ public class SkeletonCallbackHandler {
                     Thread.currentThread().interrupt();
                     break;
                 }
+            }
+
+            // Lost response retry: if we sent a response but haven't received
+            // a new callback for >25s, the server may have discarded our response
+            // due to a race in HumanPlayer.waitResponseOpen() (blocked by slow
+            // event dispatch to a disconnected player). Retry once and give it
+            // a fresh timeout window to take effect.
+            if (retryLastResponseIfLost()) {
+                startTime = System.currentTimeMillis();
             }
         }
 
@@ -2428,6 +2512,7 @@ public class SkeletonCallbackHandler {
                                 GameView gv = targetCallbackMsg.getGameView();
                                 if (gv != null) lastGameView = gv;
                                 session.sendPlayerUUID(objectId, onlyTarget);
+                                trackSentResponse(objectId, ResponseType.UUID, onlyTarget, null);
                                 break;
                             }
                         }
@@ -2535,6 +2620,7 @@ public class SkeletonCallbackHandler {
             pendingAction = new PendingAction(gameId, method, data, message);
             actionLock.notifyAll();
         }
+        clearTrackedResponse(); // New callback arrived — server moved on, no retry needed
         logger.debug("[" + client.getUsername() + "] Stored pending action: " + method + " - " + message);
     }
 
