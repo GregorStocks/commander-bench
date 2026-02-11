@@ -1,7 +1,6 @@
 {
   "scripts": {
-    "setup": "./scripts/conductor-setup.sh",
-    "run": "make run-dumb",
-    "archive": "./scripts/conductor-archive.sh"
+    "setup": "./scripts/worktree-setup.sh",
+    "run": "make run-dumb"
   }
 }
