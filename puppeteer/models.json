@@ -190,19 +190,17 @@
     }
   ],
   "random_pool": [
-    "anthropic/claude-sonnet-4.5",
     "anthropic/claude-haiku-4.5",
     "google/gemini-2.5-flash",
     "google/gemini-3-flash-preview"
   ],
   "recommendations": {
     "primary_test_set": [
-      "anthropic/claude-sonnet-4.5",
       "anthropic/claude-haiku-4.5",
       "google/gemini-2.5-flash",
       "google/gemini-3-flash-preview"
     ],
-    "reasoning": "Claude (best tool use + visible thinking), Gemini (cheapest with visible thinking). All support extended thinking. OpenAI models (o3, o4-mini) removed due to persistent empty responses and poor tool-use reliability.",
+    "reasoning": "Haiku (good tool use + visible thinking, affordable), Gemini (cheapest with visible thinking). All support extended thinking. Sonnet removed from rotation due to cost. OpenAI models (o3, o4-mini) removed due to persistent empty responses and poor tool-use reliability.",
     "showcase_matches": [
       "anthropic/claude-opus-4.6",
       "google/gemini-3-pro-preview",
