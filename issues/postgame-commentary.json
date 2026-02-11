@@ -1,0 +1,10 @@
+{
+  "title": "Post-game play-by-play commentary script",
+  "description": "Add a script that takes an already-completed game recording and has one or two smart LLMs generate play-by-play commentary on it. Should be runnable after the fact on any game log directory. The LLMs would narrate the game's key moments, explain strategic decisions, and provide color commentary like a sports broadcast.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-10T00:00:00.000000-08:00",
+  "updated_at": "2026-02-10T00:00:00.000000-08:00"
+}
