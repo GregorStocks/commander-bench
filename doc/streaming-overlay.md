@@ -19,12 +19,10 @@ make run-dumb ARGS="--overlay-port 18080"
 make run-dumb ARGS="--no-overlay"
 ```
 
-Run only a long-lived test server (no observer/client), useful for repeated manual testing:
+Run a long game (3 burn CPUs + 1 staller, 200 starting life, no time limit):
 
 ```bash
 make run-staller
-# Optional custom port:
-make run-staller PORT=18080
 ```
 
 ## URLs

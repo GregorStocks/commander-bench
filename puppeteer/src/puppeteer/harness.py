@@ -450,6 +450,8 @@ def start_gui_client(
         env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
         env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+    if config.custom_start_life:
+        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
@@ -731,6 +733,8 @@ def start_streaming_client(
         env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
         env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+    if config.custom_start_life:
+        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],

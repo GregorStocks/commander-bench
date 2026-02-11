@@ -139,14 +139,7 @@ screenshot:
 	fi && \
 	echo "Screenshot saved to $$OUT (T=$$TIME from $$VIDEO)"
 
-# Standalone test server (stays running until Ctrl-C)
-# Optional: make run-staller PORT=18080
+# Long-running game: 3 burn CPUs + 1 staller, 200 life, no time limit
 .PHONY: run-staller
-run-staller: build
-	@PORT_VALUE=$${PORT:-17171}; \
-	CONFIG_PATH="$(PWD)/.context/ai-harness-logs/server_config_$${PORT_VALUE}.xml"; \
-	mkdir -p "$(PWD)/.context/ai-harness-logs"; \
-	PORT=$$PORT_VALUE CONFIG_PATH="$$CONFIG_PATH" uv run --project puppeteer python -c "import os; from pathlib import Path; from puppeteer.xml_config import modify_server_config; modify_server_config(Path('Mage.Server/config/config.xml'), Path(os.environ['CONFIG_PATH']), int(os.environ['PORT']))"; \
-	echo "Starting staller server on localhost:$$PORT_VALUE"; \
-	echo "Config: $$CONFIG_PATH"; \
-	cd Mage.Server && MAVEN_OPTS="-Dxmage.testMode=true -Dxmage.config.path=$$CONFIG_PATH" mvn -q exec:java
+run-staller: website-build
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-staller-config.json $(ARGS)

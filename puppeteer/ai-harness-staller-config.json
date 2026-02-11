@@ -1,0 +1,11 @@
+{
+  "gameType": "Commander Free For All",
+  "deckType": "Variant Magic - Freeform Commander",
+  "customStartLife": 200,
+  "players": [
+    {"type": "cpu", "name": "Burner 1", "deck": "Mage.Client/release/sample-decks/2014/Modern/DailyMTG Top Decks/Bo Sun's Burn.dck"},
+    {"type": "cpu", "name": "Burner 2", "deck": "Mage.Client/release/sample-decks/2014/Modern/DailyMTG Top Decks/Teruya Kakumae's Burn.dck"},
+    {"type": "cpu", "name": "Burner 3", "deck": "Mage.Client/release/sample-decks/2014/Modern/GP Minneapolis/Trial Winning Decklists/Mono-Red Burn - Eric Rath.dck"},
+    {"type": "staller", "name": "Slowpoke", "deck": "random"}
+  ]
+}

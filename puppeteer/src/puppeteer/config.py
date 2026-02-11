@@ -115,6 +115,7 @@ class Config:
     # Game format settings (passed to XMage via config JSON)
     game_type: str = ""  # e.g. "Two Player Duel", "Commander Free For All"
     deck_type: str = ""  # e.g. "Constructed - Legacy", "Variant Magic - Freeform Commander"
+    custom_start_life: int = 0  # 0 = use game type default
 
     # Runtime state (set during execution)
     port: int = 0
@@ -155,6 +156,7 @@ class Config:
             self.match_buffer_time = data.get("matchBufferTime", "")
             self.game_type = data.get("gameType", "")
             self.deck_type = data.get("deckType", "")
+            self.custom_start_life = data.get("customStartLife", 0)
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
                 name = player.get("name", f"player-{i}")
