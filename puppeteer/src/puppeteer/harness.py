@@ -110,7 +110,7 @@ def _ensure_game_over_event(game_dir: Path, observer_exit_code: int = -1) -> Non
             message = "Game interrupted (observer window closed)"
         else:
             reason = "observer_crashed"
-            message = "Game ended (observer exited with code %d)" % observer_exit_code
+            message = f"Game ended (observer exited with code {observer_exit_code})"
         ts = datetime.now().isoformat(timespec="milliseconds")
         event = {
             "ts": ts,
