@@ -1,5 +1,26 @@
 ---
 import Base from '../../layouts/Base.astro';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const gamesDir = path.join(process.cwd(), 'public', 'games');
+const games: Array<Record<string, unknown>> = [];
+if (fs.existsSync(gamesDir)) {
+  for (const file of fs.readdirSync(gamesDir)) {
+    if (!file.startsWith('game_') || !file.endsWith('.json')) continue;
+    const data = JSON.parse(fs.readFileSync(path.join(gamesDir, file), 'utf-8'));
+    const entry: Record<string, unknown> = {
+      id: data.id,
+      timestamp: data.timestamp,
+      totalTurns: data.totalTurns,
+      winner: data.winner,
+      players: data.players,
+    };
+    if (data.youtubeUrl) entry.youtubeUrl = data.youtubeUrl;
+    games.push(entry);
+  }
+}
+games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 ---
 
 <Base title="Games">
@@ -209,19 +230,13 @@ import Base from '../../layouts/Base.astro';
   }
 </style>
 
-<script>
-  Promise.all([
-    fetch("/games/index.json").then(function (r) {
-      if (!r.ok) throw new Error("No games found");
-      return r.json();
-    }),
-    fetch("/data/elo.json").then(function (r) {
-      return r.ok ? r.json() : {};
-    }).catch(function () { return {}; }),
-  ])
-    .then(function (results) {
-      var games = results[0];
-      var eloData = results[1];
+<script is:inline define:vars={{ games }}>
+  var __games = games;
+  fetch("/data/elo.json").then(function (r) {
+    return r.ok ? r.json() : {};
+  }).catch(function () { return {}; })
+    .then(function (eloData) {
+      var games = __games;
       var list = document.getElementById("games-list");
       list.innerHTML = "";
 
