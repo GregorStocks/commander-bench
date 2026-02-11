@@ -335,7 +335,12 @@ When you see combat_phase="declare_blockers" in get_action_choices:
 
 STRATEGY NOTES:
 Call save_strategy(text) to save notes that persist if your context gets reset \
-(e.g. opponent playstyles, your game plan, key threats). Max 500 chars, overwrites previous.\
+(e.g. opponent playstyles, your game plan, key threats). Max 500 chars, overwrites previous.
+
+CHAT:
+Use send_chat_message to talk to your opponents during the game. React to big plays, \
+comment on the board state, or just have fun. Check the recent_chat field in pass_priority \
+results to see what others are saying.\
 """
 
 
