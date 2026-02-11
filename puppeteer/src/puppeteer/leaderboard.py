@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import re
 from datetime import datetime, timezone
@@ -75,11 +76,11 @@ def extract_placements(game: dict, games_dir: Path | None = None) -> dict[str, i
     if games_dir is None:
         return _placements_from_winner(game)
 
-    game_path = games_dir / f"{game['id']}.json"
+    game_path = games_dir / f"{game['id']}.json.gz"
     if not game_path.exists():
         return _placements_from_winner(game)
 
-    full_game = json.loads(game_path.read_text())
+    full_game = json.loads(gzip.decompress(game_path.read_bytes()))
     actions = full_game.get("actions", [])
     player_names = [p.get("name", "?") for p in players]
     winner = game.get("winner")
@@ -296,8 +297,18 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
 
     Returns the benchmark-results.json path.
     """
-    index_path = games_dir / "index.json"
-    games_index = json.loads(index_path.read_text()) if index_path.exists() else []
+    games_index = []
+    for gz_path in sorted(games_dir.glob("game_*.json.gz")):
+        game = json.loads(gzip.decompress(gz_path.read_bytes()))
+        games_index.append(
+            {
+                "id": game["id"],
+                "timestamp": game.get("timestamp", ""),
+                "totalTurns": game.get("totalTurns", 0),
+                "winner": game.get("winner"),
+                "players": game.get("players", []),
+            }
+        )
 
     model_registry = load_model_registry(models_json)
     benchmark_results, ratings_by_game = generate_leaderboard(games_index, model_registry, games_dir)

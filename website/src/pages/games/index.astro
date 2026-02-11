@@ -2,13 +2,15 @@
 import Base from '../../layouts/Base.astro';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 
 const gamesDir = path.join(process.cwd(), 'public', 'games');
 const games: Array<Record<string, unknown>> = [];
 if (fs.existsSync(gamesDir)) {
   for (const file of fs.readdirSync(gamesDir)) {
-    if (!file.startsWith('game_') || !file.endsWith('.json')) continue;
-    const data = JSON.parse(fs.readFileSync(path.join(gamesDir, file), 'utf-8'));
+    if (!file.startsWith('game_') || !file.endsWith('.json.gz')) continue;
+    const compressed = fs.readFileSync(path.join(gamesDir, file));
+    const data = JSON.parse(zlib.gunzipSync(compressed).toString());
     const entry: Record<string, unknown> = {
       id: data.id,
       timestamp: data.timestamp,

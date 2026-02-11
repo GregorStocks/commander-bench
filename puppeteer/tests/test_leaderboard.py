@@ -1,5 +1,6 @@
 """Tests for leaderboard generation: OpenSkill ratings, placement, aggregation."""
 
+import gzip
 import json
 import tempfile
 from pathlib import Path
@@ -150,7 +151,7 @@ def test_extract_placements_from_game_file():
                 {"seq": 200, "message": "Bob has lost the game."},
             ]
         }
-        (games_dir / "g1.json").write_text(json.dumps(game_data))
+        (games_dir / "g1.json.gz").write_bytes(gzip.compress(json.dumps(game_data).encode()))
 
         game = _make_game(
             "g1",
@@ -450,18 +451,16 @@ def test_generate_leaderboard_file_integration():
         data_dir = root / "data"
         data_dir.mkdir()
 
-        games = [
-            _make_game(
-                "g1",
-                "20260101_000000",
-                "Alice",
-                [
-                    _pilot("Alice", "anthropic/claude-sonnet-4.5", cost=5.0, placement=1),
-                    _pilot("Bob", "google/gemini-2.5-flash", cost=1.0, placement=2),
-                ],
-            )
-        ]
-        (games_dir / "index.json").write_text(json.dumps(games))
+        game = _make_game(
+            "game_20260101_000000",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "anthropic/claude-sonnet-4.5", cost=5.0, placement=1),
+                _pilot("Bob", "google/gemini-2.5-flash", cost=1.0, placement=2),
+            ],
+        )
+        (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
 
         models_json = root / "models.json"
         models_json.write_text(
@@ -489,14 +488,14 @@ def test_generate_leaderboard_file_integration():
         elo_path = games_dir.parent / "data" / "elo.json"
         assert elo_path.exists()
         elo_data = json.loads(elo_path.read_text())
-        assert "g1" in elo_data
-        assert "anthropic/claude-sonnet-4.5" in elo_data["g1"]
-        claude_elo = elo_data["g1"]["anthropic/claude-sonnet-4.5"]
+        assert "game_20260101_000000" in elo_data
+        assert "anthropic/claude-sonnet-4.5" in elo_data["game_20260101_000000"]
+        claude_elo = elo_data["game_20260101_000000"]["anthropic/claude-sonnet-4.5"]
         assert claude_elo["after"] > claude_elo["before"]
 
 
-def test_generate_leaderboard_file_no_index():
-    """When index.json doesn't exist, should produce empty results."""
+def test_generate_leaderboard_file_no_games():
+    """When no game files exist, should produce empty results."""
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         games_dir = root / "games"
@@ -511,32 +510,25 @@ def test_generate_leaderboard_file_no_index():
 
 
 def test_generate_leaderboard_file_with_game_fallback():
-    """When index.json entries lack placement, reads full game JSONs."""
+    """When game files lack placement, reads elimination order from actions."""
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         games_dir = root / "games"
         games_dir.mkdir()
         data_dir = root / "data"
 
-        # Index entry without placement
-        games = [
-            _make_game(
-                "g1",
-                "20260101_000000",
-                "Alice",
-                [_pilot("Alice", "a/x"), _pilot("Bob", "b/y"), _pilot("Carol", "c/z")],
-            )
+        # Game without placement fields, but with elimination actions
+        game = _make_game(
+            "game_20260101_000000",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/x"), _pilot("Bob", "b/y"), _pilot("Carol", "c/z")],
+        )
+        game["actions"] = [
+            {"seq": 100, "message": "Carol has lost the game."},
+            {"seq": 200, "message": "Bob has lost the game."},
         ]
-        (games_dir / "index.json").write_text(json.dumps(games))
-
-        # Full game JSON with elimination order
-        game_data = {
-            "actions": [
-                {"seq": 100, "message": "Carol has lost the game."},
-                {"seq": 200, "message": "Bob has lost the game."},
-            ]
-        }
-        (games_dir / "g1.json").write_text(json.dumps(game_data))
+        (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
 
         models_json = root / "models.json"
         models_json.write_text(json.dumps({"models": []}))

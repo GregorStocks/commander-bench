@@ -9,8 +9,8 @@ export function getStaticPaths() {
     return [];
   }
   return fs.readdirSync(gamesDir)
-    .filter((f: string) => f.startsWith('game_') && f.endsWith('.json'))
-    .map((f: string) => ({ params: { slug: f.replace('.json', '') } }));
+    .filter((f: string) => f.startsWith('game_') && f.endsWith('.json.gz'))
+    .map((f: string) => ({ params: { slug: f.replace('.json.gz', '') } }));
 }
 
 const { slug } = Astro.params;
@@ -690,12 +690,18 @@ const { slug } = Astro.params;
       }
     }
 
+    function fetchGzJson(url) {
+      return fetch(url).then(function (r) {
+        if (!r.ok) throw new Error("Game not found (HTTP " + r.status + ")");
+        var ds = new DecompressionStream("gzip");
+        var decompressed = r.body.pipeThrough(ds);
+        return new Response(decompressed).json();
+      });
+    }
+
     // Load game data + Elo data in parallel
     Promise.all([
-      fetch("/games/" + slug + ".json").then(function (r) {
-        if (!r.ok) throw new Error("Game not found (HTTP " + r.status + ")");
-        return r.json();
-      }),
+      fetchGzJson("/games/" + slug + ".json.gz"),
       fetch("/data/elo.json").then(function (r) {
         return r.ok ? r.json() : {};
       }).catch(function () { return {}; }),

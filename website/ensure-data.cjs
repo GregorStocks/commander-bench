@@ -1,8 +1,8 @@
 // Generate leaderboard data before astro build.
 //
 // Locally, `make leaderboard` runs the Python generator via uv before this.
-// On Cloudflare Pages, this script installs openskill + puppeteer via pip
-// and runs the generator directly.
+// On Cloudflare Pages, this script installs deps via pip and runs the
+// generator directly (uv is not available in the CF build environment).
 const { execSync } = require("child_process");
 const fs = require("fs");
 

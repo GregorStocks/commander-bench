@@ -65,7 +65,7 @@ make check
 
 ## Python
 
-Always use `uv` for Python. Never use system Python directly.
+Always use `uv` for Python. **Never** use `python3`, `pip`, `pip3`, or any system Python directly — not for running scripts, not for installing packages, not for anything. All Python execution must go through `uv`.
 
 ```bash
 # Run a Python script
@@ -73,6 +73,9 @@ uv run python script.py
 
 # Run a module
 uv run --project puppeteer python -m puppeteer
+
+# Install a package (NEVER use pip/pip3)
+uv add some-package
 ```
 
 ## Running Games
