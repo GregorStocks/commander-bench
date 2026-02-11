@@ -27,20 +27,16 @@ public class CommanderPanel extends JPanel {
 
     private static final Logger logger = Logger.getLogger(CommanderPanel.class);
 
-    // Card dimensions — wider than upstream to fill available space in the west panel
-    private static final int CARD_WIDTH = 80;
-    private static final int CARD_HEIGHT = (int) (CARD_WIDTH * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
-
-    // Gap between partner commanders
-    private static final int CARD_GAP = 5;
-
-    // Panel margin around cards
-    private static final int MARGIN = 5;
-
     private static final Border EMPTY_BORDER = new EmptyBorder(2, 2, 2, 2);
-    private static final Font LABEL_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
     private static final Color LABEL_COLOR = new Color(200, 180, 120);
-    private static final int LABEL_HEIGHT = 14;
+
+    // Instance fields scaled from cardWidth
+    private final int cardWidth;
+    private final int cardHeight;
+    private final int cardGap;
+    private final int margin;
+    private final Font labelFont;
+    private final int labelHeight;
 
     private final Map<UUID, MageCard> cards = new LinkedHashMap<>();
     private JPanel cardArea;
@@ -48,6 +44,17 @@ public class CommanderPanel extends JPanel {
     private UUID gameId;
 
     public CommanderPanel() {
+        this(80);
+    }
+
+    public CommanderPanel(int cardWidth) {
+        this.cardWidth = cardWidth;
+        this.cardHeight = (int) (cardWidth * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        double scale = cardWidth / 80.0;
+        this.cardGap = Math.max(3, (int) (5 * scale));
+        this.margin = Math.max(3, (int) (5 * scale));
+        this.labelFont = new Font(Font.SANS_SERIF, Font.BOLD, Math.max(10, (int) (10 * scale)));
+        this.labelHeight = Math.max(14, (int) (14 * scale));
         initComponents();
     }
 
@@ -58,10 +65,10 @@ public class CommanderPanel extends JPanel {
         cardArea.setOpaque(false);
 
         JLabel label = new JLabel("CMD");
-        label.setFont(LABEL_FONT);
+        label.setFont(labelFont);
         label.setForeground(LABEL_COLOR);
-        label.setPreferredSize(new Dimension(0, LABEL_HEIGHT));
-        label.setBorder(new EmptyBorder(1, MARGIN, 0, 0));
+        label.setPreferredSize(new Dimension(0, labelHeight));
+        label.setBorder(new EmptyBorder(1, margin, 0, 0));
 
         setOpaque(true);
         setBackground(new Color(100, 80, 40)); // Gold/amber for commander zone
@@ -71,8 +78,8 @@ public class CommanderPanel extends JPanel {
         add(cardArea, BorderLayout.CENTER);
 
         // Fixed size — always visible, does not grow/shrink
-        int panelWidth = CARD_WIDTH + 2 * MARGIN;
-        int panelHeight = LABEL_HEIGHT + CARD_HEIGHT + 4;
+        int panelWidth = cardWidth + 2 * margin;
+        int panelHeight = labelHeight + cardHeight + 4;
         Dimension size = new Dimension(panelWidth, panelHeight);
         setPreferredSize(size);
         setMinimumSize(size);
@@ -127,7 +134,7 @@ public class CommanderPanel extends JPanel {
     }
 
     private void addCard(CardView cardView) {
-        Dimension cardDimension = new Dimension(CARD_WIDTH, CARD_HEIGHT);
+        Dimension cardDimension = new Dimension(cardWidth, cardHeight);
         MageCard mageCard = Plugins.instance.getMageCard(
                 cardView,
                 bigCard,
@@ -141,7 +148,7 @@ public class CommanderPanel extends JPanel {
         );
         mageCard.setCardContainerRef(cardArea);
         mageCard.setZone(Zone.COMMAND);
-        mageCard.setCardBounds(0, 0, CARD_WIDTH, CARD_HEIGHT);
+        mageCard.setCardBounds(0, 0, cardWidth, cardHeight);
         mageCard.update(cardView);
 
         cards.put(cardView.getId(), mageCard);
@@ -152,8 +159,8 @@ public class CommanderPanel extends JPanel {
         // Position cards horizontally with absolute positioning
         int x = 2; // Small left margin
         for (MageCard card : cards.values()) {
-            card.setCardBounds(x, 2, CARD_WIDTH, CARD_HEIGHT);
-            x += CARD_WIDTH + CARD_GAP;
+            card.setCardBounds(x, 2, cardWidth, cardHeight);
+            x += cardWidth + cardGap;
         }
         // Panel size is fixed — set in initComponents, not updated here
     }

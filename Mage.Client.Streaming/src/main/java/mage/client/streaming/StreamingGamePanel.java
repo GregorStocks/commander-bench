@@ -742,10 +742,14 @@ public class StreamingGamePanel extends GamePanel {
      * Must be called before super.init() triggers the first layout.
      */
     private void adjustBattlefieldCardSizes() {
-        // Cap max: ~100px wide (default is ~156px). Aspect ratio 312:445.
-        GUISizeHelper.battlefieldCardMaxDimension = new Dimension(100, 143);
-        // Lower min: ~20px wide (default is ~52px). Allows aggressive shrinking.
-        GUISizeHelper.battlefieldCardMinDimension = new Dimension(20, 29);
+        // Scale card size caps with monitor resolution (1.0 at 1080p, 2.0 at 4K)
+        double scale = computeScaleFactor(this);
+        int maxW = (int) (100 * scale);
+        int maxH = (int) (maxW * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        int minW = (int) (20 * scale);
+        int minH = (int) (minW * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        GUISizeHelper.battlefieldCardMaxDimension = new Dimension(maxW, maxH);
+        GUISizeHelper.battlefieldCardMinDimension = new Dimension(minW, minH);
         // Cap hand card size to match battlefield max so hand cards don't dwarf battlefield cards
         int maxWidth = GUISizeHelper.battlefieldCardMaxDimension.width;
         if (GUISizeHelper.handCardDimension.width > maxWidth) {
@@ -1193,14 +1197,17 @@ public class StreamingGamePanel extends GamePanel {
                     westPanel.remove(oldEx);
                 }
 
+                // Scale zone panel card sizes with monitor resolution
+                int zoneCardWidth = (int) (80 * computeScaleFactor(playArea));
+
                 // Create and inject our streaming zone panels
-                CommanderPanel commanderPanel = new CommanderPanel();
+                CommanderPanel commanderPanel = new CommanderPanel(zoneCardWidth);
                 commanderPanels.put(playerId, commanderPanel);
 
-                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel();
+                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel(zoneCardWidth);
                 streamingGraveyardPanels.put(playerId, graveyardPanel);
 
-                StreamingExilePanel exilePanel = new StreamingExilePanel();
+                StreamingExilePanel exilePanel = new StreamingExilePanel(zoneCardWidth);
                 streamingExilePanels.put(playerId, exilePanel);
 
                 // Layout: playerPanel (0), commanderPanel (1), graveyardPanel (2), exilePanel (3)
@@ -1459,6 +1466,20 @@ public class StreamingGamePanel extends GamePanel {
         } catch (Exception e) {
             // Silently ignore - field may not exist or may not be a Component
         }
+    }
+
+    /**
+     * Compute the UI scale factor based on window height.
+     * At 1080p returns 1.0 (original sizes). At 4K returns 2.0.
+     * Used to scale zone panels, battlefield cards, and other fixed-size elements.
+     */
+    private double computeScaleFactor(Component component) {
+        Window window = SwingUtilities.getWindowAncestor(component);
+        int windowHeight = window != null && window.getHeight() > 0
+                ? window.getHeight()
+                : Toolkit.getDefaultToolkit().getScreenSize().height;
+        double scale = windowHeight / 1080.0;
+        return Math.max(1.0, Math.min(scale, 2.5));
     }
 
     /**
@@ -1856,12 +1877,15 @@ public class StreamingGamePanel extends GamePanel {
 
         if (costLabel == null) {
             // Create and inject cost label into the west panel
+            double scale = computeScaleFactor(playerPanel);
+            int costW = (int) (94 * scale);
+            int costH = (int) (16 * scale);
             costLabel = new JLabel();
             costLabel.setHorizontalAlignment(SwingConstants.CENTER);
             costLabel.setForeground(new Color(0, 200, 0));
-            costLabel.setFont(costLabel.getFont().deriveFont(Font.BOLD, 11f));
-            costLabel.setPreferredSize(new Dimension(94, 16));
-            costLabel.setMaximumSize(new Dimension(94, 16));
+            costLabel.setFont(costLabel.getFont().deriveFont(Font.BOLD, (float) (11 * scale)));
+            costLabel.setPreferredSize(new Dimension(costW, costH));
+            costLabel.setMaximumSize(new Dimension(costW, costH));
 
             Container westPanel = playerPanel.getParent();
             if (westPanel instanceof JPanel) {
