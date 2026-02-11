@@ -712,7 +712,7 @@ def start_streaming_client(
     jvm_args_list.append(f"-Dxmage.streaming.overlay.enabled={'true' if config.overlay else 'false'}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.port={config.overlay_port}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.host={config.overlay_host}")
-    webroot = project_root / "website" / "public"
+    webroot = project_root / "website" / "dist"
     jvm_args_list.append(f"-Dxmage.streaming.overlay.webroot={webroot}")
 
     jvm_args = " ".join(jvm_args_list)

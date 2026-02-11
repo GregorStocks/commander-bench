@@ -64,22 +64,28 @@ package:
 .PHONY: install
 install: clean build package
 
+# Build the website (Astro static site) so the overlay server can serve it.
+# Only rebuilds when dist/ is missing; delete dist/ to force a rebuild.
+.PHONY: website-build
+website-build:
+	@if [ ! -d website/dist ]; then echo "Building website..."; cd website && npm install --prefer-offline --no-audit --no-fund && npx astro build; fi
+
 # Default: streaming with recording enabled
 # Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
 # Overlay controls: make run-dumb ARGS="--overlay-port 18080"
 # Disable overlay: make run-dumb ARGS="--no-overlay"
 .PHONY: run-dumb
-run-dumb:
+run-dumb: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
 
 # LLM player mode: pilot AI + CPU opponents (consumes API tokens)
 .PHONY: run-llm
-run-llm:
+run-llm: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
 
 # 4-LLM mode: 4 different LLM pilots battle each other (consumes API tokens)
 .PHONY: run-llm4
-run-llm4:
+run-llm4: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
 # Generate mcp-tools.json with MCP tool definitions
@@ -89,12 +95,12 @@ mcp-tools:
 
 # 1v1 Legacy: CPU players, no API keys needed
 .PHONY: run-legacy-dumb
-run-legacy-dumb:
+run-legacy-dumb: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-dumb-config.json $(ARGS)
 
 # 1v1 Legacy: Gemini vs Claude (consumes API tokens)
 .PHONY: run-legacy-llm
-run-legacy-llm:
+run-legacy-llm: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-llm-config.json $(ARGS)
 
 # Launch the desktop client (for image downloads, deck building, etc.)
