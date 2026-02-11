@@ -1,11 +1,16 @@
-// Ensure benchmark-results.json exists so `astro build` works even when
-// the Python leaderboard generator hasn't run (e.g. Cloudflare Pages).
+// Generate leaderboard data before astro build.
+//
+// Locally, `make leaderboard` runs the Python generator via uv before this.
+// On Cloudflare Pages, this script installs openskill + puppeteer via pip
+// and runs the generator directly.
+const { execSync } = require("child_process");
 const fs = require("fs");
-const path = "src/data/benchmark-results.json";
-if (!fs.existsSync(path)) {
-  fs.mkdirSync("src/data", { recursive: true });
-  fs.writeFileSync(
-    path,
-    JSON.stringify({ generatedAt: "", totalGames: 0, models: [] })
+
+const RESULTS_PATH = "src/data/benchmark-results.json";
+
+if (!fs.existsSync(RESULTS_PATH)) {
+  execSync(
+    "python3 -m pip install openskill ../puppeteer && python3 ../scripts/generate_leaderboard.py",
+    { stdio: "inherit" }
   );
 }
