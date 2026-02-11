@@ -25,30 +25,22 @@ import mage.view.CardsView;
  */
 public class StreamingExilePanel extends JPanel {
 
-    // Wider cards to fill the west panel (upstream uses 60)
-    private static final int CARD_WIDTH = 80;
-    private static final int CARD_HEIGHT = (int) (CARD_WIDTH * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
-
-    // Maximum peek offset between stacked cards (shrinks as pile grows)
-    private static final int MAX_STACK_OFFSET = 24;
-    private static final int MIN_STACK_OFFSET = 5;
-
-    // Fixed content area height (room for card stacking)
-    private static final int CONTENT_HEIGHT = CARD_HEIGHT * 2;
-
-    // Panel margin
-    private static final int MARGIN = 5;
+    // Instance fields scaled from cardWidth
+    private final int cardWidth;
+    private final int cardHeight;
+    private final int maxStackOffset;
+    private final int minStackOffset;
+    private final int contentHeight;
+    private final int margin;
+    private final int labelHeight;
+    private final int panelWidth;
+    private final int panelHeight;
 
     // Red tint painted over exile cards for visual differentiation
     private static final Color EXILE_TINT = new Color(120, 30, 30, 40);
 
     private static final Border EMPTY_BORDER = new EmptyBorder(0, 0, 0, 0);
-    private static final Font LABEL_FONT = new Font(Font.SANS_SERIF, Font.BOLD, 10);
     private static final Color LABEL_COLOR = new Color(200, 130, 130);
-    private static final int LABEL_HEIGHT = 14;
-
-    private static final int PANEL_WIDTH = CARD_WIDTH + 2 * MARGIN;
-    private static final int PANEL_HEIGHT = LABEL_HEIGHT + CONTENT_HEIGHT;
 
     private final Map<UUID, MageCard> cards = new LinkedHashMap<>();
     private JPanel cardArea;
@@ -56,6 +48,20 @@ public class StreamingExilePanel extends JPanel {
     private UUID gameId;
 
     public StreamingExilePanel() {
+        this(80);
+    }
+
+    public StreamingExilePanel(int cardWidth) {
+        this.cardWidth = cardWidth;
+        this.cardHeight = (int) (cardWidth * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        double scale = cardWidth / 80.0;
+        this.maxStackOffset = Math.max(5, (int) (24 * scale));
+        this.minStackOffset = Math.max(3, (int) (5 * scale));
+        this.contentHeight = cardHeight * 2;
+        this.margin = Math.max(3, (int) (5 * scale));
+        this.labelHeight = Math.max(14, (int) (14 * scale));
+        this.panelWidth = cardWidth + 2 * margin;
+        this.panelHeight = labelHeight + contentHeight;
         initComponents();
     }
 
@@ -76,11 +82,12 @@ public class StreamingExilePanel extends JPanel {
         cardArea.setBackground(new Color(0, 0, 0, 0));
         cardArea.setOpaque(false);
 
+        Font labelFont = new Font(Font.SANS_SERIF, Font.BOLD, Math.max(10, (int) (10 * cardWidth / 80.0)));
         JLabel label = new JLabel("EXILE");
-        label.setFont(LABEL_FONT);
+        label.setFont(labelFont);
         label.setForeground(LABEL_COLOR);
-        label.setPreferredSize(new Dimension(0, LABEL_HEIGHT));
-        label.setBorder(new EmptyBorder(1, MARGIN, 0, 0));
+        label.setPreferredSize(new Dimension(0, labelHeight));
+        label.setBorder(new EmptyBorder(1, margin, 0, 0));
 
         setOpaque(true);
         setBackground(new Color(90, 40, 40)); // More distinctly reddish than upstream
@@ -89,9 +96,10 @@ public class StreamingExilePanel extends JPanel {
         add(label, BorderLayout.NORTH);
         add(cardArea, BorderLayout.CENTER);
 
-        setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
-        setMinimumSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
-        setMaximumSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
+        Dimension size = new Dimension(panelWidth, panelHeight);
+        setPreferredSize(size);
+        setMinimumSize(size);
+        setMaximumSize(size);
     }
 
     public void cleanUp() {
@@ -132,7 +140,7 @@ public class StreamingExilePanel extends JPanel {
     }
 
     private void addCard(CardView cardView) {
-        Dimension cardDimension = new Dimension(CARD_WIDTH, CARD_HEIGHT);
+        Dimension cardDimension = new Dimension(cardWidth, cardHeight);
         MageCard mageCard = Plugins.instance.getMageCard(
                 cardView,
                 bigCard,
@@ -146,7 +154,7 @@ public class StreamingExilePanel extends JPanel {
         );
         mageCard.setCardContainerRef(cardArea);
         mageCard.setZone(Zone.EXILED);
-        mageCard.setCardBounds(0, 0, CARD_WIDTH, CARD_HEIGHT);
+        mageCard.setCardBounds(0, 0, cardWidth, cardHeight);
         mageCard.update(cardView);
 
         cards.put(cardView.getId(), mageCard);
@@ -161,27 +169,27 @@ public class StreamingExilePanel extends JPanel {
         List<MageCard> cardList = new ArrayList<>(cards.values());
         int n = cardList.size();
 
-        // Dynamically compute stack offset so all cards fit in CONTENT_HEIGHT
+        // Dynamically compute stack offset so all cards fit in contentHeight
         int offset;
         if (n <= 1) {
             offset = 0;
         } else {
-            int availableForOffsets = CONTENT_HEIGHT - CARD_HEIGHT;
-            offset = Math.min(MAX_STACK_OFFSET, availableForOffsets / (n - 1));
-            offset = Math.max(MIN_STACK_OFFSET, offset);
+            int availableForOffsets = contentHeight - cardHeight;
+            offset = Math.min(maxStackOffset, availableForOffsets / (n - 1));
+            offset = Math.max(minStackOffset, offset);
         }
 
         int y = 0;
         for (int i = 0; i < n; i++) {
             MageCard card = cardList.get(i);
-            card.setCardBounds(0, y, CARD_WIDTH, CARD_HEIGHT);
+            card.setCardBounds(0, y, cardWidth, cardHeight);
             cardArea.setComponentZOrder(card, n - 1 - i);
             if (i < n - 1) {
                 y += offset;
             }
         }
 
-        cardArea.setPreferredSize(new Dimension(PANEL_WIDTH, CONTENT_HEIGHT));
+        cardArea.setPreferredSize(new Dimension(panelWidth, contentHeight));
     }
 
     public int getCardCount() {
