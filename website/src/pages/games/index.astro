@@ -162,6 +162,20 @@ import Base from '../../layouts/Base.astro';
     font-variant-numeric: tabular-nums;
   }
 
+  .player-elo {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .player-elo.elo-up {
+    color: #a8d9a5;
+  }
+
+  .player-elo.elo-down {
+    color: #e94560;
+  }
+
   .game-footer {
     padding: 0.4rem 1rem;
     font-size: 0.8rem;
@@ -196,12 +210,18 @@ import Base from '../../layouts/Base.astro';
 </style>
 
 <script>
-  fetch("/games/index.json")
-    .then(function (r) {
+  Promise.all([
+    fetch("/games/index.json").then(function (r) {
       if (!r.ok) throw new Error("No games found");
       return r.json();
-    })
-    .then(function (games) {
+    }),
+    fetch("/data/elo.json").then(function (r) {
+      return r.ok ? r.json() : {};
+    }).catch(function () { return {}; }),
+  ])
+    .then(function (results) {
+      var games = results[0];
+      var eloData = results[1];
       var list = document.getElementById("games-list");
       list.innerHTML = "";
 
@@ -312,6 +332,19 @@ import Base from '../../layouts/Base.astro';
             cell.appendChild(costEl);
             totalCost += p.totalCostUsd;
             hasCost = true;
+          }
+
+          // Elo (if available)
+          var gameElo = eloData[game.id];
+          var playerElo = gameElo && p.model ? gameElo[p.model] : null;
+          if (playerElo) {
+            var eloEl = document.createElement("div");
+            eloEl.className = "player-elo";
+            var delta = playerElo.after - playerElo.before;
+            if (delta > 0) eloEl.classList.add("elo-up");
+            else if (delta < 0) eloEl.classList.add("elo-down");
+            eloEl.textContent = playerElo.before + " \u2192 " + playerElo.after;
+            cell.appendChild(eloEl);
           }
 
           grid.appendChild(cell);

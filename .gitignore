@@ -82,3 +82,5 @@ __pycache__
 website/node_modules/
 website/dist/
 website/.astro/
+website/src/data/benchmark-results.json
+website/public/data/elo.json
