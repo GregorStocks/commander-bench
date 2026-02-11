@@ -1,0 +1,10 @@
+{
+  "title": "Context trimming can orphan tool_result blocks, causing API errors",
+  "description": "When pilot.py trims context (lines 455-476), it keeps the last N messages by index. This can split a tool_use/tool_result pair, leaving a tool_result block without its corresponding tool_use. The LLM API then rejects the request with 'unexpected tool_use_id found in tool_result blocks'.\n\nIn game_20260210_170138, Sonnet hit this error twice (errors.log lines 2, 29), with both Google and Anthropic providers rejecting the malformed message history.\n\nEvidence:\n- ~/mage-bench-logs/game_20260210_170138/Sonnet4.5_errors.log line 2: 'unexpected tool_use_id found in tool_result blocks: toolu_vrtx_0113YxkRaQQ7CLfYiaeCYBaC'\n- Same file line 29: same error with different tool_use_id, Anthropic provider\n\nSource: puppeteer/src/puppeteer/pilot.py:455-476 — messages[-trim_target:] can start mid-cycle\n\nSuggested fix: After computing the trim slice, scan backward from the start to find a clean boundary — the first message that is NOT a tool_result. Or scan forward to skip any leading tool_result messages that lack their tool_use pair.",
+  "status": "open",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["puppeteer", "pilot"],
+  "created_at": "2026-02-10T18:30:00.000000-08:00",
+  "updated_at": "2026-02-10T18:30:00.000000-08:00"
+}

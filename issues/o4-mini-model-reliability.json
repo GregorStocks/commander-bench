@@ -1,0 +1,10 @@
+{
+  "title": "o4-mini produces cascading empty responses and should be removed from default rotation",
+  "description": "In game_20260210_170138, o4-mini experienced cascading failures: 14+ consecutive empty LLM responses, JSON parse errors, and an API protocol error ('No tool call found for function call output'). The harness correctly detected degradation and switched to auto-pass mode, but o4-mini was effectively AFK for most of the game.\n\no4-mini also made only 2 GAME_TARGET actions (vs 17-30 for other models) and 29 choose_action calls (vs 133-233 for others), suggesting poor tool-use capability even before the cascade.\n\nThis is a model quality issue, not a code bug. The harness handled the degradation correctly. However, o4-mini consistently underperforms at tool-heavy Magic gameplay and wastes game slots.\n\nEvidence:\n- ~/mage-bench-logs/game_20260210_170138/o4-mini_errors.log: lines 2-27 show cascading empty responses, JSON parse errors, degradation detection\n- o4-mini_llm.jsonl: only 173 LLM calls (vs 769 Sonnet, 432 Haiku, 406 Gemini), 110 tool calls\n- o4-mini_pilot.log line 309: 'LLM appears degraded, switching to auto-pass mode'\n\nRecommendation: Remove o4-mini from the default model rotation for games. It lacks reliable tool-use capability for this workload.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer", "pilot"],
+  "created_at": "2026-02-10T18:30:00.000000-08:00",
+  "updated_at": "2026-02-10T18:30:00.000000-08:00"
+}
