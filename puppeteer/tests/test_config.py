@@ -166,9 +166,9 @@ def test_run_tag_dumb():
     assert config.run_tag == "dumb"
 
 
-def test_run_tag_arena():
-    config = Config(config_file=Path("configs/arena.json"))
-    assert config.run_tag == "arena"
+def test_run_tag_gauntlet():
+    config = Config(config_file=Path("configs/gauntlet.json"))
+    assert config.run_tag == "gauntlet"
 
 
 def test_run_tag_frontier():

@@ -84,7 +84,7 @@ Use `make run` with the `CONFIG` parameter:
 make run
 
 # 4 random LLM pilots, random personalities and decks (needs OPENROUTER_API_KEY)
-make run CONFIG=arena
+make run CONFIG=gauntlet
 
 # Frontier models: one from each major lab (needs OPENROUTER_API_KEY)
 make run CONFIG=frontier
@@ -113,7 +113,7 @@ make run                   # No API keys needed (4 CPU players)
 make run CONFIG=staller    # No API keys needed (burn vs staller)
 ```
 
-**Never run** `CONFIG=arena`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
+**Never run** `CONFIG=gauntlet`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
 
 ## Coding Style: Fail Fast
 
@@ -133,7 +133,7 @@ assert self.config_file is not None, "run_tag requires config_file to be set"
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
 Symlinks for quick access (all relative, inside `~/mage-bench-logs/`):
-- `last-dumb`, `last-arena`, `last-frontier`, etc. — most recent run per config name
+- `last-dumb`, `last-gauntlet`, `last-frontier`, etc. — most recent run per config name
 - `last-branch-{name}` — most recent run on a given git branch (slashes replaced with dashes)
 
 After running a game on your branch, check your branch symlink first:
