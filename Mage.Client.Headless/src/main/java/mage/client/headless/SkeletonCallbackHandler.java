@@ -98,6 +98,7 @@ public class SkeletonCallbackHandler {
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile int interactionsThisTurn = 0; // Generic loop detection: count model interactions per turn
+    private volatile int landsPlayedThisTurn = 0; // Track land plays for land_drops_used hint
     private volatile int maxInteractionsPerTurn = 25; // Configurable per-model; after this many, auto-pass rest of turn
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
@@ -518,6 +519,11 @@ public class SkeletonCallbackHandler {
                     result.put("untapped_lands", untappedLands);
                 }
             }
+            // Analogous to Arena highlighting your lands when you have a land drop left.
+            // Helps LLMs remember they can play a land this turn.
+            if (isMyTurn && isMainPhase) {
+                result.put("land_drops_used", landsPlayedThisTurn);
+            }
         }
 
         ClientCallbackMethod method = action.getMethod();
@@ -578,6 +584,7 @@ public class SkeletonCallbackHandler {
                             lastTurnNumber = turn;
                             failedManaCasts.clear();
                             interactionsThisTurn = 0;
+                            landsPlayedThisTurn = 0;
                         }
                     }
 
@@ -1586,6 +1593,7 @@ public class SkeletonCallbackHandler {
                             lastTurnNumber = turn;
                             failedManaCasts.clear();
                             interactionsThisTurn = 0;
+                            landsPlayedThisTurn = 0;
                         }
                     }
                 }
@@ -2553,6 +2561,11 @@ public class SkeletonCallbackHandler {
             String logEntry = null;
             if (chatMsg.getMessageType() == ChatMessage.MessageType.GAME) {
                 logEntry = chatMsg.getMessage();
+                // Track land plays for land_drops_used hint.
+                // " plays " is exclusive to land plays (spells use "casts", abilities "activates").
+                if (logEntry != null && logEntry.contains(" plays ") && logEntry.contains(client.getUsername())) {
+                    landsPlayedThisTurn++;
+                }
                 // Detect when our player has lost the game
                 if (!playerDead && logEntry != null && logEntry.contains("has lost the game")
                         && logEntry.contains(client.getUsername())) {
