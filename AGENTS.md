@@ -14,20 +14,20 @@ Avoid **modifying existing behavior** in Java outside of `Mage.Client.Streaming`
 **Additive changes are OK:** Adding new methods, fields, or classes to upstream modules is fine as long as existing behavior is untouched — these merge cleanly.
 
 **Our code (free to modify):**
-- `Mage.Client.Streaming` - streaming/observer client
-- `Mage.Client.Headless` - headless client for AI harness
+- `Mage.Client.Streaming` - streaming/spectator client
+- `Mage.Client.Headless` - headless bridge client
 - `puppeteer/` - Python orchestration
 
-## Architecture: MCP Layer vs Python Harness
+## Architecture: MCP Layer vs Puppeteer
 
-Game logic, Magic rules quirks, and XMage-specific workarounds belong in the **Java MCP layer** (`Mage.Client.Headless`), not in the Python harness. The MCP layer should handle things like:
+Game logic, Magic rules quirks, and XMage-specific workarounds belong in the **Java MCP layer** (`Mage.Client.Headless`), not in the puppeteer. The MCP layer should handle things like:
 
 - Auto-tapping and mana payment fallbacks
 - Filtering out unplayable actions (e.g. failed mana casts)
 - Auto-passing priority when there are no meaningful choices
 - Working around XMage UI quirks (modal dialogs, selection prompts)
 
-The **Python harness** (`puppeteer/`) should stay simple. Its job is to:
+The **puppeteer** (`puppeteer/`) should stay simple. Its job is to:
 
 - Connect the MCP server to the LLMs via tool calls
 - Provide additional tools for the LLMs (e.g. card lookup)
@@ -75,7 +75,7 @@ uv run python script.py
 uv run --project puppeteer python -m puppeteer
 ```
 
-## Running the AI Harness
+## Running Games
 
 Use `make run` with the `CONFIG` parameter:
 

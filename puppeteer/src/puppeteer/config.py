@@ -1,18 +1,10 @@
-"""Configuration for the AI harness."""
+"""Configuration for the puppeteer."""
 
 import json
 import random
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-
-
-@dataclass
-class SkeletonPlayer:
-    """Legacy skeleton player (kept for backwards compatibility)."""
-
-    name: str
-    deck: str | None = None  # Path to .dck file, relative to project root
 
 
 @dataclass
@@ -40,19 +32,6 @@ class SleepwalkerPlayer:
 
 
 @dataclass
-class ChatterboxPlayer:
-    """Chatterbox personality: LLM-powered commentator, auto-plays, chats via LLM."""
-
-    name: str
-    deck: str | None = None  # Path to .dck file, relative to project root
-    model: str | None = None  # LLM model (e.g., "anthropic/claude-sonnet-4")
-    base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
-    system_prompt: str | None = None  # Custom system prompt
-    personality: str | None = None  # Named personality from personalities.json
-    prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
-
-
-@dataclass
 class PilotPlayer:
     """Pilot personality: LLM-powered strategic game player."""
 
@@ -76,7 +55,7 @@ class CpuPlayer:
 
 
 # Union type for all player types
-Player = PotatoPlayer | StallerPlayer | SleepwalkerPlayer | ChatterboxPlayer | PilotPlayer | CpuPlayer | SkeletonPlayer
+Player = PotatoPlayer | StallerPlayer | SleepwalkerPlayer | PilotPlayer | CpuPlayer
 
 # XMage server username constraints (from Mage.Server/config/config.xml)
 MIN_USERNAME_LENGTH = 3
@@ -167,7 +146,7 @@ def _generate_player_name(
 
 
 def _resolve_randoms(
-    players: list[tuple[PilotPlayer | ChatterboxPlayer, bool]],
+    players: list[tuple[PilotPlayer, bool]],
     personalities: dict[str, dict],
     models_data: dict,
 ) -> None:
@@ -222,7 +201,7 @@ def _resolve_randoms(
 
 
 def _resolve_personality(
-    player: PilotPlayer | ChatterboxPlayer,
+    player: PilotPlayer,
     personalities: dict[str, dict],
     had_explicit_name: bool,
 ) -> None:
@@ -261,15 +240,15 @@ def _resolve_personality(
 
 @dataclass
 class Config:
-    """Harness configuration with sensible defaults."""
+    """Puppeteer configuration with sensible defaults."""
 
     # Hardcoded defaults
     server: str = "localhost"
     start_port: int = 17171
-    user: str = "observer"
+    user: str = "spectator"
     password: str = ""
     server_wait: int = 90
-    skeleton_delay: int = 5
+    bridge_delay: int = 5
     log_dir: Path = field(default_factory=lambda: Path.home() / "mage-bench-logs")
     jvm_opens: str = "--add-opens=java.base/java.io=ALL-UNNAMED"
     # Enable XRender pipeline for Java 2D — GPU-accelerated rendering on Linux
@@ -315,19 +294,15 @@ class Config:
     potato_players: list[PotatoPlayer] = field(default_factory=list)
     staller_players: list[StallerPlayer] = field(default_factory=list)
     sleepwalker_players: list[SleepwalkerPlayer] = field(default_factory=list)
-    chatterbox_players: list[ChatterboxPlayer] = field(default_factory=list)
     pilot_players: list[PilotPlayer] = field(default_factory=list)
     cpu_players: list[CpuPlayer] = field(default_factory=list)
 
-    # Legacy: kept for backwards compatibility
-    skeleton_players: list[SkeletonPlayer] = field(default_factory=list)
-
-    def load_skeleton_config(self) -> None:
+    def load_config(self) -> None:
         """Load player configuration from JSON file."""
         if self.config_file is None:
             # Try default locations in order
             candidates = [
-                Path(".context/ai-harness-config.json"),  # User override
+                Path(".context/ai-puppeteer-config.json"),  # User override
                 Path("configs/dumb.json"),  # Repo default
             ]
             for candidate in candidates:
@@ -351,7 +326,7 @@ class Config:
             models_data = load_models(self.config_file)
 
             # First pass: construct player objects, collecting LLM players for random resolution
-            llm_players: list[tuple[PilotPlayer | ChatterboxPlayer, bool]] = []
+            llm_players: list[tuple[PilotPlayer, bool]] = []
 
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
@@ -361,17 +336,6 @@ class Config:
 
                 if player_type == "sleepwalker":
                     self.sleepwalker_players.append(SleepwalkerPlayer(name=name, deck=deck))
-                elif player_type == "chatterbox":
-                    p = ChatterboxPlayer(
-                        name=name,
-                        deck=deck,
-                        model=player.get("model"),
-                        base_url=player.get("base_url"),
-                        system_prompt=player.get("system_prompt"),
-                        personality=player.get("personality"),
-                    )
-                    llm_players.append((p, has_explicit_name))
-                    self.chatterbox_players.append(p)
                 elif player_type == "pilot":
                     p = PilotPlayer(
                         name=name,
@@ -398,17 +362,10 @@ class Config:
             _resolve_randoms(llm_players, personalities, models_data)
 
     def get_players_config_json(self) -> str:
-        """Serialize resolved player config to JSON for passing to observer/GUI client."""
+        """Serialize resolved player config to JSON for passing to spectator/GUI client."""
         players = []
         for p in self.pilot_players:
             d = {"type": "pilot", "name": p.name}
-            if p.deck:
-                d["deck"] = p.deck
-            if p.model:
-                d["model"] = p.model
-            players.append(d)
-        for p in self.chatterbox_players:
-            d = {"type": "chatterbox", "name": p.name}
             if p.deck:
                 d["deck"] = p.deck
             if p.model:
@@ -434,11 +391,6 @@ class Config:
             if p.deck:
                 d["deck"] = p.deck
             players.append(d)
-        for p in self.skeleton_players:
-            d = {"type": "skeleton", "name": p.name}
-            if p.deck:
-                d["deck"] = p.deck
-            players.append(d)
         if not players:
             return ""
         result: dict = {"players": players}
@@ -454,10 +406,8 @@ class Config:
             self.potato_players
             + self.staller_players
             + self.sleepwalker_players
-            + self.chatterbox_players
             + self.pilot_players
             + self.cpu_players
-            + self.skeleton_players
         )
         if not any(p.deck == "random" for p in all_players):
             return

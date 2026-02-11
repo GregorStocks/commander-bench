@@ -1,4 +1,4 @@
-"""Main harness orchestration."""
+"""Main orchestrator for game lifecycle management."""
 
 import argparse
 import json
@@ -10,8 +10,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from puppeteer.chatterbox import DEFAULT_SYSTEM_PROMPT as CHATTERBOX_DEFAULT_SYSTEM_PROMPT
-from puppeteer.config import ChatterboxPlayer, Config, PilotPlayer
+from puppeteer.config import Config, PilotPlayer
 from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
@@ -20,7 +19,7 @@ from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
-_OBSERVER_TABLE_READY = "AI Harness: waiting for"
+_SPECTATOR_TABLE_READY = "AI Puppeteer: waiting for"
 
 
 def _git(cmd: str, cwd: Path) -> str:
@@ -37,30 +36,30 @@ def _git(cmd: str, cwd: Path) -> str:
         return ""
 
 
-def _wait_for_observer_table(log_path: Path, proc: subprocess.Popen, timeout: int = 300) -> None:
-    """Block until the observer log indicates the game table is ready.
+def _wait_for_spectator_table(log_path: Path, proc: subprocess.Popen, timeout: int = 300) -> None:
+    """Block until the spectator log indicates the game table is ready.
 
-    The streaming/GUI client logs a line containing ``AI Harness: waiting
-    for … skeleton client(s)`` once it has created the table.  We poll the
+    The streaming/GUI client logs a line containing ``AI Puppeteer: waiting
+    for … bridge client(s)`` once it has created the table.  We poll the
     log file for that marker so headless clients aren't started before the
     table exists.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc.poll() is not None:
-            raise RuntimeError("Observer process exited before creating the game table")
+            raise RuntimeError("Spectator process exited before creating the game table")
         if log_path.exists():
             text = log_path.read_text()
-            if _OBSERVER_TABLE_READY in text:
+            if _SPECTATOR_TABLE_READY in text:
                 return
         time.sleep(2)
-    raise TimeoutError(f"Observer did not create a table within {timeout}s — check {log_path}")
+    raise TimeoutError(f"Spectator did not create a table within {timeout}s — check {log_path}")
 
 
 def _missing_llm_api_keys(config: Config) -> list[str]:
     """Return validation errors for LLM players missing required API keys."""
     errors: list[str] = []
-    llm_players = [*config.chatterbox_players, *config.pilot_players]
+    llm_players = [*config.pilot_players]
     for player in llm_players:
         base_url = player.base_url or DEFAULT_LLM_BASE_URL
         key_env = required_api_key_env(base_url)
@@ -86,16 +85,16 @@ def bring_to_foreground_macos() -> None:
     )
 
 
-def _ensure_game_over_event(game_dir: Path, observer_exit_code: int = -1) -> None:
+def _ensure_game_over_event(game_dir: Path, spectator_exit_code: int = -1) -> None:
     """Append a game_over event to game_events.jsonl if one is missing.
 
-    When the game ends via time limit, user closing the observer window, or
+    When the game ends via time limit, user closing the spectator window, or
     process kill, XMage may not fire a GAME_OVER callback. This ensures the
     event log always has a termination record for downstream analysis.
 
-    The observer_exit_code is used to distinguish reasons:
-    - 0: observer exited cleanly (user closed window or normal shutdown)
-    - non-zero / -1: observer crashed or was killed
+    The spectator_exit_code is used to distinguish reasons:
+    - 0: spectator exited cleanly (user closed window or normal shutdown)
+    - non-zero / -1: spectator crashed or was killed
     """
     events_file = game_dir / "game_events.jsonl"
     has_game_over = False
@@ -121,12 +120,12 @@ def _ensure_game_over_event(game_dir: Path, observer_exit_code: int = -1) -> Non
             pass
 
     if not has_game_over:
-        if observer_exit_code == 0:
-            reason = "observer_closed"
-            message = "Game interrupted (observer window closed)"
+        if spectator_exit_code == 0:
+            reason = "spectator_closed"
+            message = "Game interrupted (spectator window closed)"
         else:
-            reason = "observer_crashed"
-            message = f"Game ended (observer exited with code {observer_exit_code})"
+            reason = "spectator_crashed"
+            message = f"Game ended (spectator exited with code {spectator_exit_code})"
         ts = datetime.now().isoformat(timespec="milliseconds")
         event = {
             "ts": ts,
@@ -145,7 +144,7 @@ def _ensure_game_over_event(game_dir: Path, observer_exit_code: int = -1) -> Non
 def _write_error_log(game_dir: Path) -> None:
     """Combine per-player error logs into a unified errors.log.
 
-    Each player (pilot/chatterbox) writes errors to {name}_errors.log
+    Each player (pilot) writes errors to {name}_errors.log
     in real-time. This just concatenates them into one file.
     """
     error_lines: list[str] = []
@@ -170,7 +169,6 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
     players = []
     all_players = [
         *((p, "pilot") for p in config.pilot_players),
-        *((p, "chatterbox") for p in config.chatterbox_players),
         *((p, "sleepwalker") for p in config.sleepwalker_players),
         *((p, "potato") for p in config.potato_players),
         *((p, "staller") for p in config.staller_players),
@@ -221,8 +219,8 @@ def _print_game_summary(game_dir: Path) -> None:
         except OSError:
             pass
 
-    # Fall back to game_events.jsonl (written by the streaming observer).
-    # CPU-only games have no headless client logs, but the observer still
+    # Fall back to game_events.jsonl (written by the streaming spectator).
+    # CPU-only games have no headless client logs, but the spectator still
     # records a game_over event.
     if not game_over_found:
         events_file = game_dir / "game_events.jsonl"
@@ -239,10 +237,10 @@ def _print_game_summary(game_dir: Path) -> None:
                     if event.get("type") == "game_over":
                         reason = event.get("reason", "")
                         msg = event.get("message", "")
-                        if reason == "observer_closed":
+                        if reason == "spectator_closed":
                             game_over_found = True
                             print(f"  {msg}")
-                        elif reason not in ("timeout_or_killed", "observer_crashed") and msg:
+                        elif reason not in ("timeout_or_killed", "spectator_crashed") and msg:
                             game_over_found = True
                             print(f"  Game over: {msg}")
                         break
@@ -273,16 +271,16 @@ def _print_game_summary(game_dir: Path) -> None:
 
 def parse_args() -> Config:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="XMage AI Harness")
+    parser = argparse.ArgumentParser(description="XMage AI Puppeteer")
     parser.add_argument(
         "--config",
         type=Path,
-        help="Path to skeleton player config JSON",
+        help="Path to player config JSON",
     )
     parser.add_argument(
         "--streaming",
         action="store_true",
-        help="Launch the streaming observer client (auto-requests hand permissions)",
+        help="Launch the streaming spectator client (auto-requests hand permissions)",
     )
     parser.add_argument(
         "--record",
@@ -295,7 +293,7 @@ def parse_args() -> Config:
     parser.add_argument(
         "--no-overlay",
         action="store_true",
-        help="Disable local overlay server in streaming client",
+        help="Disable local overlay server in streaming spectator",
     )
     parser.add_argument(
         "--overlay-port",
@@ -401,12 +399,12 @@ def start_server(
     )
 
     env = {
-        "XMAGE_AI_HARNESS": "1",
-        "XMAGE_AI_HARNESS_USER": config.user,
-        "XMAGE_AI_HARNESS_PASSWORD": config.password,
-        "XMAGE_AI_HARNESS_SERVER": config.server,
-        "XMAGE_AI_HARNESS_PORT": str(config.port),
-        "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW": "1",
+        "XMAGE_AI_PUPPETEER": "1",
+        "XMAGE_AI_PUPPETEER_USER": config.user,
+        "XMAGE_AI_PUPPETEER_PASSWORD": config.password,
+        "XMAGE_AI_PUPPETEER_SERVER": config.server,
+        "XMAGE_AI_PUPPETEER_PORT": str(config.port),
+        "XMAGE_AI_PUPPETEER_DISABLE_WHATS_NEW": "1",
         "MAVEN_OPTS": jvm_args,
     }
 
@@ -432,32 +430,32 @@ def start_gui_client(
         [
             config.jvm_opens,
             config.jvm_rendering,
-            "-Dxmage.aiHarness.autoConnect=true",
-            "-Dxmage.aiHarness.autoStart=true",
-            "-Dxmage.aiHarness.disableWhatsNew=true",
-            f"-Dxmage.aiHarness.server={config.server}",
-            f"-Dxmage.aiHarness.port={config.port}",
-            f"-Dxmage.aiHarness.user={config.user}",
-            f"-Dxmage.aiHarness.password={config.password}",
+            "-Dxmage.aiPuppeteer.autoConnect=true",
+            "-Dxmage.aiPuppeteer.autoStart=true",
+            "-Dxmage.aiPuppeteer.disableWhatsNew=true",
+            f"-Dxmage.aiPuppeteer.server={config.server}",
+            f"-Dxmage.aiPuppeteer.port={config.port}",
+            f"-Dxmage.aiPuppeteer.user={config.user}",
+            f"-Dxmage.aiPuppeteer.password={config.password}",
         ]
     )
 
     env = {
-        "XMAGE_AI_HARNESS": "1",
-        "XMAGE_AI_HARNESS_USER": config.user,
-        "XMAGE_AI_HARNESS_PASSWORD": config.password,
-        "XMAGE_AI_HARNESS_SERVER": config.server,
-        "XMAGE_AI_HARNESS_PORT": str(config.port),
-        "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW": "1",
-        "XMAGE_AI_HARNESS_PLAYERS_CONFIG": config_json,
+        "XMAGE_AI_PUPPETEER": "1",
+        "XMAGE_AI_PUPPETEER_USER": config.user,
+        "XMAGE_AI_PUPPETEER_PASSWORD": config.password,
+        "XMAGE_AI_PUPPETEER_SERVER": config.server,
+        "XMAGE_AI_PUPPETEER_PORT": str(config.port),
+        "XMAGE_AI_PUPPETEER_DISABLE_WHATS_NEW": "1",
+        "XMAGE_AI_PUPPETEER_PLAYERS_CONFIG": config_json,
         "MAVEN_OPTS": jvm_args,
     }
     if config.match_time_limit:
-        env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
+        env["XMAGE_AI_PUPPETEER_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
-        env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+        env["XMAGE_AI_PUPPETEER_MATCH_BUFFER_TIME"] = config.match_buffer_time
     if config.custom_start_life:
-        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
+        env["XMAGE_AI_PUPPETEER_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
@@ -465,18 +463,6 @@ def start_gui_client(
         env=env,
         log_file=log_path,
     )
-
-
-def start_skeleton_client(
-    pm: ProcessManager,
-    project_root: Path,
-    config: Config,
-    name: str,
-    deck_path: str | None,
-    log_path: Path,
-) -> subprocess.Popen:
-    """Start a headless skeleton client (legacy, same as potato)."""
-    return start_potato_client(pm, project_root, config, name, deck_path, log_path)
 
 
 def start_potato_client(
@@ -523,9 +509,9 @@ def start_sleepwalker_client(
     deck_path: str | None,
     log_path: Path,
 ) -> subprocess.Popen:
-    """Start a sleepwalker client (Python MCP client + skeleton in MCP mode).
+    """Start a sleepwalker client (Python MCP client + bridge in MCP mode).
 
-    This spawns the sleepwalker.py script which in turn spawns the skeleton.
+    This spawns the sleepwalker.py script which in turn spawns the bridge.
     """
     import sys
 
@@ -558,68 +544,6 @@ def start_sleepwalker_client(
     )
 
 
-def start_chatterbox_client(
-    pm: ProcessManager,
-    project_root: Path,
-    config: Config,
-    player: ChatterboxPlayer,
-    log_path: Path,
-    game_dir: Path | None = None,
-) -> subprocess.Popen:
-    """Start a chatterbox client (LLM-powered MCP client + skeleton in MCP mode).
-
-    This spawns the chatterbox.py script which in turn spawns the skeleton.
-    """
-    import os
-    import sys
-
-    env = {
-        "PYTHONUNBUFFERED": "1",
-    }
-
-    # Pass the provider-specific API key based on player's base_url
-    key_env = required_api_key_env(player.base_url or DEFAULT_LLM_BASE_URL)
-    api_key = os.environ.get(key_env, "")
-    if api_key:
-        env[key_env] = api_key
-
-    args = [
-        sys.executable,
-        "-m",
-        "puppeteer.chatterbox",
-        "--server",
-        config.server,
-        "--port",
-        str(config.port),
-        "--username",
-        player.name,
-        "--project-root",
-        str(project_root),
-    ]
-
-    if player.deck:
-        args.extend(["--deck", str(project_root / player.deck)])
-    if player.model:
-        args.extend(["--model", player.model])
-    if player.base_url:
-        args.extend(["--base-url", player.base_url])
-    # Determine effective system prompt: explicit system_prompt > personality suffix > default
-    effective_prompt = player.system_prompt
-    if not effective_prompt and player.prompt_suffix:
-        effective_prompt = CHATTERBOX_DEFAULT_SYSTEM_PROMPT + "\n\n" + player.prompt_suffix
-    if effective_prompt:
-        args.extend(["--system-prompt", effective_prompt])
-    if game_dir:
-        args.extend(["--game-dir", str(game_dir)])
-
-    return pm.start_process(
-        args=args,
-        cwd=project_root,
-        env=env,
-        log_file=log_path,
-    )
-
-
 def start_pilot_client(
     pm: ProcessManager,
     project_root: Path,
@@ -630,7 +554,7 @@ def start_pilot_client(
 ) -> subprocess.Popen:
     """Start a pilot client (LLM-powered game player via MCP).
 
-    This spawns the pilot.py script which in turn spawns the skeleton.
+    This spawns the pilot.py script which in turn spawns the bridge.
     """
     import os
     import sys
@@ -693,7 +617,7 @@ def start_streaming_client(
     log_path: Path,
     game_dir: Path | None = None,
 ) -> subprocess.Popen:
-    """Start the streaming observer client.
+    """Start the streaming spectator client.
 
     This client automatically requests hand permission from all players,
     making it suitable for Twitch streaming where viewers should see all hands.
@@ -704,13 +628,13 @@ def start_streaming_client(
     jvm_args_list = [
         config.jvm_opens,
         config.jvm_rendering,
-        "-Dxmage.aiHarness.autoConnect=true",
-        "-Dxmage.aiHarness.autoStart=true",
-        "-Dxmage.aiHarness.disableWhatsNew=true",
-        f"-Dxmage.aiHarness.server={config.server}",
-        f"-Dxmage.aiHarness.port={config.port}",
-        f"-Dxmage.aiHarness.user={config.user}",
-        f"-Dxmage.aiHarness.password={config.password}",
+        "-Dxmage.aiPuppeteer.autoConnect=true",
+        "-Dxmage.aiPuppeteer.autoStart=true",
+        "-Dxmage.aiPuppeteer.disableWhatsNew=true",
+        f"-Dxmage.aiPuppeteer.server={config.server}",
+        f"-Dxmage.aiPuppeteer.port={config.port}",
+        f"-Dxmage.aiPuppeteer.user={config.user}",
+        f"-Dxmage.aiPuppeteer.password={config.password}",
     ]
 
     # Add game directory for cost file polling
@@ -733,21 +657,21 @@ def start_streaming_client(
     jvm_args = " ".join(jvm_args_list)
 
     env = {
-        "XMAGE_AI_HARNESS": "1",
-        "XMAGE_AI_HARNESS_USER": config.user,
-        "XMAGE_AI_HARNESS_PASSWORD": config.password,
-        "XMAGE_AI_HARNESS_SERVER": config.server,
-        "XMAGE_AI_HARNESS_PORT": str(config.port),
-        "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW": "1",
-        "XMAGE_AI_HARNESS_PLAYERS_CONFIG": config_json,
+        "XMAGE_AI_PUPPETEER": "1",
+        "XMAGE_AI_PUPPETEER_USER": config.user,
+        "XMAGE_AI_PUPPETEER_PASSWORD": config.password,
+        "XMAGE_AI_PUPPETEER_SERVER": config.server,
+        "XMAGE_AI_PUPPETEER_PORT": str(config.port),
+        "XMAGE_AI_PUPPETEER_DISABLE_WHATS_NEW": "1",
+        "XMAGE_AI_PUPPETEER_PLAYERS_CONFIG": config_json,
         "MAVEN_OPTS": jvm_args,
     }
     if config.match_time_limit:
-        env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
+        env["XMAGE_AI_PUPPETEER_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
-        env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+        env["XMAGE_AI_PUPPETEER_MATCH_BUFFER_TIME"] = config.match_buffer_time
     if config.custom_start_life:
-        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
+        env["XMAGE_AI_PUPPETEER_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
@@ -842,14 +766,14 @@ def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
 
 
 def main() -> int:
-    """Main harness orchestration."""
+    """Main orchestrator for game lifecycle management."""
     config = parse_args()
     project_root = Path.cwd().resolve()
     pm = ProcessManager()
 
     try:
         # Load player config as early as possible so invalid LLM setup fails fast.
-        config.load_skeleton_config()
+        config.load_config()
         missing_llm_keys = _missing_llm_api_keys(config)
         if missing_llm_keys:
             print("ERROR: LLM players configured without required API keys:")
@@ -901,7 +825,7 @@ def main() -> int:
         config.port = find_available_port(config.server, config.start_port)
         print(f"Using port {config.port}")
 
-        # Pick an available overlay port for this run to support parallel observers.
+        # Pick an available overlay port for this run to support parallel spectators.
         if config.streaming and config.overlay:
             requested_overlay_port = config.overlay_port
             config.overlay_port = find_available_overlay_port(requested_overlay_port)
@@ -918,7 +842,7 @@ def main() -> int:
 
         # Set up log paths (all inside game directory)
         server_log = game_dir / "server.log"
-        observer_log = game_dir / "observer.log"
+        spectator_log = game_dir / "spectator.log"
 
         # Update per-target "last-{tag}" symlink to point to this game directory
         last_link = log_dir / f"last-{config.run_tag}"
@@ -935,7 +859,7 @@ def main() -> int:
 
         print(f"Game logs: {game_dir}")
         print(f"Server log: {server_log}")
-        print(f"Observer log: {observer_log}")
+        print(f"Spectator log: {spectator_log}")
         if config.record:
             record_path = config.record_output or (game_dir / "recording.mov")
             print(f"Recording to: {record_path}")
@@ -956,7 +880,7 @@ def main() -> int:
 
         print("Server is ready!")
 
-        # Player config was already loaded above (passed to observer/GUI via environment variable)
+        # Player config was already loaded above (passed to spectator/GUI via environment variable)
         if config.config_file:
             print(f"Using config: {config.config_file}")
             # Copy config into game directory for reference
@@ -965,50 +889,42 @@ def main() -> int:
         config.resolve_random_decks(project_root)
         _write_game_meta(game_dir, config, project_root)
 
-        # Choose which observer client to start (streaming or regular GUI)
+        # Choose which spectator client to start (streaming or regular GUI)
         if config.streaming:
-            print("Starting streaming observer client...")
-            start_observer_client = start_streaming_client
+            print("Starting streaming spectator client...")
+            start_spectator_client = start_streaming_client
         else:
-            start_observer_client = start_gui_client
+            start_spectator_client = start_gui_client
 
-        # Count headless clients (sleepwalker, chatterbox, pilot, potato, legacy skeleton)
+        # Count headless clients (sleepwalker, pilot, potato, staller)
         headless_count = (
             len(config.sleepwalker_players)
-            + len(config.chatterbox_players)
             + len(config.pilot_players)
             + len(config.potato_players)
             + len(config.staller_players)
-            + len(config.skeleton_players)  # Legacy
         )
 
-        # Start observer client first
+        # Start spectator client first
         if config.streaming:
-            observer_proc = start_observer_client(pm, project_root, config, observer_log, game_dir=game_dir)
+            spectator_proc = start_spectator_client(pm, project_root, config, spectator_log, game_dir=game_dir)
         else:
-            observer_proc = start_observer_client(pm, project_root, config, observer_log)
+            spectator_proc = start_spectator_client(pm, project_root, config, spectator_log)
 
         # Bring the GUI window to the foreground on macOS
         bring_to_foreground_macos()
 
         if headless_count > 0:
-            # Wait for observer to create the table before starting headless
-            # clients.  The observer logs a distinctive line once the table is
+            # Wait for spectator to create the table before starting headless
+            # clients.  The spectator logs a distinctive line once the table is
             # ready to accept joins.  Polling for that line avoids a fixed
             # delay that races against variable DB-init times.
-            _wait_for_observer_table(observer_log, observer_proc, timeout=300)
+            _wait_for_spectator_table(spectator_log, spectator_proc, timeout=300)
 
-            # Start sleepwalker clients (MCP-based, Python controls skeleton)
+            # Start sleepwalker clients (MCP-based, Python controls bridge)
             for player in config.sleepwalker_players:
                 log_path = game_dir / f"{player.name}_mcp.log"
                 print(f"Sleepwalker ({player.name}) log: {log_path}")
                 start_sleepwalker_client(pm, project_root, config, player.name, player.deck, log_path)
-
-            # Start chatterbox clients (LLM-based, Python controls skeleton)
-            for player in config.chatterbox_players:
-                log_path = game_dir / f"{player.name}_llm.log"
-                print(f"Chatterbox ({player.name}) log: {log_path}")
-                start_chatterbox_client(pm, project_root, config, player, log_path, game_dir=game_dir)
 
             # Start pilot clients (LLM-based game player)
             for player in config.pilot_players:
@@ -1036,23 +952,17 @@ def main() -> int:
                     personality="staller",
                 )
 
-            # Start legacy skeleton clients (treated as potato)
-            for player in config.skeleton_players:
-                log_path = game_dir / f"{player.name}_mcp.log"
-                print(f"Skeleton ({player.name}) log: {log_path}")
-                start_skeleton_client(pm, project_root, config, player.name, player.deck, log_path)
-
             # Note: CPU players are handled by the GUI client/server
 
-        # Wait for observer client to exit
-        observer_rc = observer_proc.wait()
+        # Wait for spectator client to exit
+        spectator_rc = spectator_proc.wait()
 
         # Ensure a game_over event exists in game_events.jsonl.
         # When the game ends via time limit or window close, XMage may not
         # send a GAME_OVER callback, leaving the event log without a
         # termination record.  Pass the exit code so the reason can
         # distinguish "user closed window" (exit 0) from crashes.
-        _ensure_game_over_event(game_dir, observer_rc)
+        _ensure_game_over_event(game_dir, spectator_rc)
 
         _write_error_log(game_dir)
         try:

@@ -99,18 +99,18 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
     private static final String GUI_MODAL_MODE_PROP = "xmage.guiModalMode"; // -Dxmage.guiModalMode=false
     private static final String SKIP_DONE_SYMBOLS = "-skipDoneSymbols";
     private static final String DEBUG_ARG = "-debug"; // enable debug button in main menu
-    private static final String AI_HARNESS_AUTO_CONNECT_PROP = "xmage.aiHarness.autoConnect";
-    private static final String AI_HARNESS_SERVER_PROP = "xmage.aiHarness.server";
-    private static final String AI_HARNESS_PORT_PROP = "xmage.aiHarness.port";
-    private static final String AI_HARNESS_USER_PROP = "xmage.aiHarness.user";
-    private static final String AI_HARNESS_PASSWORD_PROP = "xmage.aiHarness.password";
-    private static final String AI_HARNESS_DISABLE_WHATS_NEW_PROP = "xmage.aiHarness.disableWhatsNew";
-    private static final String AI_HARNESS_ENV = "XMAGE_AI_HARNESS";
-    private static final String AI_HARNESS_SERVER_ENV = "XMAGE_AI_HARNESS_SERVER";
-    private static final String AI_HARNESS_PORT_ENV = "XMAGE_AI_HARNESS_PORT";
-    private static final String AI_HARNESS_USER_ENV = "XMAGE_AI_HARNESS_USER";
-    private static final String AI_HARNESS_PASSWORD_ENV = "XMAGE_AI_HARNESS_PASSWORD";
-    private static final String AI_HARNESS_DISABLE_WHATS_NEW_ENV = "XMAGE_AI_HARNESS_DISABLE_WHATS_NEW";
+    private static final String AI_PUPPETEER_AUTO_CONNECT_PROP = "xmage.aiPuppeteer.autoConnect";
+    private static final String AI_PUPPETEER_SERVER_PROP = "xmage.aiPuppeteer.server";
+    private static final String AI_PUPPETEER_PORT_PROP = "xmage.aiPuppeteer.port";
+    private static final String AI_PUPPETEER_USER_PROP = "xmage.aiPuppeteer.user";
+    private static final String AI_PUPPETEER_PASSWORD_PROP = "xmage.aiPuppeteer.password";
+    private static final String AI_PUPPETEER_DISABLE_WHATS_NEW_PROP = "xmage.aiPuppeteer.disableWhatsNew";
+    private static final String AI_PUPPETEER_ENV = "XMAGE_AI_PUPPETEER";
+    private static final String AI_PUPPETEER_SERVER_ENV = "XMAGE_AI_PUPPETEER_SERVER";
+    private static final String AI_PUPPETEER_PORT_ENV = "XMAGE_AI_PUPPETEER_PORT";
+    private static final String AI_PUPPETEER_USER_ENV = "XMAGE_AI_PUPPETEER_USER";
+    private static final String AI_PUPPETEER_PASSWORD_ENV = "XMAGE_AI_PUPPETEER_PASSWORD";
+    private static final String AI_PUPPETEER_DISABLE_WHATS_NEW_ENV = "XMAGE_AI_PUPPETEER_DISABLE_WHATS_NEW";
 
     private static final String NOT_CONNECTED_TEXT = "<not connected>";
     private static final String NOT_CONNECTED_BUTTON = "CONNECT TO SERVER";
@@ -384,13 +384,13 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
         }
 
         setGUISize();
-        applyAiHarnessAutoConnectDefaults();
+        applyAiPuppeteerAutoConnectDefaults();
         setConnectButtonText(NOT_CONNECTED_BUTTON);
         SwingUtilities.invokeLater(() -> {
             updateMemUsageTask.execute();
             LOGGER.info("Client start up time: " + ((System.currentTimeMillis() - startTime) / 1000 + " seconds"));
 
-            if (isAiHarnessAutoConnectEnabled() || Boolean.parseBoolean(MageFrame.getPreferences().get("autoConnect", "false"))) {
+            if (isAiPuppeteerAutoConnectEnabled() || Boolean.parseBoolean(MageFrame.getPreferences().get("autoConnect", "false"))) {
                 startAutoConnect();
             } else {
                 connectDialog.showDialog(this::setWindowTitle);
@@ -401,7 +401,7 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
 
         // run what's new checks (loading in background)
         SwingUtilities.invokeLater(() -> {
-            if (!isAiHarnessWhatsNewDisabled()) {
+            if (!isAiPuppeteerWhatsNewDisabled()) {
                 showWhatsNewDialog(false);
             }
         });
@@ -942,48 +942,48 @@ public class MageFrame extends javax.swing.JFrame implements MageClient {
         });
     }
 
-    private void applyAiHarnessAutoConnectDefaults() {
-        if (!isAiHarnessAutoConnectEnabled()) {
+    private void applyAiPuppeteerAutoConnectDefaults() {
+        if (!isAiPuppeteerAutoConnectEnabled()) {
             return;
         }
-        String server = getAiHarnessValue(AI_HARNESS_SERVER_PROP, AI_HARNESS_SERVER_ENV, ClientDefaultSettings.serverName);
-        String portRaw = getAiHarnessValue(AI_HARNESS_PORT_PROP, AI_HARNESS_PORT_ENV, null);
+        String server = getAiPuppeteerValue(AI_PUPPETEER_SERVER_PROP, AI_PUPPETEER_SERVER_ENV, ClientDefaultSettings.serverName);
+        String portRaw = getAiPuppeteerValue(AI_PUPPETEER_PORT_PROP, AI_PUPPETEER_PORT_ENV, null);
         int port = ClientDefaultSettings.port;
         if (portRaw != null && !portRaw.isEmpty()) {
             try {
                 port = Integer.parseInt(portRaw);
             } catch (NumberFormatException ex) {
-                LOGGER.warn("AI harness: invalid port '" + portRaw + "', using default " + ClientDefaultSettings.port);
+                LOGGER.warn("AI puppeteer: invalid port '" + portRaw + "', using default " + ClientDefaultSettings.port);
             }
         }
-        String user = getAiHarnessValue(AI_HARNESS_USER_PROP, AI_HARNESS_USER_ENV, "ai-harness");
-        String password = getAiHarnessValue(AI_HARNESS_PASSWORD_PROP, AI_HARNESS_PASSWORD_ENV, "");
+        String user = getAiPuppeteerValue(AI_PUPPETEER_USER_PROP, AI_PUPPETEER_USER_ENV, "ai-puppeteer");
+        String password = getAiPuppeteerValue(AI_PUPPETEER_PASSWORD_PROP, AI_PUPPETEER_PASSWORD_ENV, "");
 
         MagePreferences.setServerAddress(server);
         MagePreferences.setServerPort(port);
         MagePreferences.setUserName(server, user);
         MagePreferences.setPassword(server, password);
         MagePreferences.setAutoConnect(true);
-        LOGGER.info("AI harness auto-connect enabled for " + server + ':' + port + " as " + user);
+        LOGGER.info("AI puppeteer auto-connect enabled for " + server + ':' + port + " as " + user);
     }
 
-    private static boolean isAiHarnessAutoConnectEnabled() {
-        if (Boolean.parseBoolean(System.getProperty(AI_HARNESS_AUTO_CONNECT_PROP, "false"))) {
+    private static boolean isAiPuppeteerAutoConnectEnabled() {
+        if (Boolean.parseBoolean(System.getProperty(AI_PUPPETEER_AUTO_CONNECT_PROP, "false"))) {
             return true;
         }
-        String envValue = System.getenv(AI_HARNESS_ENV);
+        String envValue = System.getenv(AI_PUPPETEER_ENV);
         return envValue != null && !envValue.isEmpty() && !"0".equals(envValue) && !"false".equalsIgnoreCase(envValue);
     }
 
-    private static boolean isAiHarnessWhatsNewDisabled() {
-        if (Boolean.parseBoolean(System.getProperty(AI_HARNESS_DISABLE_WHATS_NEW_PROP, "false"))) {
+    private static boolean isAiPuppeteerWhatsNewDisabled() {
+        if (Boolean.parseBoolean(System.getProperty(AI_PUPPETEER_DISABLE_WHATS_NEW_PROP, "false"))) {
             return true;
         }
-        String envValue = System.getenv(AI_HARNESS_DISABLE_WHATS_NEW_ENV);
+        String envValue = System.getenv(AI_PUPPETEER_DISABLE_WHATS_NEW_ENV);
         return envValue != null && !envValue.isEmpty() && !"0".equals(envValue) && !"false".equalsIgnoreCase(envValue);
     }
 
-    private static String getAiHarnessValue(String propKey, String envKey, String defaultValue) {
+    private static String getAiPuppeteerValue(String propKey, String envKey, String defaultValue) {
         String propValue = System.getProperty(propKey);
         if (propValue != null && !propValue.isEmpty()) {
             return propValue;

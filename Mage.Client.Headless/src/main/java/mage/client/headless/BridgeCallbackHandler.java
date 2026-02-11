@@ -52,15 +52,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Callback handler for the skeleton headless client.
+ * Callback handler for the bridge headless client.
  * Supports multiple modes:
  * - potato mode (default): Always passes priority and chooses the first available option
  * - staller mode: Same decisions as potato, but intentionally delayed and kept alive between games
  * - MCP mode (sleepwalker): Stores pending actions for external client to handle via MCP
  */
-public class SkeletonCallbackHandler {
+public class BridgeCallbackHandler {
 
-    private static final Logger logger = Logger.getLogger(SkeletonCallbackHandler.class);
+    private static final Logger logger = Logger.getLogger(BridgeCallbackHandler.class);
     private static final int DEFAULT_ACTION_DELAY_MS = 500;
     private static final int MAX_GAME_LOG_CHARS = 5 * 1024 * 1024; // 5MB cap on in-memory game log buffer
 
@@ -76,7 +76,7 @@ public class SkeletonCallbackHandler {
     // Pattern to match "TURN <number>" at the start of game log messages
     private static final Pattern TURN_MSG_PATTERN = Pattern.compile("^TURN \\d+");
 
-    private final SkeletonMageClient client;
+    private final BridgeMageClient client;
     private Session session;
     private final Map<UUID, UUID> activeGames = new ConcurrentHashMap<>(); // gameId -> playerId
     private final Map<UUID, UUID> gameChatIds = new ConcurrentHashMap<>(); // gameId -> chatId
@@ -102,7 +102,7 @@ public class SkeletonCallbackHandler {
     private volatile int maxInteractionsPerTurn = 25; // Configurable per-model; after this many, auto-pass rest of turn
     private volatile DeckCardLists deckList = null; // Original decklist for get_my_decklist
     private volatile String errorLogPath = null; // Path to write errors to (set via system property)
-    private volatile String skeletonLogPath = null; // Path to write skeleton JSONL dump
+    private volatile String bridgeLogPath = null; // Path to write bridge JSONL dump
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
     private volatile boolean playerDead = false; // Set when we see "{name} has lost the game" in chat
     private volatile String lastChatMessage = null; // For deduplicating outgoing chat
@@ -127,7 +127,7 @@ public class SkeletonCallbackHandler {
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
-    public SkeletonCallbackHandler(SkeletonMageClient client) {
+    public BridgeCallbackHandler(BridgeMageClient client) {
         this.client = client;
     }
 
@@ -135,8 +135,8 @@ public class SkeletonCallbackHandler {
         this.errorLogPath = path;
     }
 
-    public void setSkeletonLogPath(String path) {
-        this.skeletonLogPath = path;
+    public void setBridgeLogPath(String path) {
+        this.bridgeLogPath = path;
     }
 
     /**
@@ -156,11 +156,11 @@ public class SkeletonCallbackHandler {
     }
 
     /**
-     * Write a skeleton event to the JSONL dump file (data hoarding).
+     * Write a bridge event to the JSONL dump file (data hoarding).
      * Each line is a compact JSON object with timestamp, callback method, and relevant data.
      */
-    private void logSkeletonEvent(ClientCallbackMethod method, String summary) {
-        String path = skeletonLogPath;
+    private void logBridgeEvent(ClientCallbackMethod method, String summary) {
+        String path = bridgeLogPath;
         if (path == null) {
             return;
         }
@@ -175,7 +175,7 @@ public class SkeletonCallbackHandler {
             sb.append("}");
             pw.println(sb.toString());
         } catch (IOException e) {
-            logger.debug("Failed to write skeleton log: " + e.getMessage());
+            logger.debug("Failed to write bridge log: " + e.getMessage());
         }
     }
 
@@ -205,9 +205,9 @@ public class SkeletonCallbackHandler {
     }
 
     /**
-     * Build a compact one-line summary of game state for skeleton JSONL dump.
+     * Build a compact one-line summary of game state for bridge JSONL dump.
      */
-    private String buildSkeletonStateSummary() {
+    private String buildBridgeStateSummary() {
         GameView gv = lastGameView;
         if (gv == null) {
             return null;
@@ -2488,11 +2488,11 @@ public class SkeletonCallbackHandler {
             lastCallbackGameId = objectId;
             logger.debug("[" + client.getUsername() + "] Callback received: " + method);
 
-            // Skeleton JSONL dump: log every callback
-            if (skeletonLogPath != null) {
+            // Bridge JSONL dump: log every callback
+            if (bridgeLogPath != null) {
                 String summary = null;
                 if (method == ClientCallbackMethod.GAME_UPDATE || method == ClientCallbackMethod.GAME_UPDATE_AND_INFORM) {
-                    summary = buildSkeletonStateSummary();
+                    summary = buildBridgeStateSummary();
                 } else if (method == ClientCallbackMethod.CHATMESSAGE) {
                     Object chatData = callback.getData();
                     if (chatData instanceof ChatMessage) {
@@ -2502,7 +2502,7 @@ public class SkeletonCallbackHandler {
                 } else if (method == ClientCallbackMethod.GAME_OVER) {
                     summary = "Game over";
                 }
-                logSkeletonEvent(method, summary);
+                logBridgeEvent(method, summary);
             }
 
             switch (method) {

@@ -1,9 +1,9 @@
 """Shared auto-pass loop for LLM fallback mode.
 
 When an LLM becomes non-functional (degraded, credits exhausted, model not
-found), the harness falls back to repeatedly calling auto_pass_until_event
-until the game ends. This module provides that shared loop so pilot.py and
-chatterbox.py don't duplicate it.
+found), the puppeteer falls back to repeatedly calling auto_pass_until_event
+until the game ends. This module provides that shared loop so pilot.py
+doesn't duplicate it.
 """
 
 import asyncio

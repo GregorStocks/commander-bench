@@ -8,7 +8,6 @@ from unittest.mock import patch
 import pytest
 
 from puppeteer.config import (
-    ChatterboxPlayer,
     Config,
     CpuPlayer,
     PilotPlayer,
@@ -36,7 +35,6 @@ def test_config_load_players_from_json():
             {"type": "potato", "name": "spud"},
             {"type": "cpu", "name": "skynet"},
             {"type": "pilot", "name": "ace", "model": "test/model"},
-            {"type": "chatterbox", "name": "chatty", "model": "test/chat"},
         ],
         "matchTimeLimit": "MIN__60",
         "gameType": "Two Player Duel",
@@ -48,7 +46,7 @@ def test_config_load_players_from_json():
 
     try:
         config = Config(config_file=config_path)
-        config.load_skeleton_config()
+        config.load_config()
 
         assert len(config.potato_players) == 1
         assert config.potato_players[0].name == "spud"
@@ -56,8 +54,6 @@ def test_config_load_players_from_json():
         assert isinstance(config.cpu_players[0], CpuPlayer)
         assert len(config.pilot_players) == 1
         assert isinstance(config.pilot_players[0], PilotPlayer)
-        assert len(config.chatterbox_players) == 1
-        assert isinstance(config.chatterbox_players[0], ChatterboxPlayer)
         assert config.match_time_limit == "MIN__60"
         assert config.game_type == "Two Player Duel"
     finally:
@@ -91,7 +87,7 @@ def test_get_players_config_json_roundtrip():
 
     try:
         config = Config(config_file=config_path)
-        config.load_skeleton_config()
+        config.load_config()
         result = json.loads(config.get_players_config_json())
 
         assert result["gameType"] == "Two Player Duel"
@@ -110,7 +106,7 @@ def test_get_players_config_json_empty():
     assert config.get_players_config_json() == ""
 
 
-def test_skeleton_treated_as_potato():
+def test_legacy_skeleton_treated_as_potato():
     """Skeleton player type should be loaded as a PotatoPlayer."""
     config_data = {
         "players": [
@@ -124,11 +120,10 @@ def test_skeleton_treated_as_potato():
 
     try:
         config = Config(config_file=config_path)
-        config.load_skeleton_config()
+        config.load_config()
         assert len(config.potato_players) == 1
         assert config.potato_players[0].name == "bones"
         assert isinstance(config.potato_players[0], PotatoPlayer)
-        assert len(config.skeleton_players) == 0
     finally:
         config_path.unlink()
 
@@ -148,7 +143,7 @@ def test_config_default_player_name():
 
     try:
         config = Config(config_file=config_path)
-        config.load_skeleton_config()
+        config.load_config()
         assert config.potato_players[0].name == "player-0"
         assert config.cpu_players[0].name == "player-1"
     finally:
@@ -272,16 +267,6 @@ def test_personality_reasoning_effort():
     assert player2.reasoning_effort == "low"
 
 
-def test_personality_works_for_chatterbox():
-    """Personality resolution should work for ChatterboxPlayer too."""
-    player = ChatterboxPlayer(name="placeholder")
-    player.personality = "test-villain"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player.model == "test/model-y"
-    assert player.name == "TestVillain"
-    assert player.prompt_suffix == "You are evil."
-
-
 def test_personality_missing_name_in_definition_raises():
     """Personality without a name field should raise when player has no explicit name."""
     bad_personalities = {"no-name": {"model": "test/model"}}
@@ -351,7 +336,7 @@ def test_personality_end_to_end_config_load():
         config_path.write_text(json.dumps(config_data))
 
         config = Config(config_file=config_path)
-        config.load_skeleton_config()
+        config.load_config()
 
         assert len(config.pilot_players) == 2
 
@@ -553,7 +538,7 @@ def test_random_end_to_end_config_load():
 
         with patch("puppeteer.config.random.choice", side_effect=["alpha", "test/fast", "beta", "test/smart"]):
             config = Config(config_file=config_path)
-            config.load_skeleton_config()
+            config.load_config()
 
         assert len(config.pilot_players) == 2
         p1, p2 = config.pilot_players

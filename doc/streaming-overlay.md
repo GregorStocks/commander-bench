@@ -3,26 +3,26 @@
 The live game viewer runs in the website and polls the overlay API server
 from `Mage.Client.Streaming`.
 
-## Start streaming observer
+## Start streaming spectator
 
 ```bash
-make run-dumb
+make run
 ```
 
 Optional overlay controls:
 
 ```bash
 # Custom overlay port
-make run-dumb ARGS="--overlay-port 18080"
+make run ARGS="--overlay-port 18080"
 
 # Disable overlay server
-make run-dumb ARGS="--no-overlay"
+make run ARGS="--no-overlay"
 ```
 
 Run a long game (3 burn CPUs + 1 staller, 200 starting life, no time limit):
 
 ```bash
-make run-staller
+make run CONFIG=staller
 ```
 
 ## URLs
@@ -32,7 +32,7 @@ already in use, it automatically moves to the next available port and prints
 the chosen URL.
 
 The overlay server serves the live viewer directly at `/live`. The URLs are
-printed when the harness starts:
+printed when the puppeteer starts:
 
 - **Live viewer**: `http://127.0.0.1:17888/live`
 - **OBS source** (positioned mode, transparent): `http://127.0.0.1:17888/live?positions=1&obs=1`
@@ -51,7 +51,7 @@ Query parameters:
 
 `Mage.Client.Headless` now supports a `staller` personality: it makes the same choices as `potato`, but responds slowly and stays connected between games.
 
-Use it in harness config:
+Use it in game config:
 
 ```json
 {
@@ -69,7 +69,7 @@ Optional JVM override for staller delay:
 
 ## OBS setup
 
-1. Keep XMage streaming client running (`make run-dumb`).
+1. Keep XMage streaming client running (`make run`).
 2. In OBS, add your game/window capture source for XMage.
 3. Add a Browser Source:
    - URL: `http://127.0.0.1:17888/live?positions=1&obs=1`
@@ -79,7 +79,7 @@ Optional JVM override for staller delay:
 
 ## Overlay behavior
 
-- The API server publishes live game state from the streaming observer (`/api/state`).
+- The API server publishes live game state from the streaming spectator (`/api/state`).
 - When `positions=1` is set, the live viewer uses exported card rectangles from the Swing UI and scales them to the browser source size.
 - Cards are hoverable; hover opens a preview panel with card text and image.
 - Card image URLs are built from Scryfall metadata in the game state.

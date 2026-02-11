@@ -1,4 +1,4 @@
-"""Tests for harness helper functions."""
+"""Tests for orchestrator helper functions."""
 
 import json
 import subprocess
@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from puppeteer.config import Config, PilotPlayer
-from puppeteer.harness import (
+from puppeteer.orchestrator import (
     _ensure_game_over_event,
     _git,
     _missing_llm_api_keys,
@@ -74,42 +74,42 @@ def test_ensure_game_over_event_appended():
         assert len(lines) == 2
         last_event = json.loads(lines[-1])
         assert last_event["type"] == "game_over"
-        assert last_event["reason"] == "observer_crashed"
+        assert last_event["reason"] == "spectator_crashed"
         assert last_event["seq"] == 43
 
 
-def test_ensure_game_over_event_observer_closed():
-    """Exit code 0 should produce reason 'observer_closed'."""
+def test_ensure_game_over_event_spectator_closed():
+    """Exit code 0 should produce reason 'spectator_closed'."""
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
         events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 10, "type": "game_start"}) + "\n")
 
-        _ensure_game_over_event(game_dir, observer_exit_code=0)
+        _ensure_game_over_event(game_dir, spectator_exit_code=0)
 
         lines = events_file.read_text().strip().splitlines()
         assert len(lines) == 2
         last_event = json.loads(lines[-1])
         assert last_event["type"] == "game_over"
-        assert last_event["reason"] == "observer_closed"
-        assert "observer window closed" in last_event["message"]
+        assert last_event["reason"] == "spectator_closed"
+        assert "spectator window closed" in last_event["message"]
         assert last_event["seq"] == 11
 
 
-def test_ensure_game_over_event_observer_crashed():
-    """Non-zero exit code should produce reason 'observer_crashed'."""
+def test_ensure_game_over_event_spectator_crashed():
+    """Non-zero exit code should produce reason 'spectator_crashed'."""
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
         events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 10, "type": "game_start"}) + "\n")
 
-        _ensure_game_over_event(game_dir, observer_exit_code=1)
+        _ensure_game_over_event(game_dir, spectator_exit_code=1)
 
         lines = events_file.read_text().strip().splitlines()
         assert len(lines) == 2
         last_event = json.loads(lines[-1])
         assert last_event["type"] == "game_over"
-        assert last_event["reason"] == "observer_crashed"
+        assert last_event["reason"] == "spectator_crashed"
         assert "code 1" in last_event["message"]
 
 
@@ -189,8 +189,8 @@ def test_print_game_summary_synthetic_game_over(capsys):
         assert "did not finish" in output
 
 
-def test_print_game_summary_observer_closed(capsys):
-    """observer_closed reason should show the interrupted message, not 'did not finish'."""
+def test_print_game_summary_spectator_closed(capsys):
+    """spectator_closed reason should show the interrupted message, not 'did not finish'."""
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
@@ -199,8 +199,8 @@ def test_print_game_summary_observer_closed(capsys):
                 {
                     "ts": "2024-01-01T00:05:00",
                     "type": "game_over",
-                    "message": "Game interrupted (observer window closed)",
-                    "reason": "observer_closed",
+                    "message": "Game interrupted (spectator window closed)",
+                    "reason": "spectator_closed",
                 }
             )
             + "\n"
@@ -209,12 +209,12 @@ def test_print_game_summary_observer_closed(capsys):
         _print_game_summary(game_dir)
 
         output = capsys.readouterr().out
-        assert "observer window closed" in output
+        assert "spectator window closed" in output
         assert "did not finish" not in output
 
 
-def test_print_game_summary_observer_crashed(capsys):
-    """observer_crashed reason should show 'did not finish'."""
+def test_print_game_summary_spectator_crashed(capsys):
+    """spectator_crashed reason should show 'did not finish'."""
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         events_file = game_dir / "game_events.jsonl"
@@ -223,8 +223,8 @@ def test_print_game_summary_observer_crashed(capsys):
                 {
                     "ts": "2024-01-01T00:05:00",
                     "type": "game_over",
-                    "message": "Game ended (observer exited with code 1)",
-                    "reason": "observer_crashed",
+                    "message": "Game ended (spectator exited with code 1)",
+                    "reason": "spectator_crashed",
                 }
             )
             + "\n"
@@ -266,7 +266,7 @@ def test_write_error_log_empty():
 
 def test_git_returns_output():
     """Should return stripped stdout from a successful git command."""
-    with patch("puppeteer.harness.subprocess.check_output", return_value="  main\n") as mock:
+    with patch("puppeteer.orchestrator.subprocess.check_output", return_value="  main\n") as mock:
         result = _git("rev-parse --abbrev-ref HEAD", Path("/fake"))
     assert result == "main"
     mock.assert_called_once_with(
@@ -280,6 +280,6 @@ def test_git_returns_output():
 
 def test_git_returns_empty_on_failure():
     """Should return empty string when git command fails."""
-    with patch("puppeteer.harness.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "git")):
+    with patch("puppeteer.orchestrator.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "git")):
         result = _git("rev-parse HEAD", Path("/fake"))
     assert result == ""
