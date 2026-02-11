@@ -1,6 +1,6 @@
 {
   "matchTimeLimit": "MIN__20",
-  "matchBufferTime": "SEC__10",
+  "matchBufferTime": "NONE",
   "players": [
     {"type": "pilot", "name": "Sonnet4.5", "deck": "random", "model": "anthropic/claude-sonnet-4.5", "reasoning_effort": "medium"},
     {"type": "pilot", "name": "Haiku4.5", "deck": "random", "model": "anthropic/claude-haiku-4.5", "reasoning_effort": "medium"},
