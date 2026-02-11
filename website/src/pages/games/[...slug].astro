@@ -352,6 +352,7 @@ const { slug } = Astro.params;
     var autoPlayInterval = null;
     var playerColorMap = {};
     var playerMeta = {};
+    var eloData = null;
     var turnStartIndices = [];
     var showLlm = true;
     var traceByTs = {};  // ts -> trace event lookup for LLM I/O display
@@ -689,13 +690,19 @@ const { slug } = Astro.params;
       }
     }
 
-    // Load game data
-    fetch("/games/" + slug + ".json")
-      .then(function (r) {
+    // Load game data + Elo data in parallel
+    Promise.all([
+      fetch("/games/" + slug + ".json").then(function (r) {
         if (!r.ok) throw new Error("Game not found (HTTP " + r.status + ")");
         return r.json();
-      })
-      .then(function (data) {
+      }),
+      fetch("/data/elo.json").then(function (r) {
+        return r.ok ? r.json() : {};
+      }).catch(function () { return {}; }),
+    ])
+      .then(function (results) {
+        var data = results[0];
+        eloData = results[1];
         game = data;
 
         if (!game.snapshots || game.snapshots.length === 0) {
@@ -708,10 +715,17 @@ const { slug } = Astro.params;
         gameUI.classList.remove("hidden");
 
         // Build player color map and meta
+        var gameElo = eloData[game.id] || {};
         (game.players || []).forEach(function (p, i) {
           playerColorMap[p.name] = i % 4;
           if (p.model || p.totalCostUsd != null) {
-            playerMeta[p.name] = { model: p.model, totalCostUsd: p.totalCostUsd };
+            var meta = { model: p.model, totalCostUsd: p.totalCostUsd };
+            var elo = p.model ? gameElo[p.model] : null;
+            if (elo) {
+              meta.eloBefore = elo.before;
+              meta.eloAfter = elo.after;
+            }
+            playerMeta[p.name] = meta;
           }
         });
 

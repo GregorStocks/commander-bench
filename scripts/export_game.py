@@ -14,6 +14,7 @@ LOGS_DIR = Path.home() / "mage-bench-logs"
 FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
 OBJECT_ID_RE = re.compile(r"\s*\[[0-9a-f]{3,}\]")
 DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
+LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 
 # LLM event types to include in the website export
 _LLM_EVENT_TYPES = {
@@ -233,6 +234,30 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         if m:
             winner = m.group(1)
 
+    # Extract placement from elimination order
+    # "X has lost the game." messages, ordered by seq, give elimination order
+    player_names = [p.get("name", "?") for p in meta.get("players", [])]
+    eliminations = []
+    for a in actions:
+        m = LOST_GAME_RE.match(a.get("message", ""))
+        if m:
+            eliminations.append(m.group(1))
+    # eliminations[0] = first eliminated (worst), eliminations[-1] = last eliminated
+    # Placement: winner=1, last eliminated=2, second-to-last=3, etc.
+    placements: dict[str, int] = {}
+    if winner:
+        placements[winner] = 1
+        for i, name in enumerate(reversed(eliminations)):
+            placements[name] = i + 2
+    elif eliminations:
+        # No winner but some players were eliminated — assign relative placements
+        # Surviving players share 1st place, eliminated players get lower placements
+        surviving = [n for n in player_names if n not in eliminations]
+        for name in surviving:
+            placements[name] = 1
+        for i, name in enumerate(reversed(eliminations)):
+            placements[name] = len(surviving) + i + 1
+
     players_summary = []
     for p in meta.get("players", []):
         name = p.get("name", "?")
@@ -245,6 +270,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             entry["model"] = p["model"]
         if name in player_costs:
             entry["totalCostUsd"] = round(player_costs[name], 4)
+        if name in placements:
+            entry["placement"] = placements[name]
         players_summary.append(entry)
 
     # Build output

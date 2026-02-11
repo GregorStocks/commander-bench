@@ -105,6 +105,20 @@
   font-family: monospace;
 }
 
+.player-elo {
+  font-size: 0.65rem;
+  color: #a0a0b8;
+  font-family: monospace;
+}
+
+.player-elo.elo-up {
+  color: #a8d9a5;
+}
+
+.player-elo.elo-down {
+  color: #e94560;
+}
+
 .player-counters {
   font-size: 0.75rem;
   color: #a0a0b8;

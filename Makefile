@@ -64,10 +64,15 @@ package:
 .PHONY: install
 install: clean build package
 
+# Regenerate leaderboard + Elo data from game results
+.PHONY: leaderboard
+leaderboard:
+	@uv run --project puppeteer python scripts/generate_leaderboard.py
+
 # Build the website (Astro static site) so the overlay server can serve it.
 # Only rebuilds when dist/ is missing; delete dist/ to force a rebuild.
 .PHONY: website-build
-website-build:
+website-build: leaderboard
 	@if [ ! -d website/dist ]; then echo "Building website..."; cd website && npm install --prefer-offline --no-audit --no-fund && npx astro build; fi
 
 # Default: streaming with recording enabled
@@ -110,7 +115,7 @@ run-client:
 
 # Run the website dev server
 .PHONY: website
-website:
+website: leaderboard
 	cd website && npm install && npx astro dev
 
 # Export a game log for the website visualizer

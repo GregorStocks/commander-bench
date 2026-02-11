@@ -373,6 +373,15 @@
           costBadge.textContent = "$" + meta.totalCostUsd.toFixed(2);
           badgeRow.appendChild(costBadge);
         }
+        if (meta.eloBefore != null && meta.eloAfter != null) {
+          var eloBadge = document.createElement("span");
+          eloBadge.className = "player-elo";
+          var delta = meta.eloAfter - meta.eloBefore;
+          if (delta > 0) eloBadge.classList.add("elo-up");
+          else if (delta < 0) eloBadge.classList.add("elo-down");
+          eloBadge.textContent = meta.eloBefore + " \u2192 " + meta.eloAfter;
+          badgeRow.appendChild(eloBadge);
+        }
         header.appendChild(badgeRow);
       }
 
