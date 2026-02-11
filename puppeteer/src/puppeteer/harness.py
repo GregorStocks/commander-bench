@@ -856,6 +856,14 @@ def main() -> int:
         last_link.unlink(missing_ok=True)
         last_link.symlink_to(game_dir.name)
 
+        # Update per-branch symlink so agents can find their own recent runs
+        branch = _git("rev-parse --abbrev-ref HEAD")
+        if branch:
+            safe_branch = branch.replace("/", "-")
+            branch_link = log_dir / f"last-branch-{safe_branch}"
+            branch_link.unlink(missing_ok=True)
+            branch_link.symlink_to(game_dir.name)
+
         print(f"Game logs: {game_dir}")
         print(f"Server log: {server_log}")
         print(f"Observer log: {observer_log}")
