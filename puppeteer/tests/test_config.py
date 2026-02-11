@@ -3,6 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -12,7 +13,11 @@ from puppeteer.config import (
     CpuPlayer,
     PilotPlayer,
     PotatoPlayer,
+    _generate_player_name,
     _resolve_personality,
+    _resolve_randoms,
+    _validate_name_parts,
+    load_models,
     load_personalities,
 )
 
@@ -157,31 +162,31 @@ def test_run_tag_no_config_file_raises():
 
 
 def test_run_tag_dumb():
-    config = Config(config_file=Path("puppeteer/ai-harness-config.json"))
+    config = Config(config_file=Path("configs/dumb.json"))
     assert config.run_tag == "dumb"
 
 
-def test_run_tag_llm():
-    config = Config(config_file=Path("puppeteer/ai-harness-llm-config.json"))
-    assert config.run_tag == "llm"
+def test_run_tag_arena():
+    config = Config(config_file=Path("configs/arena.json"))
+    assert config.run_tag == "arena"
+
+
+def test_run_tag_frontier():
+    config = Config(config_file=Path("configs/frontier.json"))
+    assert config.run_tag == "frontier"
 
 
 def test_run_tag_llm4():
-    config = Config(config_file=Path("puppeteer/ai-harness-llm4-config.json"))
+    config = Config(config_file=Path("configs/llm4.json"))
     assert config.run_tag == "llm4"
 
 
 def test_run_tag_legacy_dumb():
-    config = Config(config_file=Path("puppeteer/ai-harness-legacy-dumb-config.json"))
+    config = Config(config_file=Path("configs/legacy-dumb.json"))
     assert config.run_tag == "legacy-dumb"
 
 
-def test_run_tag_legacy_llm():
-    config = Config(config_file=Path("puppeteer/ai-harness-legacy-llm-config.json"))
-    assert config.run_tag == "legacy-llm"
-
-
-def test_run_tag_unknown_format():
+def test_run_tag_custom():
     config = Config(config_file=Path("custom-thing.json"))
     assert config.run_tag == "custom-thing"
 
@@ -363,3 +368,202 @@ def test_personality_end_to_end_config_load():
         assert p2.name == "Override"
         assert p2.model == "test/hero-model"
         assert p2.prompt_suffix == "You are heroic."
+
+
+# --- Random resolution tests ---
+
+SAMPLE_MODELS_DATA = {
+    "models": [
+        {"id": "test/model-a", "name": "Model A", "name_part": "ModA"},
+        {"id": "test/model-b", "name": "Model B", "name_part": "ModB"},
+        {"id": "test/model-c", "name": "Model C", "name_part": "ModC"},
+    ],
+    "random_pool": ["test/model-a", "test/model-b", "test/model-c"],
+}
+
+SAMPLE_PERSONALITIES_WITH_PARTS = {
+    "hero": {
+        "name": "TheHero",
+        "name_part": "Hero",
+        "model": "test/model-a",
+        "prompt_suffix": "You are heroic.",
+    },
+    "chill": {
+        "name_part": "Chill",
+        "prompt_suffix": "You are chill.",
+    },
+    "nerd": {
+        "name_part": "Nerd",
+        "prompt_suffix": "You are nerdy.",
+    },
+}
+
+
+def test_validate_name_parts_valid():
+    """Valid name_part combos should not raise."""
+    _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+
+def test_validate_name_parts_catches_overflow():
+    """name_part combo > 14 chars should raise ValueError."""
+    bad_personalities = {
+        "longname": {"name_part": "TooLong!", "prompt_suffix": "hi"},
+    }
+    bad_models = {
+        "models": [{"id": "test/m", "name": "M", "name_part": "Longish"}],
+        "random_pool": ["test/m"],
+    }
+    # "Longish TooLong!" = 16 chars
+    with pytest.raises(ValueError, match="Invalid name_part combinations"):
+        _validate_name_parts(bad_personalities, bad_models)
+
+
+def test_validate_name_parts_missing_model_in_pool():
+    """random_pool model not in models list should raise."""
+    bad_models = {
+        "models": [],
+        "random_pool": ["test/missing"],
+    }
+    with pytest.raises(ValueError, match="not found in models list"):
+        _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, bad_models)
+
+
+def test_validate_name_parts_real_data():
+    """Validate actual personalities.json x models.json name_part combos all fit."""
+    personalities = load_personalities(None)
+    models_data = load_models(None)
+    if not personalities or not models_data:
+        pytest.skip("personalities.json or models.json not found")
+    # Should not raise — if it does, we have a real misconfiguration
+    _validate_name_parts(personalities, models_data)
+
+
+def test_generate_player_name():
+    """Name should be '{model_part} {personality_part}'."""
+    name = _generate_player_name("test/model-a", "hero", SAMPLE_MODELS_DATA, SAMPLE_PERSONALITIES_WITH_PARTS)
+    assert name == "ModA Hero"
+
+
+def test_generate_player_name_fallback():
+    """Unknown model/personality should use fallback name_parts."""
+    name = _generate_player_name("unknown/model", "unknown", SAMPLE_MODELS_DATA, SAMPLE_PERSONALITIES_WITH_PARTS)
+    # Falls back to last part of model ID and personality key
+    assert name == "model unknown"
+
+
+def test_resolve_randoms_picks_personality_and_model():
+    """Random resolution should pick concrete personality and model."""
+    player = PilotPlayer(name="player-0", personality="random", model="random")
+    players = [(player, False)]
+
+    with patch("puppeteer.config.random.choice", side_effect=["hero", "test/model-b"]):
+        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+    assert player.personality == "hero"
+    assert player.model == "test/model-b"
+    assert player.prompt_suffix == "You are heroic."
+    assert player.name == "ModB Hero"
+
+
+def test_resolve_randoms_no_duplicate_personalities():
+    """Multiple random players should get different personalities."""
+    p1 = PilotPlayer(name="p0", personality="random", model="random")
+    p2 = PilotPlayer(name="p1", personality="random", model="random")
+    players = [(p1, False), (p2, False)]
+
+    choices = ["hero", "test/model-a", "chill", "test/model-b"]
+    with patch("puppeteer.config.random.choice", side_effect=choices):
+        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+    assert p1.personality != p2.personality
+    assert p1.model != p2.model
+
+
+def test_resolve_randoms_explicit_model_not_randomized():
+    """Explicit model should not be replaced by random."""
+    player = PilotPlayer(name="player-0", personality="random", model="test/model-c")
+    players = [(player, False)]
+
+    with patch("puppeteer.config.random.choice", return_value="nerd"):
+        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+    assert player.model == "test/model-c"
+    assert player.personality == "nerd"
+    assert player.name == "ModC Nerd"
+
+
+def test_resolve_randoms_explicit_name_preserved():
+    """Explicit name in config should not be overwritten."""
+    player = PilotPlayer(name="MyCustom", personality="random", model="random")
+    players = [(player, True)]  # had_explicit_name=True
+
+    with patch("puppeteer.config.random.choice", side_effect=["hero", "test/model-a"]):
+        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+    assert player.name == "MyCustom"
+
+
+def test_resolve_randoms_non_random_untouched():
+    """Players with non-random personality/model should pass through normally."""
+    player = PilotPlayer(name="player-0", personality="hero", model="test/model-a")
+    players = [(player, False)]
+
+    _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+
+    assert player.personality == "hero"
+    assert player.model == "test/model-a"
+    assert player.name == "TheHero"  # From personality name field
+
+
+def test_random_end_to_end_config_load():
+    """Full integration: config with random values resolves to concrete players."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        personalities = {
+            "alpha": {
+                "name_part": "Alpha",
+                "prompt_suffix": "You are alpha.",
+            },
+            "beta": {
+                "name_part": "Beta",
+                "prompt_suffix": "You are beta.",
+            },
+        }
+        (tmpdir_path / "personalities.json").write_text(json.dumps(personalities))
+
+        models = {
+            "models": [
+                {"id": "test/fast", "name": "Fast", "name_part": "Fast"},
+                {"id": "test/smart", "name": "Smart", "name_part": "Smart"},
+            ],
+            "random_pool": ["test/fast", "test/smart"],
+        }
+        (tmpdir_path / "models.json").write_text(json.dumps(models))
+
+        config_data = {
+            "matchTimeLimit": "MIN__60",
+            "players": [
+                {"type": "pilot", "personality": "random", "model": "random", "deck": "random"},
+                {"type": "pilot", "personality": "random", "model": "random", "deck": "random"},
+            ],
+        }
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        with patch("puppeteer.config.random.choice", side_effect=["alpha", "test/fast", "beta", "test/smart"]):
+            config = Config(config_file=config_path)
+            config.load_skeleton_config()
+
+        assert len(config.pilot_players) == 2
+        p1, p2 = config.pilot_players
+
+        assert p1.personality == "alpha"
+        assert p1.model == "test/fast"
+        assert p1.name == "Fast Alpha"
+        assert p1.prompt_suffix == "You are alpha."
+
+        assert p2.personality == "beta"
+        assert p2.model == "test/smart"
+        assert p2.name == "Smart Beta"
+        assert p2.prompt_suffix == "You are beta."
