@@ -16,6 +16,7 @@ FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
 OBJECT_ID_RE = re.compile(r"\s*\[[0-9a-f]{3,}\]")
 DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
 LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
+WON_GAME_RE = re.compile(r"^(.+?) has won the game$")
 
 # LLM event types to include in the website export
 _LLM_EVENT_TYPES = {
@@ -240,6 +241,14 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         m = re.match(r"Player (.+?) is the winner", msg)
         if m:
             winner = m.group(1)
+    # Fallback: if spectator disconnected before writing the real game_over,
+    # scan game actions for "X has won the game"
+    if not winner:
+        for a in actions:
+            m = WON_GAME_RE.match(a.get("message", ""))
+            if m:
+                winner = m.group(1)
+                break
 
     # Extract placement from elimination order
     # "X has lost the game." messages, ordered by seq, give elimination order
