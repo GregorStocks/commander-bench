@@ -36,6 +36,42 @@
     ]
   },
   {
+    "id": "game_20260210_074307",
+    "timestamp": "20260210_074307",
+    "totalTurns": 61,
+    "winner": "Gem3Flash",
+    "players": [
+      {
+        "name": "Gem3Flash",
+        "type": "pilot",
+        "commander": "Meren of Clan Nel Toth",
+        "model": "google/gemini-3-flash-preview",
+        "totalCostUsd": 5.5682
+      },
+      {
+        "name": "GPT-4.1-mini",
+        "type": "pilot",
+        "commander": "Atraxa, Praetors' Voice",
+        "model": "openai/gpt-4.1-mini",
+        "totalCostUsd": 0.8154
+      },
+      {
+        "name": "Gemini2.5Flash",
+        "type": "pilot",
+        "commander": "Lord Windgrace",
+        "model": "google/gemini-2.5-flash",
+        "totalCostUsd": 0.6741
+      },
+      {
+        "name": "Devstral",
+        "type": "pilot",
+        "commander": "Meren of Clan Nel Toth",
+        "model": "mistralai/devstral-small",
+        "totalCostUsd": 0.0891
+      }
+    ]
+  },
+  {
     "id": "game_20260208_220934",
     "timestamp": "20260208_220934",
     "totalTurns": 10,
