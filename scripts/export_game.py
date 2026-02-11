@@ -159,11 +159,17 @@ def _read_llm_trace(game_dir: Path) -> list[dict]:
                 continue
             if raw.get("type") != "llm_call":
                 continue
+            request = raw.get("request", {})
+            # Strip bulky repeated fields (system prompt, conversation history,
+            # tool definitions) — they bloat the export by 100x+.
+            request = {
+                k: v for k, v in request.items() if k not in ("messages", "tools")
+            }
             events.append(
                 {
                     "ts": raw.get("ts", ""),
                     "player": raw.get("player", ""),
-                    "request": raw.get("request", {}),
+                    "request": request,
                     "response": raw.get("response", {}),
                 }
             )
