@@ -75,6 +75,9 @@ public class BridgeCallbackHandler {
     private static final Pattern REGEX_COLORLESS = Pattern.compile("\\x7b.{0,2}C.{0,2}\\x7d");
     // Pattern to match "TURN <number>" at the start of game log messages
     private static final Pattern TURN_MSG_PATTERN = Pattern.compile("^TURN \\d+");
+    // Pattern to extract player name and object_id from cast messages in game chat HTML
+    private static final Pattern CAST_OWNER_PATTERN = Pattern.compile(
+            "<font[^>]*>([^<]+)</font>\\s+casts\\s+.*?object_id='([^']+)'");
 
     private final BridgeMageClient client;
     private Session session;
@@ -105,6 +108,7 @@ public class BridgeCallbackHandler {
     private volatile String bridgeLogPath = null; // Path to write bridge JSONL dump
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
     private volatile boolean playerDead = false; // Set when we see "{name} has lost the game" in chat
+    private final Map<String, String> castOwners = new HashMap<>(); // objectId → playerName from cast messages
     private volatile String lastChatMessage = null; // For deduplicating outgoing chat
     private volatile long lastChatTimeMs = 0; // Timestamp of last outgoing chat
     private static final long CHAT_DEDUP_WINDOW_MS = 30_000; // Suppress identical messages within 30s
@@ -2241,6 +2245,12 @@ public class BridgeCallbackHandler {
                 if (card.getTargets() != null && !card.getTargets().isEmpty()) {
                     stackItem.put("target_count", card.getTargets().size());
                 }
+                if (card.getId() != null) {
+                    String owner = castOwners.get(card.getId().toString());
+                    if (owner != null) {
+                        stackItem.put("owner", owner);
+                    }
+                }
                 stack.add(stackItem);
             }
         }
@@ -2699,6 +2709,13 @@ public class BridgeCallbackHandler {
                 // " plays " is exclusive to land plays (spells use "casts", abilities "activates").
                 if (logEntry != null && logEntry.contains(" plays ") && logEntry.contains(client.getUsername())) {
                     landsPlayedThisTurn++;
+                }
+                // Track cast owners: extract player name and object_id from cast messages
+                if (logEntry != null && logEntry.contains(" casts ")) {
+                    Matcher castMatcher = CAST_OWNER_PATTERN.matcher(logEntry);
+                    if (castMatcher.find()) {
+                        castOwners.put(castMatcher.group(2), castMatcher.group(1));
+                    }
                 }
                 // Detect when our player has lost the game
                 if (!playerDead && logEntry != null && logEntry.contains("has lost the game")
