@@ -5,6 +5,6 @@
     {"type": "pilot", "personality": "commentator-sonnet", "deck": "random"},
     {"type": "pilot", "personality": "drill-sergeant-haiku", "deck": "random"},
     {"type": "pilot", "personality": "villain-gemini", "deck": "random"},
-    {"type": "pilot", "personality": "conspiracy-o4", "deck": "random"}
+    {"type": "pilot", "personality": "conspiracy-haiku", "deck": "random"}
   ]
 }
