@@ -1,0 +1,10 @@
+{
+  "gameType": "Two Player Duel",
+  "deckType": "Constructed - Modern",
+  "matchTimeLimit": "MIN__60",
+  "matchBufferTime": "NONE",
+  "players": [
+    {"type": "pilot", "personality": "random", "model": "random", "deck": "random"},
+    {"type": "pilot", "personality": "random", "model": "random", "deck": "random"}
+  ]
+}

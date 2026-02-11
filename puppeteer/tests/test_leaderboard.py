@@ -9,7 +9,9 @@ from puppeteer.leaderboard import (
     capitalize_provider,
     compute_ratings,
     derive_display_name,
+    derive_format,
     extract_placements,
+    generate_all_leaderboards,
     generate_leaderboard,
     generate_leaderboard_file,
     load_model_registry,
@@ -540,3 +542,115 @@ def test_generate_leaderboard_file_with_game_fallback():
         models_by_name = {m["modelName"]: m for m in result["models"]}
         assert models_by_name["X"]["rating"] > models_by_name["Y"]["rating"]
         assert models_by_name["Y"]["rating"] > models_by_name["Z"]["rating"]
+
+
+# --- derive_format ---
+
+
+def test_derive_format_legacy():
+    assert derive_format({"deckType": "Constructed - Legacy"}) == "legacy"
+
+
+def test_derive_format_modern():
+    assert derive_format({"deckType": "Constructed - Modern"}) == "modern"
+
+
+def test_derive_format_standard():
+    assert derive_format({"deckType": "Constructed - Standard"}) == "standard"
+
+
+def test_derive_format_commander():
+    assert derive_format({"deckType": "Variant Magic - Freeform Commander"}) == "commander"
+
+
+def test_derive_format_commander_default():
+    """Empty deckType defaults to 'commander' for backward compat."""
+    assert derive_format({}) == "commander"
+    assert derive_format({"deckType": ""}) == "commander"
+
+
+def test_derive_format_commander_from_game_type():
+    """Commander gameType with unknown deckType -> commander."""
+    assert derive_format({"gameType": "Commander Free For All", "deckType": "something"}) == "commander"
+
+
+# --- generate_all_leaderboards ---
+
+
+def test_generate_all_leaderboards_splits_by_format():
+    legacy_game = _make_game(
+        "g1",
+        "20260101_000000",
+        "Alice",
+        [_pilot("Alice", "a/x", placement=1), _pilot("Bob", "b/y", placement=2)],
+    )
+    legacy_game["deckType"] = "Constructed - Legacy"
+
+    modern_game = _make_game(
+        "g2",
+        "20260102_000000",
+        "Carol",
+        [_pilot("Carol", "c/z", placement=1), _pilot("Dave", "d/w", placement=2)],
+    )
+    modern_game["deckType"] = "Constructed - Modern"
+
+    format_results, _ = generate_all_leaderboards([legacy_game, modern_game], {})
+
+    assert "combined" in format_results
+    assert "legacy" in format_results
+    assert "modern" in format_results
+
+    assert format_results["combined"]["totalGames"] == 2
+    assert format_results["legacy"]["totalGames"] == 1
+    assert format_results["modern"]["totalGames"] == 1
+
+
+def test_generate_all_leaderboards_combined_includes_all():
+    games = []
+    for i, fmt in enumerate(["Constructed - Legacy", "Constructed - Modern", "Constructed - Standard"]):
+        g = _make_game(
+            f"g{i}",
+            f"2026010{i}_000000",
+            "Alice",
+            [_pilot("Alice", "a/x", placement=1), _pilot("Bob", "b/y", placement=2)],
+        )
+        g["deckType"] = fmt
+        games.append(g)
+
+    format_results, _ = generate_all_leaderboards(games, {})
+    assert format_results["combined"]["totalGames"] == 3
+
+
+def test_generate_leaderboard_file_has_formats_key():
+    """benchmark-results.json should have top-level fields AND formats key."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        games_dir = root / "games"
+        games_dir.mkdir()
+        data_dir = root / "data"
+
+        game = _make_game(
+            "game_20260101_000000",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/x", cost=5.0, placement=1), _pilot("Bob", "b/y", cost=2.0, placement=2)],
+        )
+        game["deckType"] = "Constructed - Legacy"
+        (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
+
+        models_json = root / "models.json"
+        models_json.write_text(json.dumps({"models": []}))
+
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json)
+        result = json.loads(output_path.read_text())
+
+        # Backward compat: top-level fields
+        assert "totalGames" in result
+        assert "models" in result
+        assert result["totalGames"] == 1
+
+        # New: per-format data
+        assert "formats" in result
+        assert "combined" in result["formats"]
+        assert "legacy" in result["formats"]
+        assert result["formats"]["legacy"]["totalGames"] == 1

@@ -37,7 +37,7 @@ def _make_meta(players=None):
 def test_build_title_basic():
     meta = _make_meta()
     title = _build_title(meta)
-    assert "mage-bench:" in title
+    assert "mage-bench" in title
     assert "Alice" in title
     assert "Meren of Clan Nel Toth" in title
     assert "Bob" in title

@@ -1,4 +1,5 @@
 {
+  "skipPostGamePrompts": true,
   "gameType": "Two Player Duel",
   "deckType": "Constructed - Legacy",
   "players": [

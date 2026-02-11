@@ -18,6 +18,40 @@ _LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 _RATING_BASE = 1600
 _RATING_SCALE = 100
 
+# Map XMage deckType strings to canonical format names for leaderboard bucketing.
+_DECK_TYPE_TO_FORMAT: dict[str, str] = {
+    "Constructed - Standard": "standard",
+    "Constructed - Modern": "modern",
+    "Constructed - Legacy": "legacy",
+    "Variant Magic - Freeform Commander": "commander",
+    "Variant Magic - Commander": "commander",
+}
+
+# Display labels for format tabs.
+FORMAT_LABELS: dict[str, str] = {
+    "combined": "Combined",
+    "standard": "Standard",
+    "modern": "Modern",
+    "legacy": "Legacy",
+    "commander": "Commander",
+}
+
+
+def derive_format(game: dict) -> str:
+    """Derive canonical format name from game data.
+
+    Uses deckType if present, falls back to 'commander' for
+    backward compatibility with existing games.
+    """
+    deck_type = game.get("deckType", "")
+    if deck_type in _DECK_TYPE_TO_FORMAT:
+        return _DECK_TYPE_TO_FORMAT[deck_type]
+    # Backward compat: old games without deckType were all Commander
+    game_type = game.get("gameType", "")
+    if "Commander" in game_type or not deck_type:
+        return "commander"
+    return deck_type.lower().replace(" ", "-")
+
 
 def _display_rating(ordinal: float) -> int:
     """Convert raw OpenSkill ordinal to display rating."""
@@ -288,6 +322,36 @@ def generate_leaderboard(
     return benchmark_results, ratings_by_game
 
 
+def generate_all_leaderboards(
+    games_index: list[dict],
+    model_registry: dict[str, str],
+    games_dir: Path | None = None,
+) -> tuple[dict[str, dict], dict[str, dict[str, dict[str, int]]]]:
+    """Generate per-format and combined leaderboards.
+
+    Returns (format_results, ratings_by_game) where format_results maps
+    format name -> benchmark_results dict. The "combined" key has all
+    formats merged into one unified rating pool.
+    """
+    # Combined leaderboard (all games, one rating pool)
+    combined_results, ratings_by_game = generate_leaderboard(games_index, model_registry, games_dir)
+
+    format_results: dict[str, dict] = {"combined": combined_results}
+
+    # Partition games by format
+    by_format: dict[str, list[dict]] = {}
+    for game in games_index:
+        fmt = derive_format(game)
+        by_format.setdefault(fmt, []).append(game)
+
+    # Generate per-format leaderboards
+    for fmt, fmt_games in by_format.items():
+        fmt_results, _ = generate_leaderboard(fmt_games, model_registry, games_dir)
+        format_results[fmt] = fmt_results
+
+    return format_results, ratings_by_game
+
+
 def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path) -> Path:
     """Generate leaderboard files from game data.
 
@@ -304,6 +368,8 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
             {
                 "id": game["id"],
                 "timestamp": game.get("timestamp", ""),
+                "gameType": game.get("gameType", ""),
+                "deckType": game.get("deckType", ""),
                 "totalTurns": game.get("totalTurns", 0),
                 "winner": game.get("winner"),
                 "players": game.get("players", []),
@@ -311,12 +377,21 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
         )
 
     model_registry = load_model_registry(models_json)
-    benchmark_results, ratings_by_game = generate_leaderboard(games_index, model_registry, games_dir)
+    format_results, ratings_by_game = generate_all_leaderboards(games_index, model_registry, games_dir)
+
+    # Build output with backward-compatible top-level fields from combined
+    combined = format_results.get("combined", {"generatedAt": "", "totalGames": 0, "models": []})
+    output = {
+        "generatedAt": combined.get("generatedAt", ""),
+        "totalGames": combined.get("totalGames", 0),
+        "models": combined.get("models", []),
+        "formats": format_results,
+    }
 
     # Write benchmark-results.json
     data_dir.mkdir(parents=True, exist_ok=True)
     output_path = data_dir / "benchmark-results.json"
-    output_path.write_text(json.dumps(benchmark_results, indent=2) + "\n")
+    output_path.write_text(json.dumps(output, indent=2) + "\n")
 
     # Write elo.json to public/data/ (kept as elo.json for backward compat)
     elo_dir = games_dir.parent / "data"

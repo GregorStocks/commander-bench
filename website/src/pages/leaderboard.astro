@@ -2,34 +2,75 @@
 import Base from '../layouts/Base.astro';
 import benchmarkData from '../data/benchmark-results.json';
 
-const models = benchmarkData.models;
-const providers = [...new Set(models.map((m: any) => m.provider))].sort();
-const hasData = models.length > 0;
+const FORMAT_LABELS: Record<string, string> = {
+  combined: 'Combined',
+  standard: 'Standard',
+  modern: 'Modern',
+  legacy: 'Legacy',
+  commander: 'Commander',
+};
+
+const FORMAT_ORDER = ['combined', 'standard', 'modern', 'legacy', 'commander'];
+
+// Build per-format data from the formats key (or fall back to single leaderboard)
+const formats: Record<string, any> = (benchmarkData as any).formats ?? {
+  combined: { totalGames: benchmarkData.totalGames, models: benchmarkData.models },
+};
+
+// Only show tabs for formats that have games (or combined)
+const activeFormats = FORMAT_ORDER.filter(
+  (f) => f === 'combined' || (formats[f] && formats[f].totalGames > 0)
+);
+
+// Collect all providers across all formats for the filter dropdown
+const allProviders = [
+  ...new Set(
+    Object.values(formats)
+      .flatMap((f: any) => (f.models || []).map((m: any) => m.provider))
+  ),
+].sort();
+
+const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length > 1;
 ---
 
 <Base title="Leaderboard">
   <h1>Leaderboard</h1>
 
   {hasData ? (
-    <p class="subtitle">
-      Model ratings based on {benchmarkData.totalGames.toLocaleString()} Commander games.
+    <p class="subtitle" id="subtitle">
+      Model ratings based on {benchmarkData.totalGames.toLocaleString()} games.
       Last updated: <time>{new Date(benchmarkData.generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</time>.
     </p>
+
+    <div class="format-tabs" id="format-tabs" style={activeFormats.length <= 1 ? 'display:none' : ''}>
+      {activeFormats.map((fmt: string) => (
+        <button class:list={['format-tab', { active: fmt === 'combined' }]} data-format={fmt}>
+          {FORMAT_LABELS[fmt] || fmt}
+          {formats[fmt] && fmt !== 'combined' ? (
+            <span class="tab-count">({formats[fmt].totalGames})</span>
+          ) : null}
+        </button>
+      ))}
+    </div>
 
     <details class="rating-info">
       <summary>How ratings work</summary>
       <div class="rating-info-body">
         <p>
           Ratings use the <a href="https://openskill.me/" target="_blank" rel="noopener">OpenSkill</a>
-          PlackettLuce model, a Bayesian rating system designed for multiplayer games.
-          Unlike Elo (which only handles 1v1), PlackettLuce uses the full finishing
-          order (1st through 4th) to update ratings after each Commander game.
+          PlackettLuce model, a Bayesian rating system that handles both 1v1 and multiplayer games.
+          For Commander (4-player), it uses the full finishing order (1st through 4th).
+          For 1v1 formats (Standard, Modern, Legacy), it reduces to pairwise comparison.
         </p>
         <p>
           Each model starts at <strong>1600</strong>. The displayed rating is a
           conservative estimate: <code>&mu; &minus; 3&sigma;</code>, scaled to a
           familiar range. As a model plays more games, its uncertainty (&sigma;)
           decreases, and the rating converges toward the model's true skill (&mu;).
+        </p>
+        <p>
+          The <strong>Combined</strong> leaderboard runs all games across all formats
+          through a single unified rating pool.
         </p>
       </div>
     </details>
@@ -43,7 +84,7 @@ const hasData = models.length > 0;
       />
       <select id="provider-filter">
         <option value="">All Providers</option>
-        {providers.map((p: string) => (
+        {allProviders.map((p: string) => (
           <option value={p}>{p}</option>
         ))}
       </select>
@@ -61,25 +102,27 @@ const hasData = models.length > 0;
             <th data-sort="avgApiCost" data-type="number">Avg API Cost</th>
           </tr>
         </thead>
-        <tbody>
-          {models.map((m: any) => (
-            <tr
-              data-model-name={m.modelName.toLowerCase()}
-              data-provider={m.provider}
-              data-rating={m.rating}
-              data-games-played={m.gamesPlayed}
-              data-win-rate={m.winRate}
-              data-avg-api-cost={m.avgApiCost}
-            >
-              <td class="model-name">{m.modelName}</td>
-              <td>{m.provider}</td>
-              <td class="num">{m.rating}</td>
-              <td class="num">{m.gamesPlayed}</td>
-              <td class="num">{(m.winRate * 100).toFixed(1)}%</td>
-              <td class="num">${m.avgApiCost.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
+        {activeFormats.map((fmt: string) => (
+          <tbody data-format={fmt} style={fmt !== 'combined' ? 'display: none;' : ''}>
+            {(formats[fmt]?.models || []).map((m: any) => (
+              <tr
+                data-model-name={m.modelName.toLowerCase()}
+                data-provider={m.provider}
+                data-rating={m.rating}
+                data-games-played={m.gamesPlayed}
+                data-win-rate={m.winRate}
+                data-avg-api-cost={m.avgApiCost}
+              >
+                <td class="model-name">{m.modelName}</td>
+                <td>{m.provider}</td>
+                <td class="num">{m.rating}</td>
+                <td class="num">{m.gamesPlayed}</td>
+                <td class="num">{(m.winRate * 100).toFixed(1)}%</td>
+                <td class="num">${m.avgApiCost.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        ))}
       </table>
     </div>
 
@@ -96,13 +139,45 @@ const hasData = models.length > 0;
   if (!table) {
     // No data yet, nothing to make interactive
   } else {
-  const tbody = table.querySelector('tbody')!;
   const headers = table.querySelectorAll('th[data-sort]');
   const searchInput = document.getElementById('search-input') as HTMLInputElement;
   const providerFilter = document.getElementById('provider-filter') as HTMLSelectElement;
   const noResults = document.getElementById('no-results')!;
+  const formatTabs = document.getElementById('format-tabs');
+
+  let activeFormat = 'combined';
+
+  function getActiveTbody(): HTMLTableSectionElement {
+    return table!.querySelector(`tbody[data-format="${activeFormat}"]`) as HTMLTableSectionElement;
+  }
+
+  // Format tab switching
+  if (formatTabs) {
+    formatTabs.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.format-tab') as HTMLElement | null;
+      if (!btn) return;
+      const fmt = btn.dataset.format!;
+      if (fmt === activeFormat) return;
+
+      // Hide all tbodies, show selected
+      table!.querySelectorAll('tbody[data-format]').forEach((tb) => {
+        (tb as HTMLElement).style.display = 'none';
+      });
+      const newTbody = table!.querySelector(`tbody[data-format="${fmt}"]`) as HTMLElement;
+      if (newTbody) newTbody.style.display = '';
+
+      // Update active tab styling
+      formatTabs.querySelectorAll('.format-tab').forEach((t) => t.classList.remove('active'));
+      btn.classList.add('active');
+
+      activeFormat = fmt;
+      applyFilters();
+    });
+  }
 
   function sortTable(column: string, type: string, ascending: boolean) {
+    const tbody = getActiveTbody();
+    if (!tbody) return;
     const rows = Array.from(tbody.querySelectorAll('tr'));
 
     rows.sort((a, b) => {
@@ -159,6 +234,8 @@ const hasData = models.length > 0;
   function applyFilters() {
     const searchTerm = searchInput.value.toLowerCase().trim();
     const provider = providerFilter.value;
+    const tbody = getActiveTbody();
+    if (!tbody) return;
     const rows = tbody.querySelectorAll('tr');
     let visibleCount = 0;
 
@@ -195,6 +272,42 @@ const hasData = models.length > 0;
 
   .subtitle time {
     color: #e0e0e0;
+  }
+
+  .format-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .format-tab {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 20px;
+    color: #a0a0b8;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .format-tab:hover {
+    border-color: #e94560;
+    color: #e0e0e0;
+  }
+
+  .format-tab.active {
+    background: #e94560;
+    border-color: #e94560;
+    color: #fff;
+  }
+
+  .tab-count {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-left: 0.2rem;
   }
 
   .rating-info {
@@ -373,6 +486,15 @@ const hasData = models.length > 0;
     th, td {
       padding: 0.5rem;
       font-size: 0.8rem;
+    }
+
+    .format-tabs {
+      gap: 0.3rem;
+    }
+
+    .format-tab {
+      font-size: 0.75rem;
+      padding: 0.3rem 0.6rem;
     }
   }
 </style>
