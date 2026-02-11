@@ -1,4 +1,5 @@
 {
+  "skipPostGamePrompts": true,
   "gameType": "Commander Free For All",
   "deckType": "Variant Magic - Freeform Commander",
   "customStartLife": 200,

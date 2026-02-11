@@ -22,6 +22,20 @@ PLAYLIST_ID = os.environ.get("YOUTUBE_PLAYLIST_ID", DEFAULT_PLAYLIST_ID)
 
 DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
 
+_DECK_TYPE_TO_FORMAT: dict[str, str] = {
+    "Constructed - Standard": "Standard",
+    "Constructed - Modern": "Modern",
+    "Constructed - Legacy": "Legacy",
+    "Variant Magic - Freeform Commander": "Commander",
+    "Variant Magic - Commander": "Commander",
+}
+
+
+def _format_label(meta: dict) -> str:
+    """Derive a human-readable format label from game metadata."""
+    deck_type = meta.get("deck_type", "")
+    return _DECK_TYPE_TO_FORMAT.get(deck_type, "Commander")
+
 
 def _extract_commander(player: dict) -> str | None:
     """Find commander name from decklist (SB: entries)."""
@@ -50,7 +64,8 @@ def _build_title(meta: dict) -> str:
             parts.append(name)
 
     matchup = " vs ".join(parts)
-    title = f"mage-bench: {matchup}"
+    fmt = _format_label(meta)
+    title = f"mage-bench {fmt}: {matchup}"
 
     # Truncate to fit YouTube's 100-char limit
     if len(title) > 100:
@@ -63,7 +78,8 @@ def _build_description(meta: dict, game_dir: Path) -> str:
     game_id = game_dir.name
     game_url = f"https://mage-bench.com/games/{game_id}"
 
-    lines = ["AI models play Commander (Magic: The Gathering) via mage-bench.", ""]
+    fmt = _format_label(meta)
+    lines = [f"AI models play {fmt} (Magic: The Gathering) via mage-bench.", ""]
 
     players = meta.get("players", [])
     for p in players:

@@ -294,6 +294,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
     output = {
         "id": game_id,
         "timestamp": meta.get("timestamp", ""),
+        "gameType": meta.get("game_type", ""),
+        "deckType": meta.get("deck_type", ""),
         "totalTurns": total_turns,
         "winner": winner,
         "players": players_summary,

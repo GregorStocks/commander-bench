@@ -971,8 +971,9 @@ def main() -> int:
         except Exception as e:
             print(f"  Warning: failed to merge game log: {e}")
         _print_game_summary(game_dir)
-        _maybe_upload_to_youtube(game_dir, project_root)
-        _maybe_export_for_website(game_dir, project_root)
+        if not config.skip_post_game_prompts:
+            _maybe_upload_to_youtube(game_dir, project_root)
+            _maybe_export_for_website(game_dir, project_root)
 
         return 0
     finally:

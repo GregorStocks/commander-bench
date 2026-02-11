@@ -238,6 +238,15 @@ def _resolve_personality(
         player.prompt_suffix = pdata["prompt_suffix"]
 
 
+_DECK_TYPE_TO_DIR: dict[str, str] = {
+    "Variant Magic - Freeform Commander": "Commander",
+    "Variant Magic - Commander": "Commander",
+    "Constructed - Legacy": "Legacy",
+    "Constructed - Modern": "Modern",
+    "Constructed - Standard": "Standard",
+}
+
+
 @dataclass
 class Config:
     """Puppeteer configuration with sensible defaults."""
@@ -286,6 +295,9 @@ class Config:
     deck_type: str = ""  # e.g. "Constructed - Legacy", "Variant Magic - Freeform Commander"
     custom_start_life: int = 0  # 0 = use game type default
 
+    # Post-game behavior
+    skip_post_game_prompts: bool = False  # Skip YouTube/export prompts
+
     # Runtime state (set during execution)
     port: int = 0
     timestamp: str = ""
@@ -322,6 +334,7 @@ class Config:
             self.game_type = data.get("gameType", "")
             self.deck_type = data.get("deckType", "")
             self.custom_start_life = data.get("customStartLife", 0)
+            self.skip_post_game_prompts = data.get("skipPostGamePrompts", False)
             personalities = load_personalities(self.config_file)
             models_data = load_models(self.config_file)
 
@@ -401,7 +414,7 @@ class Config:
         return json.dumps(result, separators=(",", ":"))
 
     def resolve_random_decks(self, project_root: Path) -> None:
-        """Replace any deck="random" with a randomly chosen Commander .dck file."""
+        """Replace any deck="random" with a randomly chosen .dck file for the configured format."""
         all_players = (
             self.potato_players
             + self.staller_players
@@ -412,14 +425,21 @@ class Config:
         if not any(p.deck == "random" for p in all_players):
             return
 
-        commander_dir = project_root / "Mage.Client" / "release" / "sample-decks" / "Commander"
-        decks = [p.relative_to(project_root) for p in commander_dir.rglob("*.dck")]
+        dir_name = _DECK_TYPE_TO_DIR.get(self.deck_type, "Commander")
+        deck_dir = project_root / "Mage.Client" / "release" / "sample-decks" / dir_name
+        decks = [p.relative_to(project_root) for p in deck_dir.rglob("*.dck")]
         if not decks:
-            print("WARNING: No .dck files found in Commander directory, keeping 'random' as-is")
+            print(f"WARNING: No .dck files found in {dir_name} directory, keeping 'random' as-is")
             return
 
+        used: set[str] = set()
         for player in all_players:
             if player.deck == "random":
-                chosen = random.choice(decks)
+                available = [d for d in decks if str(d) not in used]
+                if not available:
+                    used.clear()
+                    available = list(decks)
+                chosen = random.choice(available)
+                used.add(str(chosen))
                 player.deck = str(chosen)
                 print(f"Random deck for {player.name}: {chosen.name}")

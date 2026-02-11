@@ -552,3 +552,74 @@ def test_random_end_to_end_config_load():
         assert p2.model == "test/smart"
         assert p2.name == "Smart Beta"
         assert p2.prompt_suffix == "You are beta."
+
+
+# --- Format-aware random deck selection tests ---
+
+
+def test_resolve_random_decks_legacy_format():
+    """With deckType='Constructed - Legacy', decks should come from Legacy dir."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        legacy_dir = root / "Mage.Client" / "release" / "sample-decks" / "Legacy"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "Burn.dck").write_text("4 [M21:1] Lightning Bolt\n")
+        (legacy_dir / "Delver.dck").write_text("4 [ISD:1] Delver of Secrets\n")
+
+        config = Config(deck_type="Constructed - Legacy")
+        config.cpu_players = [CpuPlayer(name="cpu1", deck="random")]
+        config.resolve_random_decks(root)
+
+        assert config.cpu_players[0].deck is not None
+        assert "Legacy" in config.cpu_players[0].deck
+        assert config.cpu_players[0].deck.endswith(".dck")
+
+
+def test_resolve_random_decks_modern_format():
+    """With deckType='Constructed - Modern', decks should come from Modern dir."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        modern_dir = root / "Mage.Client" / "release" / "sample-decks" / "Modern"
+        modern_dir.mkdir(parents=True)
+        (modern_dir / "Burn.dck").write_text("4 [M21:1] Lightning Bolt\n")
+
+        config = Config(deck_type="Constructed - Modern")
+        config.cpu_players = [CpuPlayer(name="cpu1", deck="random")]
+        config.resolve_random_decks(root)
+
+        assert "Modern" in config.cpu_players[0].deck
+
+
+def test_resolve_random_decks_default_commander():
+    """Empty deckType should fall back to Commander directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        commander_dir = root / "Mage.Client" / "release" / "sample-decks" / "Commander"
+        commander_dir.mkdir(parents=True)
+        (commander_dir / "Precon.dck").write_text("1 [CMD:1] Sol Ring\n")
+
+        config = Config()
+        config.cpu_players = [CpuPlayer(name="cpu1", deck="random")]
+        config.resolve_random_decks(root)
+
+        assert "Commander" in config.cpu_players[0].deck
+
+
+def test_resolve_random_decks_no_duplicate_decks():
+    """Two players with random decks should get different decks."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        legacy_dir = root / "Mage.Client" / "release" / "sample-decks" / "Legacy"
+        legacy_dir.mkdir(parents=True)
+        (legacy_dir / "DeckA.dck").write_text("4 [M21:1] Card A\n")
+        (legacy_dir / "DeckB.dck").write_text("4 [M21:2] Card B\n")
+        (legacy_dir / "DeckC.dck").write_text("4 [M21:3] Card C\n")
+
+        config = Config(deck_type="Constructed - Legacy")
+        config.cpu_players = [
+            CpuPlayer(name="cpu1", deck="random"),
+            CpuPlayer(name="cpu2", deck="random"),
+        ]
+        config.resolve_random_decks(root)
+
+        assert config.cpu_players[0].deck != config.cpu_players[1].deck

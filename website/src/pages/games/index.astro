@@ -17,6 +17,7 @@ if (fs.existsSync(gamesDir)) {
       totalTurns: data.totalTurns,
       winner: data.winner,
       players: data.players,
+      deckType: data.deckType || '',
     };
     if (data.youtubeUrl) entry.youtubeUrl = data.youtubeUrl;
     games.push(entry);
@@ -83,6 +84,35 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 
   .game-date {
     color: #a0a0b8;
+  }
+
+  .format-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  .format-standard {
+    background: rgba(76, 175, 80, 0.15);
+    color: #66bb6a;
+  }
+
+  .format-modern {
+    background: rgba(33, 150, 243, 0.15);
+    color: #42a5f5;
+  }
+
+  .format-legacy {
+    background: rgba(156, 39, 176, 0.15);
+    color: #ab47bc;
+  }
+
+  .format-commander {
+    background: rgba(255, 152, 0, 0.15);
+    color: #ffa726;
   }
 
   .game-turns {
@@ -279,6 +309,20 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
         dateEl.className = "game-date";
         dateEl.textContent = dateStr || game.id;
         header.appendChild(dateEl);
+
+        // Format badge
+        var DECK_TYPE_FORMATS = {
+          "Constructed - Standard": "Standard",
+          "Constructed - Modern": "Modern",
+          "Constructed - Legacy": "Legacy",
+          "Variant Magic - Freeform Commander": "Commander",
+          "Variant Magic - Commander": "Commander",
+        };
+        var formatLabel = DECK_TYPE_FORMATS[game.deckType] || "Commander";
+        var fmtBadge = document.createElement("span");
+        fmtBadge.className = "format-badge format-" + formatLabel.toLowerCase();
+        fmtBadge.textContent = formatLabel;
+        header.appendChild(fmtBadge);
 
         var turnsEl = document.createElement("span");
         turnsEl.className = "game-turns";

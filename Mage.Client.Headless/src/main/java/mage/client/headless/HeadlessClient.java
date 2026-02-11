@@ -93,10 +93,15 @@ public class HeadlessClient {
 
         // Initialize card database so get_oracle_text can look up cards by name
         logger.info("Loading card database...");
-        java.io.File lockFile = new java.io.File("./db/cards.lock");
-        lockFile.getParentFile().mkdirs();
-        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(lockFile, "rw");
-             java.nio.channels.FileLock lock = raf.getChannel().lock()) {
+        try {
+            java.io.File lockFile = new java.io.File("./db/cards.lock");
+            lockFile.getParentFile().mkdirs();
+            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(lockFile, "rw");
+                 java.nio.channels.FileLock lock = raf.getChannel().lock()) {
+                CardScanner.scan();
+            }
+        } catch (java.io.IOException e) {
+            logger.warn("Failed to acquire card DB lock, scanning without lock: " + e.getMessage());
             CardScanner.scan();
         }
         logger.info("Card database loaded.");
