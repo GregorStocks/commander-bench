@@ -223,7 +223,10 @@ def generate_leaderboard(
     Returns (benchmark_results, ratings_by_game) where ratings_by_game is
     {game_id: {model_id: {before, after}}}.
     """
-    final_ratings, per_game = compute_ratings(games_index, games_dir)
+    # Filter to games with a winner for leaderboard purposes
+    scored_games = [g for g in games_index if g.get("winner")]
+
+    final_ratings, per_game = compute_ratings(scored_games, games_dir)
 
     # Build ratings_by_game lookup
     ratings_by_game: dict[str, dict[str, dict[str, int]]] = {}
@@ -235,7 +238,7 @@ def generate_leaderboard(
 
     # Aggregate per-model stats
     stats: dict[str, dict[str, float]] = {}
-    for game in games_index:
+    for game in scored_games:
         for p in game.get("players", []):
             if p.get("type") != "pilot" or not p.get("model"):
                 continue
@@ -277,7 +280,7 @@ def generate_leaderboard(
 
     benchmark_results = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
-        "totalGames": len(games_index),
+        "totalGames": len(scored_games),
         "models": models,
     }
 

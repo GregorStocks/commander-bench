@@ -355,7 +355,7 @@ def test_generate_leaderboard_skips_non_pilot():
 
 def test_generate_leaderboard_uses_registry():
     registry = {"a/model-a": "Fancy Model Name"}
-    games = [_make_game("g1", "20260101_000000", None, [_pilot("Alice", "a/model-a")])]
+    games = [_make_game("g1", "20260101_000000", "Alice", [_pilot("Alice", "a/model-a", placement=1)])]
     result, _ = generate_leaderboard(games, registry)
     assert result["models"][0]["modelName"] == "Fancy Model Name"
 
@@ -378,19 +378,65 @@ def test_generate_leaderboard_sorted_by_rating():
 
 
 def test_generate_leaderboard_missing_cost():
-    player = {"name": "Alice", "type": "pilot", "model": "a/x"}
-    games = [_make_game("g1", "20260101_000000", None, [player])]
+    player = {"name": "Alice", "type": "pilot", "model": "a/x", "placement": 1}
+    games = [_make_game("g1", "20260101_000000", "Alice", [player])]
     result, _ = generate_leaderboard(games, {})
     assert result["models"][0]["avgApiCost"] == 0.0
 
 
 def test_generate_leaderboard_avg_cost():
     games = [
-        _make_game("g1", "20260101_000000", None, [_pilot("A", "a/x", cost=10.0)]),
-        _make_game("g2", "20260102_000000", None, [_pilot("A", "a/x", cost=20.0)]),
+        _make_game("g1", "20260101_000000", "A", [_pilot("A", "a/x", cost=10.0, placement=1)]),
+        _make_game("g2", "20260102_000000", "A", [_pilot("A", "a/x", cost=20.0, placement=1)]),
     ]
     result, _ = generate_leaderboard(games, {})
     assert result["models"][0]["avgApiCost"] == 15.0
+
+
+def test_generate_leaderboard_excludes_no_winner():
+    """Games without a winner should be excluded from leaderboard stats."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/model-a", cost=5.0, placement=1),
+                _pilot("Bob", "b/model-b", cost=2.0, placement=2),
+            ],
+        ),
+        # No winner — should be excluded
+        _make_game(
+            "g2",
+            "20260102_000000",
+            None,
+            [_pilot("Alice", "a/model-a", cost=3.0), _pilot("Bob", "b/model-b", cost=1.0)],
+        ),
+    ]
+    result, ratings_by_game = generate_leaderboard(games, {})
+    assert result["totalGames"] == 1
+    for m in result["models"]:
+        assert m["gamesPlayed"] == 1
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    assert alice["winRate"] == 1.0
+    assert alice["avgApiCost"] == 5.0
+
+    # No-winner game should not appear in ratings
+    assert "g1" in ratings_by_game
+    assert "g2" not in ratings_by_game
+
+
+def test_generate_leaderboard_all_no_winner():
+    """If all games lack a winner, leaderboard should be empty."""
+    games = [
+        _make_game("g1", "20260101_000000", None, [_pilot("A", "a/x"), _pilot("B", "b/y")]),
+        _make_game("g2", "20260102_000000", None, [_pilot("A", "a/x"), _pilot("B", "b/y")]),
+    ]
+    result, ratings_by_game = generate_leaderboard(games, {})
+    assert result["totalGames"] == 0
+    assert result["models"] == []
+    assert ratings_by_game == {}
 
 
 # --- generate_leaderboard_file ---
