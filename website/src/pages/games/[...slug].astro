@@ -67,7 +67,7 @@ const { slug } = Astro.params;
           <!-- Action log -->
           <div id="action-log">
             <div class="action-log-header">
-              <span class="section-title">Actions</span>
+              <span class="section-title">Game Log</span>
               <label id="llm-toggle-label" class="hidden">
                 <input type="checkbox" id="llm-toggle" checked /> Show LLM thinking
               </label>
@@ -298,15 +298,6 @@ const { slug } = Astro.params;
     line-height: 1.5;
   }
 
-  .action-line {
-    padding: 0.15rem 0;
-    color: #c0c0d0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  }
-
-  .action-line:last-child {
-    border-bottom: 0;
-  }
 </style>
 
 <script is:inline src="/game-renderer.js"></script>
@@ -566,15 +557,17 @@ const { slug } = Astro.params;
       // Stack
       R.renderStack(stackSection, stackCards, snap.stack, game.cardImages, previewEls);
 
-      // Action log: show actions between previous snapshot seq and current snapshot seq
+      // Action log: show all actions up to current snapshot (persistent/accumulated)
       actionList.innerHTML = "";
       var prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
       var curSeq = snap.seq;
-      var relevantActions = game.actions.filter(function (a) {
-        return a.seq > prevSeq && a.seq <= curSeq;
+
+      // All game actions + chat up to current snapshot
+      var allActions = game.actions.filter(function (a) {
+        return a.seq <= curSeq;
       });
 
-      // Find LLM events in this time window (using timestamps)
+      // LLM events: only show for the current step (windowed) since they're verbose
       var hasLlmEvents = game.llmEvents && game.llmEvents.length > 0;
       var relevantLlm = [];
       if (hasLlmEvents && showLlm) {
@@ -587,38 +580,37 @@ const { slug } = Astro.params;
         }
       }
 
-      // Merge game actions and LLM events chronologically
-      var merged = [];
-      relevantActions.forEach(function (a) {
-        merged.push({ kind: "action", ts: a.ts || "", data: a });
-      });
-      relevantLlm.forEach(function (e) {
-        merged.push({ kind: "llm", ts: e.ts || "", data: e });
-      });
-      merged.sort(function (a, b) {
-        if (a.ts < b.ts) return -1;
-        if (a.ts > b.ts) return 1;
-        return 0;
+      // Render accumulated game actions and chat
+      allActions.forEach(function (a) {
+        if (a.type === "chat") {
+          var line = document.createElement("div");
+          line.className = "chat-line";
+          var fromIdx = playerColorMap[a.from];
+          var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
+          line.innerHTML = '<span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
+          actionList.appendChild(line);
+        } else {
+          var line = document.createElement("div");
+          line.className = "action-line";
+          // Highlight actions from the current step
+          if (a.seq > prevSeq) {
+            line.style.color = "#e0e0f0";
+          }
+          line.innerHTML = colorizePlayerNames(a.message);
+          actionList.appendChild(line);
+        }
       });
 
-      if (merged.length === 0) {
-        var empty = document.createElement("div");
-        empty.className = "action-line";
-        empty.textContent = "(no actions)";
-        actionList.appendChild(empty);
-      } else {
-        merged.forEach(function (item) {
-          if (item.kind === "action") {
-            var line = document.createElement("div");
-            line.className = "action-line";
-            line.innerHTML = colorizePlayerNames(item.data.message);
-            actionList.appendChild(line);
-          } else {
-            var el = renderLlmEvent(item.data);
-            if (el) actionList.appendChild(el);
-          }
+      // Append LLM events for current step at the end
+      if (relevantLlm.length > 0) {
+        relevantLlm.forEach(function (e) {
+          var el = renderLlmEvent(e);
+          if (el) actionList.appendChild(el);
         });
       }
+
+      // Auto-scroll to bottom
+      actionList.scrollTop = actionList.scrollHeight;
 
       // Update transport
       slider.value = String(index);

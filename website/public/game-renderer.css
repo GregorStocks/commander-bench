@@ -627,6 +627,55 @@
 .llm-thought.llm-player-2 { border-left-color: #22c55e; }
 .llm-thought.llm-player-3 { border-left-color: #f59e0b; }
 
+/* Action log lines (shared by live + replay) */
+.action-line {
+  padding: 0.15rem 0;
+  color: #c0c0d0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.action-line:last-child {
+  border-bottom: 0;
+}
+
+/* Chat message styling in action log */
+.chat-line {
+  padding: 0.15rem 0;
+  color: #c0c0d0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-style: italic;
+}
+
+.chat-line .chat-from {
+  font-style: normal;
+  font-weight: 600;
+}
+
+/* Game log panel (shared by live + replay) */
+.game-log {
+  padding: 0.75rem 1rem;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  position: sticky;
+  top: 0.5rem;
+}
+
+.game-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.game-log-list {
+  max-height: calc(100vh - 8rem);
+  overflow-y: auto;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .hidden {
   display: none !important;
 }

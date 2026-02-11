@@ -66,6 +66,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -127,6 +128,7 @@ public class StreamingGamePanel extends GamePanel {
     // Overlay publishing support
     private static final int OVERLAY_PUSH_INTERVAL_MS = 200;
     private long lastOverlayPushMs = 0L;
+    private final List<JsonObject> overlayEvents = Collections.synchronizedList(new ArrayList<>());
 
     // Player color styling (matches website PLAYER_COLOR_HEX in game-renderer.js)
     private static final Color[] PLAYER_ACCENT_COLORS = {
@@ -1781,6 +1783,16 @@ public class StreamingGamePanel extends GamePanel {
         }
         event.addProperty("message", message != null ? message : "");
         writeGameEvent(type, event);
+
+        // Also buffer for the overlay API so the live web UI can show events
+        JsonObject overlayEvent = new JsonObject();
+        overlayEvent.addProperty("type", type);
+        overlayEvent.addProperty("seq", gameEventSeq);
+        overlayEvent.addProperty("message", message != null ? message : "");
+        if ("player_chat".equals(type)) {
+            overlayEvent.addProperty("from", username != null ? username : "");
+        }
+        overlayEvents.add(overlayEvent);
     }
 
     /**
@@ -1908,6 +1920,14 @@ public class StreamingGamePanel extends GamePanel {
         root.add("players", buildOverlayPlayers(game, layout));
         root.add("stack", cardsToJson(game.getStack(), "stack", null, layout));
         root.add("layout", buildOverlayLayoutJson(layout));
+        // Include accumulated game events for the live web UI
+        JsonArray eventsArray = new JsonArray();
+        synchronized (overlayEvents) {
+            for (JsonObject e : overlayEvents) {
+                eventsArray.add(e);
+            }
+        }
+        root.add("events", eventsArray);
         return root.toString();
     }
 

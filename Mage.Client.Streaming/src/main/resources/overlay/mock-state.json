@@ -838,5 +838,24 @@
         }
       ]
     }
+  ],
+  "events": [
+    {"type":"game_action","seq":1,"message":"Krenko plays Mountain"},
+    {"type":"game_action","seq":2,"message":"Krenko casts Sol Ring"},
+    {"type":"game_action","seq":3,"message":"Atraxa plays Breeding Pool tapped"},
+    {"type":"player_chat","seq":4,"message":"gl hf everyone","from":"Krenko"},
+    {"type":"game_action","seq":5,"message":"Meren plays Overgrown Tomb"},
+    {"type":"game_action","seq":6,"message":"Meren casts Sakura-Tribe Elder"},
+    {"type":"player_chat","seq":7,"message":"gl!","from":"Atraxa"},
+    {"type":"game_action","seq":8,"message":"Talrand plays Island"},
+    {"type":"game_action","seq":9,"message":"Krenko casts Goblin Warchief"},
+    {"type":"game_action","seq":10,"message":"Atraxa casts Rhystic Study"},
+    {"type":"game_action","seq":11,"message":"Meren sacrifices Sakura-Tribe Elder, searching for Swamp"},
+    {"type":"game_action","seq":12,"message":"Talrand casts Propaganda"},
+    {"type":"game_action","seq":13,"message":"Krenko activates Krenko, Mob Boss creating 3 Goblin tokens"},
+    {"type":"player_chat","seq":14,"message":"that's a lot of goblins","from":"Talrand"},
+    {"type":"game_action","seq":15,"message":"Atraxa casts Deepglow Skate"},
+    {"type":"game_action","seq":16,"message":"Meren casts Grave Pact"},
+    {"type":"game_action","seq":17,"message":"Talrand casts Counterspell targeting Lightning Bolt"}
   ]
 }
