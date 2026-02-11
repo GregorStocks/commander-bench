@@ -6,7 +6,7 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 
 1. Find recent game logs:
    ```bash
-   GAME_DIR=$(readlink ~/mage-bench-logs/last-llm4 || ls -dt ~/mage-bench-logs/game_* | head -1)
+   GAME_DIR=$(readlink ~/mage-bench-logs/last || ls -dt ~/mage-bench-logs/game_* | head -1)
    echo "Analyzing: $GAME_DIR"
    ls "$GAME_DIR"
    ```
