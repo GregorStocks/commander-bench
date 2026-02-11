@@ -1,0 +1,10 @@
+{
+  "title": "GAME_PLAY_MANA rejects answer=true when no mana sources available, cancelling spells",
+  "description": "Follow-on from mana-select-empty-choices (fixed in #188). After that fix, when no mana sources are available, GAME_PLAY_MANA returns `response_type: \"boolean\"` with the payment message (e.g. \"Pay {1} Darkwater Catacombs\"). Models interpret this as a confirmation prompt and send `answer: true` (\"yes, pay it\"). But only `answer: false` (cancel) is accepted — `true` returns an error: \"Provide 'index' to choose mana source/pool, or 'answer: false' to cancel\".\n\nThe model then recovers by sending `answer: false`, which cancels the spell entirely. The net effect: spells fizzle and mana is wasted because the model couldn't understand that the only valid action was to cancel.\n\nThis happened twice for Haiku ESPN (01:26:16 and 02:26:02), both times resulting in spells being cancelled.\n\nEvidence:\n- ~/mage-bench-logs/game_20260211_002821/Haiku ESPN_errors.log: \"Provide 'index' to choose mana source/pool, or 'answer: false' to cancel\" at 01:26:16 and 02:26:02\n- ~/mage-bench-logs/game_20260211_002821/Haiku ESPN_llm.jsonl seq 994-999: Model sees response_type=boolean, sends answer=true, gets error, sends answer=false (spell cancelled)\n\nSource: BridgeCallbackHandler.java:1250-1309, the GAME_PLAY_MANA case in chooseAction()\n\nSuggested fix: When GAME_PLAY_MANA has no mana sources available and the model sends `answer: true`, treat it the same as `answer: false` (auto-cancel). The model can't do anything useful when there are no sources — rejecting `true` just adds an error round-trip before the inevitable cancel. Alternatively, auto-cancel immediately when manaChoiceList is empty (don't even ask the LLM), since the only possible outcome is cancellation.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-11T07:53:00.000000-08:00",
+  "updated_at": "2026-02-11T07:53:00.000000-08:00"
+}
