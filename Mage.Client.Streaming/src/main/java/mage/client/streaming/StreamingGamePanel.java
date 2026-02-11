@@ -18,6 +18,7 @@ import mage.client.game.PlayAreaPanel;
 import mage.client.game.PlayAreaPanelOptions;
 import mage.client.game.PlayerPanelExt;
 import mage.client.components.HoverButton;
+import mage.client.components.MageRoundPane;
 import mage.client.plugins.adapters.MageActionCallback;
 import mage.client.plugins.impl.Plugins;
 import mage.client.util.CardsViewUtil;
@@ -391,10 +392,12 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Update player panel borders dynamically based on game state.
-     * - Active turn player: thick (3px) accent-colored border
-     * - Priority player (when different from active): white 2px border
-     * - Other players: dim gray 1px border
+     * Update player panel borders and name highlights based on game state.
+     * - Battlefield border: accent-colored for active turn player, dim gray for others
+     * - Name highlight (avatar + button): green for priority player, empty for others
+     *
+     * The name highlight overrides PlayerPanelExt.update() which sets green for
+     * the active turn player — we want green to indicate priority instead.
      */
     private void updatePlayerHighlights(GameView game) {
         if (game == null || game.getPlayers() == null || playerColorIndices.isEmpty()) {
@@ -415,28 +418,63 @@ public class StreamingGamePanel extends GamePanel {
                 continue;
             }
 
+            // Battlefield border: accent color for active turn, dim gray for others
             Border border;
             if (player.isActive()) {
-                // Active turn: thick accent-colored border
                 Color accent = PLAYER_ACCENT_COLORS[colorIdx];
                 border = BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(accent, 3),
                     BorderFactory.createEmptyBorder(1, 1, 1, 1)
                 );
-            } else if (player.hasPriority()) {
-                // Has priority but not active turn: white border
-                border = BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(Color.WHITE, 2),
-                    BorderFactory.createEmptyBorder(2, 2, 2, 2)
-                );
             } else {
-                // Neither: dim border
                 border = BorderFactory.createCompoundBorder(
                     BorderFactory.createLineBorder(new Color(0x44, 0x44, 0x44), 1),
                     BorderFactory.createEmptyBorder(3, 3, 3, 3)
                 );
             }
             playArea.setBorder(border);
+
+            // Name highlight: override PlayerPanelExt to show priority instead of turn
+            overrideNameHighlight(playArea.getPlayerPanel(), player);
+        }
+    }
+
+    /**
+     * Override the name/avatar borders set by PlayerPanelExt.update() so that
+     * green highlights indicate the priority player rather than the active turn player.
+     */
+    private void overrideNameHighlight(PlayerPanelExt playerPanel, PlayerView player) {
+        try {
+            Field btnField = PlayerPanelExt.class.getDeclaredField("btnPlayer");
+            btnField.setAccessible(true);
+            JButton btnPlayer = (JButton) btnField.get(playerPanel);
+
+            Field avatarField = PlayerPanelExt.class.getDeclaredField("avatar");
+            avatarField.setAccessible(true);
+            HoverButton avatar = (HoverButton) avatarField.get(playerPanel);
+
+            Field bgField = PlayerPanelExt.class.getDeclaredField("panelBackground");
+            bgField.setAccessible(true);
+            MageRoundPane panelBackground = (MageRoundPane) bgField.get(playerPanel);
+
+            Border nameBorder;
+            Color bgColor;
+            if (player.hasPriority()) {
+                nameBorder = BorderFactory.createLineBorder(Color.green, 3);
+                bgColor = PreferencesDialog.getCurrentTheme().getPlayerPanel_activeBackgroundColor();
+            } else if (player.hasLeft()) {
+                nameBorder = BorderFactory.createLineBorder(Color.red, 2);
+                bgColor = PreferencesDialog.getCurrentTheme().getPlayerPanel_deadBackgroundColor();
+            } else {
+                nameBorder = BorderFactory.createEmptyBorder(0, 0, 0, 0);
+                bgColor = PreferencesDialog.getCurrentTheme().getPlayerPanel_inactiveBackgroundColor();
+            }
+
+            if (btnPlayer != null) btnPlayer.setBorder(nameBorder);
+            if (avatar != null) avatar.setBorder(nameBorder);
+            if (panelBackground != null) panelBackground.setBackgroundColor(bgColor);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            logger.warn("Failed to override name highlight", e);
         }
     }
 
