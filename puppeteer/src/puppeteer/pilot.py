@@ -691,7 +691,6 @@ async def run_pilot(
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         f"-Dxmage.headless.server={server}",
         f"-Dxmage.headless.port={port}",
-        f"-Dxmage.headless.username={username}",
         "-Dxmage.headless.personality=sleepwalker",
     ]
     if sys.platform == "darwin":
@@ -701,10 +700,10 @@ async def run_pilot(
     env = os.environ.copy()
     env["MAVEN_OPTS"] = jvm_args
 
-    # Pass deck path as a Maven CLI arg (not in MAVEN_OPTS) because
-    # MAVEN_OPTS gets shell-split by the mvn script, breaking paths with spaces.
+    # Pass values that may contain spaces as Maven CLI args (not in MAVEN_OPTS)
+    # because MAVEN_OPTS gets shell-split by the mvn script.
     # Maven CLI -D args go through "$@" which preserves spaces correctly.
-    mvn_args = ["-q"]
+    mvn_args = ["-q", f"-Dxmage.headless.username={username}"]
     if deck_path:
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
     if game_dir:

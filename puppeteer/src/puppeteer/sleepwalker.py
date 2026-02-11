@@ -57,7 +57,6 @@ async def run_sleepwalker(
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         f"-Dxmage.headless.server={server}",
         f"-Dxmage.headless.port={port}",
-        f"-Dxmage.headless.username={username}",
         "-Dxmage.headless.personality=sleepwalker",
     ]
     if sys.platform == "darwin":
@@ -68,9 +67,9 @@ async def run_sleepwalker(
     env = os.environ.copy()
     env["MAVEN_OPTS"] = jvm_args
 
-    # Pass deck path as a Maven CLI arg (not in MAVEN_OPTS) because
-    # MAVEN_OPTS gets shell-split by the mvn script, breaking paths with spaces.
-    mvn_args = ["-q"]
+    # Pass values that may contain spaces as Maven CLI args (not in MAVEN_OPTS)
+    # because MAVEN_OPTS gets shell-split by the mvn script.
+    mvn_args = ["-q", f"-Dxmage.headless.username={username}"]
     if deck_path:
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
     mvn_args.append("exec:java")

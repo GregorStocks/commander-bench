@@ -492,16 +492,15 @@ def start_potato_client(
         config.jvm_headless_opts,
         f"-Dxmage.headless.server={config.server}",
         f"-Dxmage.headless.port={config.port}",
-        f"-Dxmage.headless.username={name}",
         f"-Dxmage.headless.personality={personality}",
     ]
 
     jvm_args = " ".join(jvm_args_list)
     env = {"MAVEN_OPTS": jvm_args}
 
-    # Pass deck path as a Maven CLI arg (not in MAVEN_OPTS) because
-    # MAVEN_OPTS gets shell-split by the mvn script, breaking paths with spaces.
-    mvn_args = ["mvn", "-q"]
+    # Pass values that may contain spaces as Maven CLI args (not in MAVEN_OPTS)
+    # because MAVEN_OPTS gets shell-split by the mvn script.
+    mvn_args = ["mvn", "-q", f"-Dxmage.headless.username={name}"]
     if deck_path:
         resolved_path = project_root / deck_path
         mvn_args.append(f"-Dxmage.headless.deck={resolved_path}")
