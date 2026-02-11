@@ -951,6 +951,22 @@ public class BridgeCallbackHandler {
                     }
                 }
 
+                // Optional GAME_TARGET with no valid targets: auto-cancel
+                if (choiceList.isEmpty() && !required) {
+                    synchronized (actionLock) {
+                        if (pendingAction == action) {
+                            pendingAction = null;
+                        }
+                    }
+                    session.sendPlayerBoolean(currentGameId, false);
+                    trackSentResponse(currentGameId, ResponseType.BOOLEAN, false, null);
+                    result.put("action_pending", false);
+                    result.put("action_taken", "auto_cancelled_no_targets");
+                    result.put("message", msg.getMessage());
+                    lastChoices = null;
+                    break;
+                }
+
                 result.put("choices", choiceList);
                 lastChoices = indexToUuid;
                 break;
@@ -1749,6 +1765,25 @@ public class BridgeCallbackHandler {
                     session.sendPlayerBoolean(action.getGameId(), false);
                     actionsPassed++;
                     continue;
+                }
+
+                // Optional GAME_TARGET with no valid targets: auto-cancel
+                if (method == ClientCallbackMethod.GAME_TARGET) {
+                    GameClientMessage targetMsg = (GameClientMessage) action.getData();
+                    boolean required = targetMsg.isFlag();
+                    if (!required) {
+                        Set<UUID> targets = findValidTargets(targetMsg);
+                        if (targets == null || targets.isEmpty()) {
+                            synchronized (actionLock) {
+                                if (pendingAction == action) {
+                                    pendingAction = null;
+                                }
+                            }
+                            session.sendPlayerBoolean(action.getGameId(), false);
+                            actionsPassed++;
+                            continue;
+                        }
+                    }
                 }
 
                 // Non-GAME_SELECT always needs LLM input — return immediately

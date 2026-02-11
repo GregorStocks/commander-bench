@@ -13,6 +13,8 @@ Avoid **modifying existing behavior** in Java outside of `Mage.Client.Streaming`
 
 **Additive changes are OK:** Adding new methods, fields, or classes to upstream modules is fine as long as existing behavior is untouched — these merge cleanly.
 
+**Bug fixes in upstream modules are OK** when we're confident they're XMage bugs (e.g. incorrect combat legality checks). File a P2 issue for tracking and keep the fix minimal.
+
 **Our code (free to modify):**
 - `Mage.Client.Streaming` - streaming/spectator client
 - `Mage.Client.Headless` - headless bridge client
