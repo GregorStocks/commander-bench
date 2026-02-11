@@ -1,7 +1,7 @@
 {
   "gameType": "Two Player Duel",
   "deckType": "Constructed - Legacy",
-  "matchTimeLimit": "MIN__20",
+  "matchTimeLimit": "MIN__60",
   "matchBufferTime": "NONE",
   "players": [
     {"type": "pilot", "personality": "commentator-gemini3", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck"},
