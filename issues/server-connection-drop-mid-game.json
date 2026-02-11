@@ -1,0 +1,10 @@
+{
+  "title": "Server connection drops cause premature game end and player disconnections",
+  "description": "JBoss remoting connections between the XMage server and headless clients fail mid-game, causing cascading player disconnections. The server's callback channel throws `java.io.IOException: Unable to create socket`, then the game freezes in `waitResponseOpen` for 30 seconds, and eventually players are disconnected.\n\nIn the worst case (game_20260210_224830), the entire game ended at Turn 5 after ~15 minutes due to a `LeasePinger` / `ConnectionValidator` timeout.\n\nEvidence:\n- ~/mage-bench-logs/game_20260210_234611/server.log line 70-71: `Game frozen in waitResponseOpen for 30 secs` then `SESSION CALLBACK EXCEPTION - java.io.IOException: Unable to create socket` at 00:10:27\n- ~/mage-bench-logs/game_20260210_234611/server.log line 73: second socket failure at 01:03:08\n- ~/mage-bench-logs/game_20260210_234611/server.log lines 72,74,76: 3 of 4 players disconnected progressively\n- ~/mage-bench-logs/game_20260210_224830/Gem3 ESPN_pilot.log line 887: `Could not connect to server!` at 23:05:21, game ended at Turn 5\n\nPossible causes: socket pool exhaustion under 4 concurrent LLM clients, slow LLM responses blocking the client's ability to process server callbacks, or JBoss remoting lease expiration. The 30-second `waitResponseOpen` timeout may be too short for LLM-driven clients.\n\nSuggested investigation: Check JBoss remoting configuration (lease period, socket timeout, connection pool size). The headless client may need keep-alive or reconnection logic.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-11T10:00:00.000000-08:00",
+  "updated_at": "2026-02-11T10:00:00.000000-08:00"
+}
