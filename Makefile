@@ -113,6 +113,12 @@ website:
 export-game:
 	python3 scripts/export_game.py $(GAME)
 
+# Upload a game recording to YouTube
+# Usage: make upload-youtube GAME=game_20260208_220934
+.PHONY: upload-youtube
+upload-youtube:
+	uv run --project puppeteer python scripts/upload_youtube.py $(GAME)
+
 # Extract a screenshot from a game recording
 # Usage: make screenshot [GAME=path] [T=time] [FILE=path]
 #   T=-0.5  (default) 0.5s before end. Negative = from end, positive = from start.

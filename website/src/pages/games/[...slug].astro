@@ -26,6 +26,9 @@ const { slug } = Astro.params;
       <!-- Header -->
       <div id="game-header">
         <div id="game-title"></div>
+        <div id="youtube-link" class="hidden">
+          <a id="youtube-url" href="#" target="_blank" rel="noopener">Watch on YouTube</a>
+        </div>
         <div id="turn-info"></div>
       </div>
 
@@ -118,6 +121,21 @@ const { slug } = Astro.params;
     font-size: 1rem;
     font-weight: 600;
     color: #e94560;
+  }
+
+  #youtube-link a {
+    color: #e94560;
+    text-decoration: none;
+    font-size: 0.85rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #e94560;
+    border-radius: 4px;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  #youtube-link a:hover {
+    background: #e94560;
+    color: #fff;
   }
 
   #turn-info {
@@ -696,6 +714,14 @@ const { slug } = Astro.params;
           return p.commander || p.name;
         }).join(" vs ");
         gameTitleEl.textContent = playerNames;
+
+        // YouTube link
+        if (game.youtubeUrl) {
+          var ytLink = document.getElementById("youtube-link");
+          var ytUrl = document.getElementById("youtube-url");
+          ytUrl.href = game.youtubeUrl;
+          ytLink.classList.remove("hidden");
+        }
 
         // Set up transport
         slider.max = String(game.snapshots.length - 1);
