@@ -712,6 +712,8 @@ def start_streaming_client(
     jvm_args_list.append(f"-Dxmage.streaming.overlay.enabled={'true' if config.overlay else 'false'}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.port={config.overlay_port}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.host={config.overlay_host}")
+    webroot = project_root / "website" / "public"
+    jvm_args_list.append(f"-Dxmage.streaming.overlay.webroot={webroot}")
 
     jvm_args = " ".join(jvm_args_list)
 
@@ -865,8 +867,8 @@ def main() -> int:
         if config.streaming and config.overlay:
             base = f"http://{config.overlay_host}:{config.overlay_port}"
             print(f"Overlay API: {base}/api/state")
-            print(f"Live viewer: http://localhost:4321/games/live?api={base}")
-            print(f"OBS source:  http://localhost:4321/games/live?api={base}&positions=1&obs=1")
+            print(f"Live viewer: {base}/live")
+            print(f"OBS source:  {base}/live?positions=1&obs=1")
 
         # Start server
         print("Starting XMage server...")
