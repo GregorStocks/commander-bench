@@ -98,7 +98,7 @@
       "context_k": 200,
       "thinking": true,
       "tier": "mid",
-      "notes": "Strong reasoning model. Internal chain-of-thought with effort levels (low/medium/high). Likely good at complex game decisions. Thinking is opaque — reasoning_content not exposed."
+      "notes": "Strong reasoning model but unreliable tool use — persistent empty responses and stall loops in testing (24 counted empties across 3 stall cycles in game_20260210_230611). Removed from default rotation. Internal chain-of-thought with effort levels (low/medium/high). Thinking is opaque — reasoning_content not exposed."
     },
     {
       "id": "openai/o3-mini",
@@ -194,7 +194,6 @@
     "anthropic/claude-haiku-4.5",
     "google/gemini-2.5-flash",
     "google/gemini-3-flash-preview",
-    "openai/o3",
     "deepseek/deepseek-r1"
   ],
   "recommendations": {
@@ -202,9 +201,9 @@
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-haiku-4.5",
       "google/gemini-2.5-flash",
-      "openai/o3"
+      "google/gemini-3-flash-preview"
     ],
-    "reasoning": "These four cover the interesting quadrant: Claude (best tool use + visible thinking), Gemini (cheapest with visible thinking), OpenAI (strong reasoning but opaque thinking). All support extended thinking. o4-mini was removed due to cascading empty responses and poor tool-use reliability; o3 replaces it as the OpenAI representative.",
+    "reasoning": "Claude (best tool use + visible thinking), Gemini (cheapest with visible thinking). All support extended thinking. OpenAI models (o3, o4-mini) removed due to persistent empty responses and poor tool-use reliability.",
     "showcase_matches": [
       "anthropic/claude-opus-4.6",
       "google/gemini-3-pro-preview",
@@ -218,13 +217,14 @@
       "x-ai/grok-4-fast"
     ],
     "skip": [
+      "openai/o3",
       "openai/o4-mini",
       "openai/gpt-5.2",
       "openai/gpt-5.1",
       "mistralai/mistral-large-2512",
       "mistralai/devstral-small"
     ],
-    "skip_reasoning": "o4-mini has a thinking mode but produces cascading empty responses and very few meaningful game actions (2 GAME_TARGET vs 17-30 for other models) — poor tool-use reliability. Non-thinking models consistently produce empty reasoning text with tool calls, making them hard to debug and likely worse at strategic play. The cost savings vs cheap thinking models (Gemini 2.5 Flash, Haiku 4.5) aren't worth it."
+    "skip_reasoning": "OpenAI reasoning models (o3, o4-mini) produce persistent empty responses and stall loops — o3 had 24 counted empties across 3 stall cycles in one game, o4-mini similarly produces very few meaningful game actions. Non-thinking models consistently produce empty reasoning text with tool calls, making them hard to debug and likely worse at strategic play."
   },
   "thinking_config": {
     "_comment": "How to enable thinking for each provider via OpenRouter's unified reasoning param",
