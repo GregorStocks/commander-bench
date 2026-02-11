@@ -39,16 +39,16 @@ public class McpServer {
 
     private static final Logger logger = Logger.getLogger(McpServer.class);
     private static final String PROTOCOL_VERSION = "2024-11-05";
-    private static final String SERVER_NAME = "xmage-skeleton";
+    private static final String SERVER_NAME = "xmage-bridge";
     private static final String SERVER_VERSION = "1.0.0";
 
-    private final SkeletonCallbackHandler callbackHandler;
+    private final BridgeCallbackHandler callbackHandler;
     private final Gson gson;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final PrintWriter stdout;
     private boolean initialized = false;
 
-    public McpServer(SkeletonCallbackHandler callbackHandler) {
+    public McpServer(BridgeCallbackHandler callbackHandler) {
         this.callbackHandler = callbackHandler;
         this.gson = new GsonBuilder().create();
         this.stdout = new PrintWriter(System.out, true);

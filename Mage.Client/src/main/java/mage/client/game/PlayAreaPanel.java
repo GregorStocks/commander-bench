@@ -563,13 +563,13 @@ public class PlayAreaPanel extends javax.swing.JPanel {
             westPanel.add(playerPanel);
 
             if (options.showGraveyardInPlayArea) {
-                // Create graveyard panel for displaying graveyard cards (streaming/observer mode)
+                // Create graveyard panel for displaying graveyard cards (streaming/spectator mode)
                 graveyardPanel = new GraveyardPanel();
                 westPanel.add(graveyardPanel);
             }
 
             if (options.showExileInPlayArea) {
-                // Create exile panel for displaying exiled cards (streaming/observer mode)
+                // Create exile panel for displaying exiled cards (streaming/spectator mode)
                 exilePanel = new ExilePanel();
                 westPanel.add(exilePanel);
             }
@@ -580,7 +580,7 @@ public class PlayAreaPanel extends javax.swing.JPanel {
         }
 
         if (options.showHandInPlayArea) {
-            // Create hand panel for displaying cards in hand (streaming/observer mode)
+            // Create hand panel for displaying cards in hand (streaming/spectator mode)
             handPanel = new HandPanel();
             handPanel.setVisible(false); // Hidden by default until cards loaded
 

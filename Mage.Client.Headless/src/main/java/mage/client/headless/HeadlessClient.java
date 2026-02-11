@@ -59,7 +59,7 @@ public class HeadlessClient {
     public static void main(String[] args) {
         String server = getArg(args, "--server", System.getProperty("xmage.headless.server", "localhost"));
         int port = getIntArg(args, "--port", Integer.getInteger("xmage.headless.port", 17171));
-        String username = getArg(args, "--username", System.getProperty("xmage.headless.username", "skeleton-" + System.currentTimeMillis()));
+        String username = getArg(args, "--username", System.getProperty("xmage.headless.username", "bridge-" + System.currentTimeMillis()));
         String password = getArg(args, "--password", System.getProperty("xmage.headless.password", ""));
         String personalityArg = getArg(args, "--personality", System.getProperty("xmage.headless.personality", PERSONALITY_POTATO));
         String personality = personalityArg.toLowerCase(Locale.ROOT);
@@ -96,12 +96,12 @@ public class HeadlessClient {
         CardScanner.scan();
         logger.info("Card database loaded.");
 
-        SkeletonMageClient client = new SkeletonMageClient(username);
+        BridgeMageClient client = new BridgeMageClient(username);
         Session session = new SessionImpl(client);
         client.setSession(session);
 
         // Get callback handler and configure MCP mode
-        SkeletonCallbackHandler callbackHandler = client.getCallbackHandler();
+        BridgeCallbackHandler callbackHandler = client.getCallbackHandler();
         if (isSleepwalker) {
             callbackHandler.setMcpMode(true);
         }
@@ -115,9 +115,9 @@ public class HeadlessClient {
         if (errorLogPath != null && !errorLogPath.isEmpty()) {
             callbackHandler.setErrorLogPath(errorLogPath);
         }
-        String skeletonLogPath = System.getProperty("xmage.headless.skeletonlog");
-        if (skeletonLogPath != null && !skeletonLogPath.isEmpty()) {
-            callbackHandler.setSkeletonLogPath(skeletonLogPath);
+        String bridgeLogPath = System.getProperty("xmage.headless.bridgelog");
+        if (bridgeLogPath != null && !bridgeLogPath.isEmpty()) {
+            callbackHandler.setBridgeLogPath(bridgeLogPath);
         }
         Integer maxInteractions = Integer.getInteger("xmage.headless.maxInteractionsPerTurn");
         if (maxInteractions != null) {
@@ -131,11 +131,11 @@ public class HeadlessClient {
         connection.setPassword(password);
         connection.setProxyType(Connection.ProxyType.NONE);
 
-        // Set user data with allowRequestShowHandCards=true so observers can see hands
+        // Set user data with allowRequestShowHandCards=true so spectators can see hands
         UserData userData = new UserData(
                 UserGroup.PLAYER,
                 0, // avatarId
-                true, // allowRequestShowHandCards - important for streaming observers
+                true, // allowRequestShowHandCards - important for streaming spectators
                 false, // confirmEmptyManaPool — suppress "mana left in pool" GAME_ASK prompts
                 new UserSkipPrioritySteps(),
                 "world", // flagName

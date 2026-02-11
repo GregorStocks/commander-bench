@@ -19,7 +19,7 @@ import mage.view.CardsView;
 import org.apache.log4j.Logger;
 
 /**
- * Panel for displaying commander cards in the streaming/observer west panel.
+ * Panel for displaying commander cards in the streaming/spectator west panel.
  * Always visible (shows empty placeholder when no commanders loaded).
  * Supports partner commanders displayed side-by-side.
  */

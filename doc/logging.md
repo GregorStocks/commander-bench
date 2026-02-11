@@ -7,7 +7,6 @@ All game logs live in `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`.
 | File pattern | Source | Contents |
 |---|---|---|
 | `{name}_pilot.log` | `pilot.py` stdout | LLM reasoning, tool calls, game actions, errors |
-| `{name}_llm.log` | `chatterbox.py` stdout | LLM chat commentary, tool calls, errors |
 | `{name}_mcp.log` | `sleepwalker.py` / potato stdout | Auto-play actions, game log excerpts |
 | `{name}_errors.log` | Python `_log_error()` + Java `logError()` | Errors only (written in real-time from both sides) |
 | `{name}_cost.txt` | `llm_cost.py` | Cumulative LLM API cost in USD |
@@ -18,12 +17,12 @@ Machine-readable JSONL files for post-game analysis. Each line is a compact JSON
 
 | File | Source | Contents |
 |---|---|---|
-| `game_meta.json` | `harness.py` at game start | Decklists, models, system prompts, format, git info |
-| `game_events.jsonl` | Observer (`StreamingGamePanel`) | Game actions, player chat, state snapshots (all hands visible), game over |
+| `game_meta.json` | `orchestrator.py` at game start | Decklists, models, system prompts, format, git info |
+| `game_events.jsonl` | Spectator (`StreamingGamePanel`) | Game actions, player chat, state snapshots (all hands visible), game over |
 | `{name}_llm.jsonl` | `pilot.py` per player | LLM reasoning, tool calls + results, costs, errors, stalls, context trims |
 | `{name}_llm_trace.jsonl` | `pilot.py` per player | Full LLM request/response pairs (messages array + complete API response) |
-| `{name}_skeleton.jsonl` | `SkeletonCallbackHandler` per player | Raw callback dump — every callback the skeleton sees (data hoarding) |
-| `game.jsonl` | `harness.py` post-game merge | Unified log: `game_events.jsonl` + all `*_llm.jsonl` sorted by timestamp (excludes trace files) |
+| `{name}_bridge.jsonl` | `BridgeCallbackHandler` per player | Raw callback dump — every callback the bridge sees (data hoarding) |
+| `game.jsonl` | `orchestrator.py` post-game merge | Unified log: `game_events.jsonl` + all `*_llm.jsonl` sorted by timestamp (excludes trace files) |
 
 ### Event types in game_events.jsonl
 
@@ -68,16 +67,16 @@ jq 'select(.type=="game_end") | {player, total_cost_usd}' game.jsonl
 
 | File | Created by | Contents |
 |---|---|---|
-| `errors.log` | `harness.py` `_write_error_log()` | All `*_errors.log` files concatenated, prefixed with source |
-| `observer.log` | Observer/streaming client | Game creation, table setup, recording |
-| `config.json` | `harness.py` | Copy of the game config used |
+| `errors.log` | `orchestrator.py` `_write_error_log()` | All `*_errors.log` files concatenated, prefixed with source |
+| `spectator.log` | Spectator/streaming client | Game creation, table setup, recording |
+| `config.json` | `orchestrator.py` | Copy of the game config used |
 
 ## Error logging
 
 Errors are written at the source, not pattern-matched after the fact:
 
-- **Python side**: `_log_error(game_dir, username, msg)` in `pilot.py` and `chatterbox.py` appends to `{name}_errors.log` and prints to stdout.
-- **Java side**: `SkeletonCallbackHandler.logError(msg)` appends to the same file. Triggered when `chooseAction()` returns `success: false` or `McpServer` catches an unhandled exception. The file path is passed via `-Dxmage.headless.errorlog=...`.
+- **Python side**: `_log_error(game_dir, username, msg)` in `pilot.py` appends to `{name}_errors.log` and prints to stdout.
+- **Java side**: `BridgeCallbackHandler.logError(msg)` appends to the same file. Triggered when `chooseAction()` returns `success: false` or `McpServer` catches an unhandled exception. The file path is passed via `-Dxmage.headless.errorlog=...`.
 
 Both Python and Java write to the same per-player error file, so errors appear in chronological order regardless of layer.
 

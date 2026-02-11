@@ -7,7 +7,7 @@ import mage.client.SessionHandler;
 import mage.client.chat.ChatPanelBasic;
 import mage.client.components.MageComponents;
 import mage.client.dialog.*;
-import mage.client.util.AiHarnessConfig;
+import mage.client.util.AiPuppeteerConfig;
 import mage.client.util.GUISizeHelper;
 import mage.client.util.IgnoreList;
 import mage.client.util.MageTableRowSorter;
@@ -66,10 +66,10 @@ public class TablesPanel extends javax.swing.JPanel {
 
     private static final Logger LOGGER = Logger.getLogger(TablesPanel.class);
     private static final int[] DEFAULT_COLUMNS_WIDTH = {35, 150, 100, 50, 120, 180, 80, 120, 80, 60, 40, 40, 60};
-    private static final String AI_HARNESS_AUTO_START_PROP = "xmage.aiHarness.autoStart";
-    private static final String AI_HARNESS_DECKS_DIR = "release/sample-decks/Commander";
-    private static boolean aiHarnessAutoStartTriggered = false;
-    private static boolean aiHarnessAutoWatchTriggered = false;
+    private static final String AI_PUPPETEER_AUTO_START_PROP = "xmage.aiPuppeteer.autoStart";
+    private static final String AI_PUPPETEER_DECKS_DIR = "release/sample-decks/Commander";
+    private static boolean aiPuppeteerAutoStartTriggered = false;
+    private static boolean aiPuppeteerAutoWatchTriggered = false;
 
     // ping timeout (warning, must be less than UserManagerImpl.USER_CONNECTION_TIMEOUTS_CHECK_SECS)
     public static final int PING_SERVER_SECS = 20;
@@ -765,11 +765,11 @@ public class TablesPanel extends javax.swing.JPanel {
         UUID chatRoomId = null;
         if (SessionHandler.getSession() != null) {
             boolean testMode = SessionHandler.isTestMode();
-            boolean aiHarnessMode = SessionHandler.isAiHarnessMode();
+            boolean aiPuppeteerMode = SessionHandler.isAiPuppeteerMode();
             btnQuickStart2Player.setVisible(testMode);
             btnQuickStartMCTS.setVisible(testMode);
-            btnQuickStart4Player.setVisible(testMode || aiHarnessMode);
-            btnQuickStart4Player.setText(aiHarnessMode ? "Quick 4 AI Commander" : "Quick 4 player");
+            btnQuickStart4Player.setVisible(testMode || aiPuppeteerMode);
+            btnQuickStart4Player.setText(aiPuppeteerMode ? "Quick 4 AI Commander" : "Quick 4 player");
             gameChooser.init();
             chatRoomId = SessionHandler.getRoomChatId(roomId).orElse(null);
         }
@@ -790,7 +790,7 @@ public class TablesPanel extends javax.swing.JPanel {
             startUpdateTasks(true);
             this.setVisible(true);
             this.repaint();
-            maybeAutoStartAiHarnessGame();
+            maybeAutoStartAiPuppeteerGame();
         } else {
             hideTables();
         }
@@ -1692,12 +1692,12 @@ public class TablesPanel extends javax.swing.JPanel {
         createQuickGame(gameName, gameType, aiType, numPlayers, true);
     }
 
-    private void createAiHarnessGame() {
-        AiHarnessConfig config = AiHarnessConfig.load();
-        createConfiguredAiHarnessGame(config);
+    private void createAiPuppeteerGame() {
+        AiPuppeteerConfig config = AiPuppeteerConfig.load();
+        createConfiguredAiPuppeteerGame(config);
     }
 
-    private void createConfiguredAiHarnessGame(AiHarnessConfig config) {
+    private void createConfiguredAiPuppeteerGame(AiPuppeteerConfig config) {
         TableView table;
         try {
             String testDeckFile = "test.dck";
@@ -1714,23 +1714,23 @@ public class TablesPanel extends javax.swing.JPanel {
 
             int numPlayers = config.getPlayers().size();
             int botCount = config.getBotCount();
-            List<DeckCardLists> aiDecks = pickAiHarnessDecks(botCount, testDeck);
+            List<DeckCardLists> aiDecks = pickAiPuppeteerDecks(botCount, testDeck);
 
             String gameTypeStr = config.getGameType() != null ? config.getGameType() : "Commander Free For All";
             String deckTypeStr = config.getDeckType() != null ? config.getDeckType() : "Variant Magic - Freeform Commander";
-            MatchOptions options = new MatchOptions("AI Harness", gameTypeStr, numPlayers > 2);
-            for (AiHarnessConfig.PlayerConfig player : config.getPlayers()) {
+            MatchOptions options = new MatchOptions("AI Puppeteer", gameTypeStr, numPlayers > 2);
+            for (AiPuppeteerConfig.PlayerConfig player : config.getPlayers()) {
                 options.getPlayerTypes().add(player.getPlayerType());
             }
             options.setDeckType(deckTypeStr);
             options.setAttackOption(MultiplayerAttackOption.MULTIPLE);
             options.setRange(RangeOfInfluence.ONE);
             options.setWinsNeeded(2);
-            String timeLimitEnv = System.getenv("XMAGE_AI_HARNESS_MATCH_TIME_LIMIT");
+            String timeLimitEnv = System.getenv("XMAGE_AI_PUPPETEER_MATCH_TIME_LIMIT");
             options.setMatchTimeLimit(timeLimitEnv != null ? MatchTimeLimit.valueOf(timeLimitEnv) : MatchTimeLimit.NONE);
-            String bufferTimeEnv = System.getenv("XMAGE_AI_HARNESS_MATCH_BUFFER_TIME");
+            String bufferTimeEnv = System.getenv("XMAGE_AI_PUPPETEER_MATCH_BUFFER_TIME");
             options.setMatchBufferTime(bufferTimeEnv != null ? MatchBufferTime.valueOf(bufferTimeEnv) : MatchBufferTime.NONE);
-            String customLifeEnv = System.getenv("XMAGE_AI_HARNESS_CUSTOM_START_LIFE");
+            String customLifeEnv = System.getenv("XMAGE_AI_PUPPETEER_CUSTOM_START_LIFE");
             if (customLifeEnv != null) {
                 options.setCustomStartLifeEnabled(true);
                 options.setCustomStartLife(Integer.parseInt(customLifeEnv));
@@ -1746,7 +1746,7 @@ public class TablesPanel extends javax.swing.JPanel {
             table = SessionHandler.createTable(roomId, options);
 
             int deckIndex = 0;
-            for (AiHarnessConfig.PlayerConfig player : config.getPlayers()) {
+            for (AiPuppeteerConfig.PlayerConfig player : config.getPlayers()) {
                 String name = player.name != null ? player.name : ("Player " + (deckIndex + 1));
                 PlayerType playerType = player.getPlayerType();
 
@@ -1762,9 +1762,9 @@ public class TablesPanel extends javax.swing.JPanel {
                     }
                     try {
                         deckToUse = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
-                        LOGGER.info("AI Harness: loaded deck from " + deckFile.getPath() + " for " + name);
+                        LOGGER.info("AI Puppeteer: loaded deck from " + deckFile.getPath() + " for " + name);
                     } catch (Exception ex) {
-                        LOGGER.warn("AI Harness: failed to load deck " + deckPath + " for " + name + ", using fallback", ex);
+                        LOGGER.warn("AI Puppeteer: failed to load deck " + deckPath + " for " + name + ", using fallback", ex);
                         deckToUse = player.isBot() && deckIndex < aiDecks.size() ? aiDecks.get(deckIndex) : testDeck;
                     }
                 } else if (player.isBot() && deckIndex < aiDecks.size()) {
@@ -1774,23 +1774,23 @@ public class TablesPanel extends javax.swing.JPanel {
                 }
 
                 if (player.isHeadless()) {
-                    // Headless players (sleepwalker, potato, skeleton) join via the headless client
-                    LOGGER.info("AI Harness: slot reserved for headless client: " + name);
+                    // Headless players (sleepwalker, potato, bridge) join via the headless client
+                    LOGGER.info("AI Puppeteer: slot reserved for headless client: " + name);
                 } else {
                     boolean joined = SessionHandler.joinTable(roomId, table.getTableId(), name, playerType, 1, deckToUse, "");
-                    LOGGER.info("AI Harness: joined " + name + " (" + playerType + ") -> " + joined);
+                    LOGGER.info("AI Puppeteer: joined " + name + " (" + playerType + ") -> " + joined);
                 }
                 if (player.isBot()) {
                     deckIndex++;
                 }
             }
 
-            // Only start match if there are no skeleton slots (all bots)
-            if (config.getSkeletonCount() == 0) {
+            // Only start match if there are no bridge slots (all bots)
+            if (config.getBridgeCount() == 0) {
                 SessionHandler.startMatch(roomId, table.getTableId());
             } else {
-                LOGGER.info("AI Harness: waiting for " + config.getSkeletonCount() + " skeleton client(s) to join table " + table.getTableId());
-                // Start a thread to wait for skeletons and then start the match
+                LOGGER.info("AI Puppeteer: waiting for " + config.getBridgeCount() + " bridge client(s) to join table " + table.getTableId());
+                // Start a thread to wait for bridge clients and then start the match
                 final UUID finalTableId = table.getTableId();
                 Thread starter = new Thread(() -> {
                     long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
@@ -1800,7 +1800,7 @@ public class TablesPanel extends javax.swing.JPanel {
                             for (TableView tv : tables) {
                                 if (finalTableId.equals(tv.getTableId())) {
                                     if (tv.getTableState() == TableState.READY_TO_START) {
-                                        LOGGER.info("AI Harness: all players joined, starting match for table " + finalTableId);
+                                        LOGGER.info("AI Puppeteer: all players joined, starting match for table " + finalTableId);
                                         SessionHandler.startMatch(roomId, finalTableId);
                                         return;
                                     }
@@ -1809,42 +1809,42 @@ public class TablesPanel extends javax.swing.JPanel {
                             }
                             Thread.sleep(1000);
                         } catch (Exception e) {
-                            LOGGER.warn("AI Harness: error polling for ready state", e);
+                            LOGGER.warn("AI Puppeteer: error polling for ready state", e);
                         }
                     }
-                    LOGGER.warn("AI Harness: timed out waiting for table to be ready: " + finalTableId);
-                }, "AIHarness-MatchStarter");
+                    LOGGER.warn("AI Puppeteer: timed out waiting for table to be ready: " + finalTableId);
+                }, "AIPuppeteer-MatchStarter");
                 starter.setDaemon(true);
                 starter.start();
             }
-            maybeAutoWatchAiHarnessTable(table.getTableId());
+            maybeAutoWatchAiPuppeteerTable(table.getTableId());
         } catch (HeadlessException ex) {
             handleError(ex);
         }
     }
 
-    private void maybeAutoStartAiHarnessGame() {
-        if (aiHarnessAutoStartTriggered) {
+    private void maybeAutoStartAiPuppeteerGame() {
+        if (aiPuppeteerAutoStartTriggered) {
             return;
         }
-        if (!SessionHandler.isAiHarnessMode()) {
+        if (!SessionHandler.isAiPuppeteerMode()) {
             return;
         }
-        if (!Boolean.parseBoolean(System.getProperty(AI_HARNESS_AUTO_START_PROP, "false"))) {
+        if (!Boolean.parseBoolean(System.getProperty(AI_PUPPETEER_AUTO_START_PROP, "false"))) {
             return;
         }
-        aiHarnessAutoStartTriggered = true;
-        SwingUtilities.invokeLater(this::createAiHarnessGame);
+        aiPuppeteerAutoStartTriggered = true;
+        SwingUtilities.invokeLater(this::createAiPuppeteerGame);
     }
 
-    private void maybeAutoWatchAiHarnessTable(UUID tableId) {
-        if (aiHarnessAutoWatchTriggered) {
+    private void maybeAutoWatchAiPuppeteerTable(UUID tableId) {
+        if (aiPuppeteerAutoWatchTriggered) {
             return;
         }
-        if (!SessionHandler.isAiHarnessMode()) {
+        if (!SessionHandler.isAiPuppeteerMode()) {
             return;
         }
-        aiHarnessAutoWatchTriggered = true;
+        aiPuppeteerAutoWatchTriggered = true;
         Thread watcher = new Thread(() -> {
             long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
             while (System.currentTimeMillis() < deadline) {
@@ -1854,7 +1854,7 @@ public class TablesPanel extends javax.swing.JPanel {
                         continue;
                     }
                     if (TableState.DUELING.equals(tableView.getTableState())) {
-                        LOGGER.info("AI harness auto-watch table " + tableId);
+                        LOGGER.info("AI puppeteer auto-watch table " + tableId);
                         SessionHandler.watchTable(roomId, tableId);
                         return;
                     }
@@ -1866,8 +1866,8 @@ public class TablesPanel extends javax.swing.JPanel {
                     return;
                 }
             }
-            LOGGER.warn("AI harness auto-watch timed out for table " + tableId);
-        }, "AIHarness-AutoWatch");
+            LOGGER.warn("AI puppeteer auto-watch timed out for table " + tableId);
+        }, "AIPuppeteer-AutoWatch");
         watcher.setDaemon(true);
         watcher.start();
     }
@@ -1891,8 +1891,8 @@ public class TablesPanel extends javax.swing.JPanel {
             boolean multiPlayer = numPlayers > 2;
             int aiPlayers = includeHuman ? numPlayers - 1 : numPlayers;
             List<DeckCardLists> aiDecks = null;
-            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
-                aiDecks = pickAiHarnessDecks(aiPlayers, testDeck);
+            if (!includeHuman && SessionHandler.isAiPuppeteerMode()) {
+                aiDecks = pickAiPuppeteerDecks(aiPlayers, testDeck);
             }
 
             MatchOptions options = new MatchOptions(gameName, gameType, multiPlayer);
@@ -1913,7 +1913,7 @@ public class TablesPanel extends javax.swing.JPanel {
             options.setRollbackTurnsAllowed(true);
             options.setQuitRatio(100);
             options.setMinimumRating(0);
-            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
+            if (!includeHuman && SessionHandler.isAiPuppeteerMode()) {
                 options.setSpectatorsAllowed(true);
             }
             String serverAddress = SessionHandler.getSession().getServerHost();
@@ -1935,18 +1935,18 @@ public class TablesPanel extends javax.swing.JPanel {
                 SessionHandler.joinTable(roomId, table.getTableId(), aiName, aiType, 1, deckToUse, "");
             }
             SessionHandler.startMatch(roomId, table.getTableId());
-            if (!includeHuman && SessionHandler.isAiHarnessMode()) {
-                maybeAutoWatchAiHarnessTable(table.getTableId());
+            if (!includeHuman && SessionHandler.isAiPuppeteerMode()) {
+                maybeAutoWatchAiPuppeteerTable(table.getTableId());
             }
         } catch (HeadlessException ex) {
             handleError(ex);
         }
     }
 
-    private List<DeckCardLists> pickAiHarnessDecks(int count, DeckCardLists fallbackDeck) {
-        List<File> deckFiles = findAiHarnessDeckFiles();
+    private List<DeckCardLists> pickAiPuppeteerDecks(int count, DeckCardLists fallbackDeck) {
+        List<File> deckFiles = findAiPuppeteerDeckFiles();
         if (deckFiles.isEmpty()) {
-            LOGGER.warn("AI harness decks not found; using fallback deck.");
+            LOGGER.warn("AI puppeteer decks not found; using fallback deck.");
             return Collections.nCopies(count, fallbackDeck);
         }
         Collections.shuffle(deckFiles, RandomUtil.getRandom());
@@ -1957,21 +1957,21 @@ public class TablesPanel extends javax.swing.JPanel {
             try {
                 deck = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
             } catch (Exception ex) {
-                LOGGER.warn("AI harness failed to load deck " + deckFile.getPath() + ", using fallback.", ex);
+                LOGGER.warn("AI puppeteer failed to load deck " + deckFile.getPath() + ", using fallback.", ex);
             }
             if (deck == null) {
                 deck = fallbackDeck;
             }
             decks.add(deck);
         }
-        LOGGER.info("AI harness using " + decks.size() + " commander decks from " + deckFiles.get(0).getParent());
+        LOGGER.info("AI puppeteer using " + decks.size() + " commander decks from " + deckFiles.get(0).getParent());
         return decks;
     }
 
-    private List<File> findAiHarnessDeckFiles() {
-        File root = new File(AI_HARNESS_DECKS_DIR);
+    private List<File> findAiPuppeteerDeckFiles() {
+        File root = new File(AI_PUPPETEER_DECKS_DIR);
         if (!root.exists()) {
-            root = new File("Mage.Client/" + AI_HARNESS_DECKS_DIR);
+            root = new File("Mage.Client/" + AI_PUPPETEER_DECKS_DIR);
         }
         if (!root.exists()) {
             return Collections.emptyList();
@@ -2039,8 +2039,8 @@ public class TablesPanel extends javax.swing.JPanel {
     }//GEN-LAST:event_btnQuickStartDuelActionPerformed
 
     private void btnQuickStart4PlayerActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuickStartCommanderActionPerformed
-        if (SessionHandler.isAiHarnessMode()) {
-            createAiHarnessGame();
+        if (SessionHandler.isAiPuppeteerMode()) {
+            createAiPuppeteerGame();
         } else {
             createTestGame("Test 4 player", "Commander Free For All", false);
         }

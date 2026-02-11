@@ -22,13 +22,13 @@ import java.nio.charset.Charset;
  * Or via Maven:
  *   mvn exec:java -pl Mage.Client.Streaming
  *
- * For AI harness integration, use the standard AI harness env vars:
- *   XMAGE_AI_HARNESS=1              - Enable AI harness mode
- *   XMAGE_AI_HARNESS_SERVER         - Server address
- *   XMAGE_AI_HARNESS_PORT           - Server port
- *   XMAGE_AI_HARNESS_USER           - Username
+ * For AI puppeteer integration, use the standard AI puppeteer env vars:
+ *   XMAGE_AI_PUPPETEER=1              - Enable AI puppeteer mode
+ *   XMAGE_AI_PUPPETEER_SERVER         - Server address
+ *   XMAGE_AI_PUPPETEER_PORT           - Server port
+ *   XMAGE_AI_PUPPETEER_USER           - Username
  *
- * The lobby UI is automatically hidden in streaming mode. In AI harness mode,
+ * The lobby UI is automatically hidden in streaming mode. In AI puppeteer mode,
  * game creation and auto-watch are handled by the standard TablesPanel logic.
  */
 public class StreamingMain {

@@ -29,7 +29,7 @@ The first time you upload, a browser window will open for Google OAuth consent. 
 
 ### After a game
 
-When a game finishes with a recording, the harness prompts:
+When a game finishes with a recording, the puppeteer prompts:
 
 ```
 Upload recording to YouTube? [y/N]:

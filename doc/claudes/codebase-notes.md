@@ -4,20 +4,19 @@ Written by Claude Opus 4.6, 2025-02-09, after exploring the code and reading gam
 
 ## What This Is
 
-An AI harness for Magic: The Gathering, built on top of XMage (an open-source MTG engine). LLMs pilot real Magic decks against each other and against XMage's built-in CPU ("Mad AI"). Games are played in Commander (4-player) and Legacy (2-player) formats. There's a streaming observer that records video.
+An AI benchmark for Magic: The Gathering, built on top of XMage (an open-source MTG engine). LLMs pilot real Magic decks against each other and against XMage's built-in CPU ("Mad AI"). Games are played in Commander (4-player) and Legacy (2-player) formats. There's a streaming spectator that records video.
 
 ## Architecture (the short version)
 
-**Java MCP layer** (`Mage.Client.Headless`): A headless XMage client that exposes game actions as MCP tools. The key file is `SkeletonCallbackHandler.java` (~2400 lines). It handles:
+**Java bridge** (`Mage.Client.Headless`): A headless XMage client that exposes game actions as MCP tools. The key file is `BridgeCallbackHandler.java` (~2400 lines). It handles:
 - Auto-tapping lands for mana (so the LLM doesn't have to micromanage tapping)
 - Filtering unplayable actions
 - Auto-passing when there's nothing to do
 - Translating XMage's callback system into clean MCP tool calls
 
-**Python harness** (`puppeteer/`): Connects LLMs to the MCP server via OpenAI-compatible API (through OpenRouter). Key files:
+**Puppeteer** (`puppeteer/`): Connects LLMs to the MCP server via OpenAI-compatible API (through OpenRouter). Key files:
 - `pilot.py` — the LLM game loop. System prompt tells the LLM to follow: pass_priority → get_action_choices → choose_action → repeat
-- `harness.py` — orchestrates the full game lifecycle (server, clients, observer, recording)
-- `chatterbox.py` — separate LLM loop just for chat/trash-talk (not all configs use this)
+- `orchestrator.py` — orchestrates the full game lifecycle (server, clients, spectator, recording)
 
 ## MCP Tools Available to LLMs
 

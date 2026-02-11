@@ -21,7 +21,7 @@ import mage.view.CardsView;
 /**
  * Panel for displaying graveyard cards in a stacked vertical layout.
  * Cards are stacked on top of each other with only the top portion visible.
- * Used in streaming/observer mode to show each player's graveyard.
+ * Used in streaming/spectator mode to show each player's graveyard.
  */
 public class GraveyardPanel extends JPanel {
 

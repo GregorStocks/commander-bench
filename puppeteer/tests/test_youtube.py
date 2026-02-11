@@ -1,4 +1,4 @@
-"""Tests for YouTube upload and related harness functions."""
+"""Tests for YouTube upload and related orchestrator functions."""
 
 import json
 import sys
@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "scripts"
 
 from upload_youtube import _build_description, _build_title
 
-from puppeteer.harness import _save_youtube_url, _update_website_youtube_url
+from puppeteer.orchestrator import _save_youtube_url, _update_website_youtube_url
 
 
 def _make_meta(players=None):
@@ -133,7 +133,7 @@ def test_update_website_youtube_url_no_files():
 
 def test_maybe_export_defaults_to_no(capsys):
     """Empty input should NOT trigger export (default is now N)."""
-    from puppeteer.harness import _maybe_export_for_website
+    from puppeteer.orchestrator import _maybe_export_for_website
 
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
@@ -147,7 +147,7 @@ def test_maybe_export_defaults_to_no(capsys):
 
 def test_maybe_upload_skips_without_recording():
     """Should not prompt if no recording.mov exists."""
-    from puppeteer.harness import _maybe_upload_to_youtube
+    from puppeteer.orchestrator import _maybe_upload_to_youtube
 
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)

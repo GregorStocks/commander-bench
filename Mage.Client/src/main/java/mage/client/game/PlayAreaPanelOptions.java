@@ -58,17 +58,17 @@ public class PlayAreaPanelOptions {
     public boolean topRow;
 
     /**
-     * true to show the player's hand in their play area (for streaming/observer mode)
+     * true to show the player's hand in their play area (for streaming/spectator mode)
      */
     public boolean showHandInPlayArea;
 
     /**
-     * true to show the player's graveyard in their play area (for streaming/observer mode)
+     * true to show the player's graveyard in their play area (for streaming/spectator mode)
      */
     public boolean showGraveyardInPlayArea;
 
     /**
-     * true to show the player's exile in their play area (for streaming/observer mode)
+     * true to show the player's exile in their play area (for streaming/spectator mode)
      */
     public boolean showExileInPlayArea;
 

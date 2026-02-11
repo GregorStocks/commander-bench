@@ -246,12 +246,12 @@ public final class SessionHandler {
     }
 
     /**
-     * Check if client is running in AI harness mode.
+     * Check if client is running in AI puppeteer mode.
      * This is determined by client-side system property, not server state.
      */
-    public static boolean isAiHarnessMode() {
-        return Boolean.parseBoolean(System.getProperty("xmage.aiHarness.autoConnect", "false"))
-            || Boolean.parseBoolean(System.getProperty("xmage.aiHarness.autoStart", "false"));
+    public static boolean isAiPuppeteerMode() {
+        return Boolean.parseBoolean(System.getProperty("xmage.aiPuppeteer.autoConnect", "false"))
+            || Boolean.parseBoolean(System.getProperty("xmage.aiPuppeteer.autoStart", "false"));
     }
 
     public static void cheatShow(UUID gameId, UUID playerId) {
