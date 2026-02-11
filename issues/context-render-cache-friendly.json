@@ -1,0 +1,10 @@
+{
+  "title": "Improve prompt cache hit rate by rendering less frequently",
+  "description": "The render-from-history approach (PR #163) rebuilds the LLM messages list every iteration, including a fresh state_summary at position 1. This breaks prompt caching for everything after the system prompt, since providers like Anthropic (via OpenRouter) cache prefix tokens at 50% discount.\n\nThe old approach had better cache behavior between trims: the prefix stayed stable and only new messages were appended. The token reduction from smaller context (23K → ~6K) still wins overall, but we're leaving money on the table.\n\nPossible fixes:\n- Only re-render every Nth iteration (e.g. every 5th), appending new history entries directly between renders\n- Move state_summary to the end of the context instead of position 1, so system + summarised prefix stays stable\n- Track whether the summarised window actually changed before re-rendering\n\nThe goal is to keep the prefix stable across consecutive LLM calls so cached tokens get reused.",
+  "status": "open",
+  "priority": 4,
+  "type": "task",
+  "labels": ["puppeteer", "pilot"],
+  "created_at": "2026-02-10T22:00:00.000000-08:00",
+  "updated_at": "2026-02-10T22:00:00.000000-08:00"
+}

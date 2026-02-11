@@ -28,6 +28,14 @@ MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
 
+# Context window management.
+# History is append-only; before each LLM call we render a bounded context
+# window from history: recent messages at full fidelity, older messages
+# with tool results summarised to save tokens.
+CONTEXT_RECENT_COUNT = 40  # recent history entries kept at full fidelity
+CONTEXT_SUMMARY_COUNT = 20  # older entries included as compact summaries
+TOOL_RESULT_MAX_CHARS = 200  # max chars for a summarised tool result
+
 
 def _log(msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S")
@@ -44,6 +52,154 @@ def _log_error(game_dir: Path | None, username: str, msg: str) -> None:
                 f.write(f"[{ts}] {msg}\n")
         except OSError:
             pass
+
+
+def _summarize_tool_result(tool_name: str, content: str) -> str:
+    """Compress a tool result to a short summary for older context entries.
+
+    Parses the JSON result and extracts key fields per tool type.
+    Falls back to truncation for unknown tools or invalid JSON.
+    """
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return content[:TOOL_RESULT_MAX_CHARS]
+
+    if tool_name == "pass_priority":
+        if data.get("player_dead"):
+            return "player_dead"
+        if data.get("action_pending"):
+            return f"action_pending({data.get('action_type', '?')})"
+        if data.get("timeout"):
+            return "timeout"
+        return f"passed {data.get('actions_passed', '?')}"
+
+    if tool_name == "choose_action":
+        if data.get("success"):
+            return f"OK: {data.get('action_taken', '?')}"
+        return f"FAIL: {data.get('error', '?')[:100]}"
+
+    if tool_name == "get_action_choices":
+        parts = [data.get("action_type", "?")]
+        resp_type = data.get("response_type", "")
+        if resp_type:
+            parts.append(resp_type)
+        choices = data.get("choices", [])
+        if choices:
+            names = [c.get("description", "?")[:30] for c in choices[:3]]
+            parts.append(f"{len(choices)} choices: {', '.join(names)}")
+        msg = data.get("message", "")
+        if msg and not choices:
+            parts.append(msg[:60])
+        return "; ".join(parts)
+
+    if tool_name == "get_game_state":
+        parts = []
+        if "turn" in data:
+            parts.append(f"T{data['turn']}")
+        if "phase" in data:
+            parts.append(data["phase"])
+        for p in data.get("players", []):
+            name = p.get("name", "?")
+            life = p.get("life", "?")
+            bf = len(p.get("battlefield", []))
+            parts.append(f"{name}:{life}hp/{bf}perm")
+        return "; ".join(parts) if parts else content[:TOOL_RESULT_MAX_CHARS]
+
+    # get_oracle_text, send_chat_message, take_action, unknown
+    return content[:TOOL_RESULT_MAX_CHARS]
+
+
+def _find_tool_name(history: list[dict], tool_result_idx: int, tool_call_id: str) -> str:
+    """Find the tool name for a tool result by searching backward for its assistant message."""
+    for j in range(tool_result_idx - 1, -1, -1):
+        msg = history[j]
+        if msg.get("role") == "assistant":
+            for tc in msg.get("tool_calls", []):
+                if tc.get("id") == tool_call_id:
+                    return tc.get("function", {}).get("name", "")
+            break
+    return ""
+
+
+def _render_context(
+    history: list[dict],
+    system_prompt: str,
+    state_summary: str,
+) -> list[dict]:
+    """Build the LLM messages list from append-only history.
+
+    Recent messages (last CONTEXT_RECENT_COUNT) are included at full fidelity.
+    Older messages (up to CONTEXT_SUMMARY_COUNT before the recent window) have
+    their tool results summarised to save tokens. Everything older is dropped.
+    """
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+
+    if len(history) <= CONTEXT_RECENT_COUNT:
+        # Short history — include everything at full fidelity
+        messages.extend(history)
+        return messages
+
+    # Long history — add state bridge, then summarised + full slices
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"{state_summary}"
+                "Continue playing. Use pass_priority to skip ahead, "
+                "then get_action_choices before choose_action. "
+                "All cards listed are playable right now. "
+                "Play cards with index=N, pass with answer=false."
+            ),
+        }
+    )
+
+    # Find a clean boundary for the recent slice — don't split assistant/tool pairs.
+    # Walk the recent boundary backward so it doesn't start on a tool message.
+    recent_start = len(history) - CONTEXT_RECENT_COUNT
+    while recent_start > 0 and history[recent_start].get("role") == "tool":
+        recent_start -= 1
+
+    # Summarised older slice
+    summary_start = max(0, recent_start - CONTEXT_SUMMARY_COUNT)
+    # Same clean-boundary logic for the summary start
+    while summary_start > 0 and history[summary_start].get("role") == "tool":
+        summary_start -= 1
+
+    for i in range(summary_start, recent_start):
+        msg = history[i]
+        if msg.get("role") == "tool" and len(msg.get("content", "")) > TOOL_RESULT_MAX_CHARS:
+            tool_name = _find_tool_name(history, i, msg.get("tool_call_id", ""))
+            messages.append({**msg, "content": _summarize_tool_result(tool_name, msg["content"])})
+        else:
+            messages.append(msg)
+
+    # Recent slice — full fidelity
+    messages.extend(history[recent_start:])
+    return messages
+
+
+async def _fetch_state_summary(session: ClientSession) -> str:
+    """Fetch a compact game state summary for context bridging."""
+    try:
+        state_result = await execute_tool(session, "get_game_state", {})
+        state_data = json.loads(state_result)
+        if state_data.get("error"):
+            return ""
+        parts: list[str] = []
+        if "turn" in state_data:
+            parts.append(f"Turn {state_data['turn']}")
+        if "phase" in state_data:
+            parts.append(state_data["phase"])
+        for p in state_data.get("players", []):
+            name = p.get("name", "?")
+            life = p.get("life", "?")
+            bf = len(p.get("battlefield", []))
+            hand = p.get("hand_count", p.get("hand_size", "?"))
+            parts.append(f"{name}: {life}hp, {bf} permanents, {hand} cards")
+        return "Current game state: " + "; ".join(parts) + ". "
+    except Exception:
+        return ""
 
 
 # Tools the pilot is allowed to use.
@@ -164,10 +320,10 @@ async def run_pilot_loop(
     reasoning_effort: str = "",
 ) -> None:
     """Run the LLM-driven game-playing loop."""
-    messages = [
-        {"role": "system", "content": system_prompt},
+    history: list[dict] = [
         {"role": "user", "content": "The game is starting. Call pass_priority to begin."},
     ]
+    state_summary = ""
     model_price = get_model_price(model, prices or {})
     cumulative_cost = 0.0
     empty_responses = 0  # consecutive LLM responses with no reasoning text
@@ -178,6 +334,18 @@ async def run_pilot_loop(
 
     while True:
         try:
+            # Render context from history; fetch fresh state summary when needed
+            if len(history) > CONTEXT_RECENT_COUNT:
+                state_summary = await _fetch_state_summary(session)
+            messages = _render_context(history, system_prompt, state_summary)
+
+            if game_log and len(history) > CONTEXT_RECENT_COUNT:
+                game_log.emit(
+                    "context_trim",
+                    history_size=len(history),
+                    rendered_size=len(messages),
+                )
+
             create_kwargs: dict = dict(
                 model=model,
                 messages=messages,
@@ -261,7 +429,7 @@ async def run_pilot_loop(
                         }
                         for tc in choice.message.tool_calls
                     ]
-                messages.append(assistant_msg)
+                history.append(assistant_msg)
 
                 for tool_call in choice.message.tool_calls:
                     fn = tool_call.function
@@ -325,7 +493,7 @@ async def run_pilot_loop(
                         except (json.JSONDecodeError, TypeError):
                             pass
 
-                    messages.append(
+                    history.append(
                         {
                             "role": "tool",
                             "tool_call_id": tool_call.id,
@@ -344,7 +512,7 @@ async def run_pilot_loop(
                 content = (choice.message.content or "").strip()
                 if content:
                     _log(f"[pilot] Thinking: {content[:500]}")
-                    messages.append({"role": "assistant", "content": content})
+                    history.append({"role": "assistant", "content": content})
                     empty_responses = 0
                     last_was_empty = False
                 elif not last_was_empty:
@@ -378,7 +546,7 @@ async def run_pilot_loop(
                             pass
                         await auto_pass_loop(session, game_dir, username, "pilot")
                         return
-                messages.append(
+                history.append(
                     {
                         "role": "user",
                         "content": "Continue playing. Call pass_priority.",
@@ -418,62 +586,14 @@ async def run_pilot_loop(
                     _log(f"[pilot] Auto-pass failed: {e}")
                 turns_without_progress = 0
                 # Reset conversation so the LLM gets a fresh start
-                messages = [
-                    {"role": "system", "content": system_prompt},
+                history = [
                     {
                         "role": "user",
                         "content": "A new turn has started. Call pass_priority to continue.",
                     },
                 ]
-                continue
-
-            # Trim message history to avoid unbounded growth.
-            # The game loop is tool-call-heavy (3+ messages per action), so we need
-            # a generous limit to avoid constant trimming that degrades LLM reasoning.
-            if len(messages) > 200:
-                # Fetch current game state to preserve context across trim
                 state_summary = ""
-                try:
-                    state_result = await execute_tool(session, "get_game_state", {})
-                    state_data = json.loads(state_result)
-                    if not state_data.get("error"):
-                        parts = []
-                        if "turn" in state_data:
-                            parts.append(f"Turn {state_data['turn']}")
-                        if "phase" in state_data:
-                            parts.append(state_data["phase"])
-                        for p in state_data.get("players", []):
-                            name = p.get("name", "?")
-                            life = p.get("life", "?")
-                            bf = len(p.get("battlefield", []))
-                            hand = p.get("hand_count", p.get("hand_size", "?"))
-                            parts.append(f"{name}: {life}hp, {bf} permanents, {hand} cards")
-                        state_summary = "Current game state: " + "; ".join(parts) + ". "
-                except Exception:
-                    pass
-
-                trim_target = 160
-                _log_error(
-                    game_dir,
-                    username,
-                    f"[pilot] Trimming context: {len(messages)} -> ~{trim_target + 2} messages",
-                )
-                if game_log:
-                    game_log.emit("context_trim", messages_before=len(messages), messages_after=trim_target + 2)
-                messages = [
-                    messages[0],
-                    {
-                        "role": "user",
-                        "content": (
-                            f"{state_summary}"
-                            "Continue playing. Use pass_priority to skip ahead, "
-                            "then get_action_choices before choose_action. "
-                            "All cards listed are playable right now. "
-                            "Play cards with index=N, pass with answer=false."
-                        ),
-                    },
-                    *messages[-trim_target:],
-                ]
+                continue
 
         except asyncio.TimeoutError:
             consecutive_timeouts += 1
@@ -497,10 +617,8 @@ async def run_pilot_loop(
                 _log("[pilot] Repeated LLM timeouts, resetting conversation context")
                 if game_log:
                     game_log.emit("context_reset", reason="repeated_timeouts")
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Continue playing. Call pass_priority."},
-                ]
+                history = [{"role": "user", "content": "Continue playing. Call pass_priority."}]
+                state_summary = ""
                 consecutive_timeouts = 0
 
         except Exception as e:
@@ -534,10 +652,8 @@ async def run_pilot_loop(
                 await asyncio.sleep(5)
 
             # Reset conversation on error
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": "Continue playing. Call pass_priority."},
-            ]
+            history = [{"role": "user", "content": "Continue playing. Call pass_priority."}]
+            state_summary = ""
 
 
 async def run_pilot(
