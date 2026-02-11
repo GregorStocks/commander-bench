@@ -24,40 +24,163 @@ import Base from '../../layouts/Base.astro';
   .loading {
     color: #a0a0b8;
   }
+</style>
+
+<style is:global>
+  .no-games {
+    color: #a0a0b8;
+    font-style: italic;
+  }
 
   .game-card {
     display: block;
-    padding: 1rem 1.25rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     background: #16213e;
     border: 1px solid #0f3460;
     border-radius: 8px;
     text-decoration: none;
     color: #e0e0e0;
     transition: border-color 0.2s;
+    overflow: hidden;
   }
 
   .game-card:hover {
     border-color: #e94560;
   }
 
-  .game-title {
-    font-weight: 600;
-    margin-bottom: 0.35rem;
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    background: rgba(15, 52, 96, 0.3);
+    border-bottom: 1px solid rgba(15, 52, 96, 0.5);
+    font-size: 0.85rem;
   }
 
-  .game-meta {
-    font-size: 0.85rem;
+  .game-date {
+    color: #a0a0b8;
+  }
+
+  .game-turns {
     color: #a0a0b8;
   }
 
   .game-winner {
+    font-weight: 600;
+  }
+
+  .winner-none {
+    color: #a0a0b8;
+    font-style: italic;
+  }
+
+  .winner-found {
     color: #a8d9a5;
   }
 
-  .no-games {
+  .game-players {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .player-cell {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+    border-right: 1px solid rgba(15, 52, 96, 0.3);
+  }
+
+  .player-cell:nth-child(2n) {
+    border-right: none;
+  }
+
+  .player-cell:nth-child(n+3) {
+    border-bottom: none;
+  }
+
+  .player-cell.is-winner {
+    box-shadow: inset 3px 0 0 #a8d9a5;
+  }
+
+  .player-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .player-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .badge-pilot {
+    background: rgba(233, 69, 96, 0.2);
+    color: #e94560;
+  }
+
+  .badge-cpu {
+    background: rgba(160, 160, 184, 0.15);
     color: #a0a0b8;
-    font-style: italic;
+  }
+
+  .player-commander {
+    font-size: 0.8rem;
+    color: #a0a0b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .player-model {
+    font-size: 0.75rem;
+    color: #e94560;
+    opacity: 0.8;
+  }
+
+  .player-cost {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .game-footer {
+    padding: 0.4rem 1rem;
+    font-size: 0.8rem;
+    color: #a0a0b8;
+    text-align: right;
+    border-top: 1px solid rgba(15, 52, 96, 0.5);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 500px) {
+    .game-players {
+      grid-template-columns: 1fr;
+    }
+
+    .player-cell:nth-child(2n) {
+      border-right: none;
+    }
+
+    .player-cell {
+      border-bottom: 1px solid rgba(15, 52, 96, 0.3);
+    }
+
+    .player-cell:last-child {
+      border-bottom: none;
+    }
+
+    .game-header {
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
   }
 </style>
 
@@ -68,7 +191,7 @@ import Base from '../../layouts/Base.astro';
       return r.json();
     })
     .then(function (games) {
-      const list = document.getElementById("games-list");
+      var list = document.getElementById("games-list");
       list.innerHTML = "";
 
       if (!games || games.length === 0) {
@@ -77,43 +200,127 @@ import Base from '../../layouts/Base.astro';
       }
 
       games.forEach(function (game) {
-        const a = document.createElement("a");
+        var a = document.createElement("a");
         a.href = "/games/" + game.id;
         a.className = "game-card";
 
-        const commanders = (game.players || [])
-          .map(function (p) {
-            var label = p.commander || p.name;
-            if (p.model) {
-              var model = p.model;
-              var slash = model.indexOf("/");
-              if (slash !== -1) model = model.substring(slash + 1);
-              label += " (" + model + ")";
-            }
-            return label;
-          })
-          .join(" vs ");
-
-        const title = document.createElement("div");
-        title.className = "game-title";
-        title.textContent = commanders;
-        a.appendChild(title);
-
-        const meta = document.createElement("div");
-        meta.className = "game-meta";
-        const parts = [];
-        parts.push(game.totalTurns + " turns");
-        if (game.winner) {
-          parts.push("Winner: " + game.winner);
+        // Parse timestamp: "20260210_090609" -> human-readable date
+        var ts = game.timestamp || "";
+        var dateStr = "";
+        if (ts.length >= 15) {
+          var year = ts.substring(0, 4);
+          var month = ts.substring(4, 6);
+          var day = ts.substring(6, 8);
+          var hour = ts.substring(9, 11);
+          var min = ts.substring(11, 13);
+          var d = new Date(year + "-" + month + "-" + day + "T" + hour + ":" + min);
+          if (!isNaN(d.getTime())) {
+            dateStr = d.toLocaleDateString("en-US", {
+              year: "numeric", month: "short", day: "numeric"
+            }) + " " + d.toLocaleTimeString("en-US", {
+              hour: "numeric", minute: "2-digit"
+            });
+          }
         }
-        meta.textContent = parts.join(" | ");
-        a.appendChild(meta);
+
+        // Header
+        var header = document.createElement("div");
+        header.className = "game-header";
+
+        var dateEl = document.createElement("span");
+        dateEl.className = "game-date";
+        dateEl.textContent = dateStr || game.id;
+        header.appendChild(dateEl);
+
+        var turnsEl = document.createElement("span");
+        turnsEl.className = "game-turns";
+        turnsEl.textContent = game.totalTurns + " turns";
+        header.appendChild(turnsEl);
+
+        var winnerEl = document.createElement("span");
+        if (game.winner) {
+          winnerEl.className = "game-winner winner-found";
+          winnerEl.textContent = "\u2605 " + game.winner;
+        } else {
+          winnerEl.className = "game-winner winner-none";
+          winnerEl.textContent = "No winner";
+        }
+        header.appendChild(winnerEl);
+
+        a.appendChild(header);
+
+        // Player grid
+        var grid = document.createElement("div");
+        grid.className = "game-players";
+
+        var totalCost = 0;
+        var hasCost = false;
+
+        (game.players || []).forEach(function (p) {
+          var cell = document.createElement("div");
+          cell.className = "player-cell";
+          if (game.winner && p.name === game.winner) {
+            cell.classList.add("is-winner");
+          }
+
+          // Name + badge
+          var nameRow = document.createElement("div");
+          nameRow.className = "player-name";
+
+          var badge = document.createElement("span");
+          badge.className = "player-badge " + (p.type === "pilot" ? "badge-pilot" : "badge-cpu");
+          badge.textContent = p.type === "pilot" ? "AI" : "CPU";
+          nameRow.appendChild(badge);
+
+          var nameText = document.createTextNode(p.name);
+          nameRow.appendChild(nameText);
+          cell.appendChild(nameRow);
+
+          // Commander
+          var cmdEl = document.createElement("div");
+          cmdEl.className = "player-commander";
+          cmdEl.textContent = p.commander || "";
+          cell.appendChild(cmdEl);
+
+          // Model (only for pilots)
+          if (p.model) {
+            var modelEl = document.createElement("div");
+            modelEl.className = "player-model";
+            var modelName = p.model;
+            var slash = modelName.indexOf("/");
+            if (slash !== -1) modelName = modelName.substring(slash + 1);
+            modelEl.textContent = modelName;
+            cell.appendChild(modelEl);
+          }
+
+          // Cost (only if present)
+          if (p.totalCostUsd != null) {
+            var costEl = document.createElement("div");
+            costEl.className = "player-cost";
+            costEl.textContent = "$" + p.totalCostUsd.toFixed(2);
+            cell.appendChild(costEl);
+            totalCost += p.totalCostUsd;
+            hasCost = true;
+          }
+
+          grid.appendChild(cell);
+        });
+
+        a.appendChild(grid);
+
+        // Footer with total cost (only if there's cost data)
+        if (hasCost) {
+          var footer = document.createElement("div");
+          footer.className = "game-footer";
+          footer.textContent = "Total cost: $" + totalCost.toFixed(2);
+          a.appendChild(footer);
+        }
 
         list.appendChild(a);
       });
     })
     .catch(function () {
-      const list = document.getElementById("games-list");
+      var list = document.getElementById("games-list");
       list.innerHTML = '<p class="no-games">No games exported yet.</p>';
     });
 </script>
