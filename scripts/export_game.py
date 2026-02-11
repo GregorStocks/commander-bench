@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Export a game log directory into a single JSON file for the website visualizer."""
 
+import gzip
 import json
 import re
 import sys
@@ -292,8 +293,13 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         output["youtubeUrl"] = meta["youtube_url"]
 
     website_games_dir.mkdir(parents=True, exist_ok=True)
-    output_path = website_games_dir / f"{game_id}.json"
-    output_path.write_text(json.dumps(output, indent=2))
+    output_path = website_games_dir / f"{game_id}.json.gz"
+    output_path.write_bytes(gzip.compress(json.dumps(output).encode()))
+
+    # Clean up old uncompressed file if it exists
+    old_json = website_games_dir / f"{game_id}.json"
+    if old_json.exists():
+        old_json.unlink()
 
     return output_path
 
