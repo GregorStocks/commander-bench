@@ -161,6 +161,7 @@ async def run_pilot_loop(
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
     game_log: GameLogWriter | None = None,
+    reasoning_effort: str = "",
 ) -> None:
     """Run the LLM-driven game-playing loop."""
     messages = [
@@ -177,14 +178,19 @@ async def run_pilot_loop(
 
     while True:
         try:
+            create_kwargs: dict = dict(
+                model=model,
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                max_tokens=MAX_TOKENS,
+            )
+            if reasoning_effort:
+                create_kwargs["extra_body"] = {
+                    "reasoning": {"effort": reasoning_effort},
+                }
             response = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    max_tokens=MAX_TOKENS,
-                ),
+                client.chat.completions.create(**create_kwargs),
                 timeout=LLM_REQUEST_TIMEOUT_SECS,
             )
             consecutive_timeouts = 0
@@ -203,6 +209,13 @@ async def run_pilot_loop(
             # Log LLM response to JSONL
             if game_log:
                 llm_event = {"reasoning": choice.message.content or ""}
+                # Capture extended thinking / chain-of-thought if present.
+                # OpenRouter returns this as `reasoning_content` for models
+                # that support it (Claude, Gemini 2.5 thinking mode, etc.).
+                # The openai SDK preserves it as an extra field.
+                thinking = getattr(choice.message, "reasoning_content", None)
+                if thinking:
+                    llm_event["thinking"] = thinking
                 if choice.message.tool_calls:
                     llm_event["tool_calls"] = [
                         {"name": tc.function.name, "arguments": tc.function.arguments}
@@ -266,7 +279,7 @@ async def run_pilot_loop(
                             call_id=tool_call.id,
                             tool=fn.name,
                             arguments=args,
-                            result=result_text[:2000],
+                            result=result_text[:20000],
                             latency_ms=tool_latency_ms,
                         )
 
@@ -540,11 +553,14 @@ async def run_pilot(
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
     max_interactions_per_turn: int | None = None,
+    reasoning_effort: str = "",
 ) -> None:
     """Run the pilot client."""
     _log(f"[pilot] Starting for {username}@{server}:{port}")
     _log(f"[pilot] Model: {model}")
     _log(f"[pilot] Base URL: {base_url}")
+    if reasoning_effort:
+        _log(f"[pilot] Reasoning effort: {reasoning_effort}")
 
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
@@ -625,6 +641,7 @@ async def run_pilot(
                 game_dir=game_dir,
                 prices=prices,
                 game_log=game_log,
+                reasoning_effort=reasoning_effort,
             )
     finally:
         if game_log:
@@ -646,6 +663,7 @@ def main() -> int:
     parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="Custom system prompt")
     parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
     parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
+    parser.add_argument("--reasoning-effort", default="", help="OpenRouter reasoning effort: low, medium, high")
     args = parser.parse_args()
 
     # Determine project root
@@ -684,6 +702,7 @@ def main() -> int:
                 game_dir=args.game_dir,
                 prices=prices,
                 max_interactions_per_turn=args.max_interactions_per_turn,
+                reasoning_effort=args.reasoning_effort,
             )
         )
     except KeyboardInterrupt:

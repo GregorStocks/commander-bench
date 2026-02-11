@@ -658,6 +658,8 @@ def start_pilot_client(
         args.extend(["--system-prompt", player.system_prompt])
     if player.max_interactions_per_turn is not None:
         args.extend(["--max-interactions-per-turn", str(player.max_interactions_per_turn)])
+    if player.reasoning_effort:
+        args.extend(["--reasoning-effort", player.reasoning_effort])
     if game_dir:
         args.extend(["--game-dir", str(game_dir)])
 

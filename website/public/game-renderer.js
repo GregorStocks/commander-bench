@@ -318,13 +318,14 @@
   var PLAYER_COLORS = ["player-0", "player-1", "player-2", "player-3"];
 
   function renderPlayers(container, players, opts) {
-    // opts: { cardImages, playerColorMap, diffs, previewEls, showTimer, showThumbnails, priorityPlayerName }
+    // opts: { cardImages, playerColorMap, diffs, previewEls, showTimer, showThumbnails, playerMeta, priorityPlayerName }
     opts = opts || {};
     var cardImages = opts.cardImages || {};
     var playerColorMap = opts.playerColorMap || {};
     var diffs = opts.diffs || null;
     var previewEls = opts.previewEls;
     var showTimer = opts.showTimer || false;
+    var playerMeta = opts.playerMeta || {};
     var priorityPlayerName = opts.priorityPlayerName || "";
 
     container.innerHTML = "";
@@ -332,6 +333,7 @@
 
     players.forEach(function (player) {
       var playerDiff = diffs ? diffs[player.name] : null;
+      var meta = playerMeta[player.name] || {};
 
       var card = document.createElement("article");
       card.className = "player-card";
@@ -350,6 +352,29 @@
       if (player.name === priorityPlayerName) nameEl.classList.add("has-priority");
       nameEl.textContent = player.name || "?";
       header.appendChild(nameEl);
+
+      // Model + cost badges
+      if (meta.model || meta.totalCostUsd != null) {
+        var badgeRow = document.createElement("div");
+        badgeRow.className = "player-badges";
+        if (meta.model) {
+          var modelBadge = document.createElement("span");
+          modelBadge.className = "player-model";
+          // Strip provider prefix (e.g. "google/gemini-2.5-flash" -> "gemini-2.5-flash")
+          var modelName = meta.model;
+          var slashIdx = modelName.indexOf("/");
+          if (slashIdx !== -1) modelName = modelName.substring(slashIdx + 1);
+          modelBadge.textContent = modelName;
+          badgeRow.appendChild(modelBadge);
+        }
+        if (meta.totalCostUsd != null) {
+          var costBadge = document.createElement("span");
+          costBadge.className = "player-cost";
+          costBadge.textContent = "$" + meta.totalCostUsd.toFixed(2);
+          badgeRow.appendChild(costBadge);
+        }
+        header.appendChild(badgeRow);
+      }
 
       var lifeEl = document.createElement("div");
       lifeEl.className = "player-life";

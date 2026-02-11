@@ -60,6 +60,7 @@ class PilotPlayer:
     base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
     system_prompt: str | None = None  # Custom system prompt
     max_interactions_per_turn: int | None = None  # Loop detection threshold (default 25 in Java)
+    reasoning_effort: str | None = None  # OpenRouter reasoning effort: "low", "medium", "high"
 
 
 @dataclass
@@ -179,6 +180,7 @@ class Config:
                             model=player.get("model"),
                             base_url=player.get("base_url"),
                             system_prompt=player.get("system_prompt"),
+                            reasoning_effort=player.get("reasoning_effort"),
                         )
                     )
                 elif player_type == "potato":

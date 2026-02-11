@@ -86,6 +86,25 @@
   color: #a0a0b8;
 }
 
+.player-badges {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.player-model {
+  font-size: 0.65rem;
+  color: #888;
+  font-family: monospace;
+}
+
+.player-cost {
+  font-size: 0.65rem;
+  color: #a8d9a5;
+  font-family: monospace;
+}
+
 .player-counters {
   font-size: 0.75rem;
   color: #a0a0b8;
@@ -481,6 +500,132 @@
   max-width: 80vw;
   background: rgba(22, 33, 62, 0.92);
 }
+
+/* LLM event display in action log */
+.llm-event {
+  margin: 2px 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.llm-thought {
+  border-left: 2px solid #888;
+  padding: 4px 0 4px 8px;
+  margin: 4px 0;
+}
+
+.llm-thought .llm-player {
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+.llm-thought .llm-reasoning {
+  color: #d0d0e0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-top: 2px;
+}
+
+.llm-thought .llm-tool-calls {
+  color: #888;
+  font-size: 0.72rem;
+  font-family: monospace;
+  margin-top: 2px;
+}
+
+.llm-thinking-block {
+  margin: 4px 0;
+  font-size: 0.72rem;
+}
+
+.llm-thinking-block summary {
+  color: #c084fc;
+  cursor: pointer;
+  font-style: italic;
+}
+
+.llm-thinking-text {
+  color: #a78bfa;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  margin-top: 2px;
+  padding: 4px;
+  background: rgba(139, 92, 246, 0.08);
+  border-radius: 4px;
+}
+
+.llm-compact {
+  color: #888;
+  font-family: monospace;
+  font-size: 0.72rem;
+  padding: 1px 0;
+}
+
+.llm-compact .llm-player {
+  font-weight: 600;
+}
+
+.llm-tool-result {
+  font-size: 0.72rem;
+  color: #888;
+  margin: 1px 0;
+}
+
+.llm-tool-result summary {
+  cursor: pointer;
+  font-family: monospace;
+  padding: 1px 0;
+  list-style: disclosure-closed;
+}
+
+.llm-tool-result summary::-webkit-details-marker {
+  color: #666;
+}
+
+.llm-tool-result[open] summary {
+  list-style: disclosure-open;
+}
+
+.llm-tool-result .llm-player {
+  font-weight: 600;
+}
+
+.llm-tool-result pre {
+  margin: 4px 0 4px 16px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: #b0b0c0;
+  max-height: 12rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.llm-meta {
+  color: #666;
+  font-size: 0.7rem;
+  font-style: italic;
+  padding: 1px 0;
+}
+
+.llm-cost {
+  color: #666;
+  font-size: 0.65rem;
+  font-family: monospace;
+  margin-left: 6px;
+}
+
+/* Player-colored left borders for LLM thoughts */
+.llm-thought.llm-player-0 { border-left-color: #3b82f6; }
+.llm-thought.llm-player-1 { border-left-color: #ef4444; }
+.llm-thought.llm-player-2 { border-left-color: #22c55e; }
+.llm-thought.llm-player-3 { border-left-color: #f59e0b; }
 
 .hidden {
   display: none !important;

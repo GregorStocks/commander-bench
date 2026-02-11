@@ -15,6 +15,17 @@ FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
 OBJECT_ID_RE = re.compile(r"\s*\[[0-9a-f]{3,}\]")
 DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
 
+# LLM event types to include in the website export
+_LLM_EVENT_TYPES = {
+    "llm_response",
+    "tool_call",
+    "stall",
+    "context_trim",
+    "context_reset",
+    "llm_error",
+    "auto_pilot_mode",
+}
+
 
 def _strip_html(message: str) -> str:
     """Remove <font> tags and [hex_id] suffixes from action messages."""
@@ -50,6 +61,85 @@ def _extract_commander(player_meta: dict) -> str | None:
     return None
 
 
+def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
+    """Read LLM events from all *_llm.jsonl files.
+
+    Returns (llm_events sorted by timestamp, {player_name: total_cost_usd}).
+    """
+    events = []
+    player_costs: dict[str, float] = {}
+
+    for path in sorted(game_dir.glob("*_llm.jsonl")):
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event_type = raw.get("type", "")
+            player = raw.get("player", "")
+
+            # Track per-player cost from game_end or cumulative_cost_usd
+            if event_type == "game_end" and "total_cost_usd" in raw:
+                player_costs[player] = raw["total_cost_usd"]
+            elif "cumulative_cost_usd" in raw:
+                player_costs[player] = raw["cumulative_cost_usd"]
+
+            if event_type not in _LLM_EVENT_TYPES:
+                continue
+
+            # Build the exported event with camelCase keys
+            exported: dict = {
+                "ts": raw.get("ts", ""),
+                "player": player,
+                "type": event_type,
+            }
+
+            if event_type == "llm_response":
+                exported["reasoning"] = raw.get("reasoning", "")
+                if raw.get("thinking"):
+                    exported["thinking"] = raw["thinking"]
+                if raw.get("tool_calls"):
+                    exported["toolCalls"] = raw["tool_calls"]
+                usage = raw.get("usage")
+                if usage:
+                    exported["usage"] = {
+                        "promptTokens": usage.get("prompt_tokens", 0),
+                        "completionTokens": usage.get("completion_tokens", 0),
+                    }
+                if "cost_usd" in raw:
+                    exported["costUsd"] = raw["cost_usd"]
+            elif event_type == "tool_call":
+                exported["tool"] = raw.get("tool", "")
+                exported["args"] = raw.get("arguments", {})
+                exported["result"] = raw.get("result", "")
+                if "latency_ms" in raw:
+                    exported["latencyMs"] = raw["latency_ms"]
+            elif event_type == "stall":
+                exported["turnsWithoutProgress"] = raw.get("turns_without_progress", 0)
+                exported["lastTools"] = raw.get("last_tools", [])
+            elif event_type == "context_trim":
+                exported["messagesBefore"] = raw.get("messages_before", 0)
+                exported["messagesAfter"] = raw.get("messages_after", 0)
+            elif event_type == "context_reset":
+                exported["reason"] = raw.get("reason", "")
+            elif event_type == "llm_error":
+                exported["errorType"] = raw.get("error_type", "")
+                exported["errorMessage"] = raw.get("error_message", "")
+            elif event_type == "auto_pilot_mode":
+                exported["reason"] = raw.get("reason", "")
+
+            events.append(exported)
+
+    # Sort by timestamp
+    events.sort(key=lambda e: e.get("ts", ""))
+
+    return events, player_costs
+
+
 def export_game(game_dir: Path, website_games_dir: Path) -> Path:
     """Export a game directory to a website JSON file. Returns the output path."""
     events_path = game_dir / "game_events.jsonl"
@@ -76,12 +166,13 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         event_type = event.get("type")
 
         if event_type == "state_snapshot":
-            # Keep all fields except ts and type (seq is needed for action mapping)
-            snap = {k: v for k, v in event.items() if k not in ("type", "ts")}
+            # Keep all fields except type (preserve ts + seq for timeline matching)
+            snap = {k: v for k, v in event.items() if k != "type"}
             snapshots.append(snap)
         elif event_type == "game_action":
             actions.append(
                 {
+                    "ts": event.get("ts", ""),
                     "seq": event.get("seq", 0),
                     "message": _strip_html(event.get("message", "")),
                 }
@@ -91,6 +182,9 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
                 "seq": event.get("seq", 0),
                 "message": _strip_html(event.get("message", "")),
             }
+
+    # Read LLM logs
+    llm_events, player_costs = _read_llm_events(game_dir)
 
     # Build card images map from decklists
     card_images = _build_card_images(meta.get("players", []))
@@ -109,13 +203,17 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
 
     players_summary = []
     for p in meta.get("players", []):
-        players_summary.append(
-            {
-                "name": p.get("name", "?"),
-                "type": p.get("type", "?"),
-                "commander": _extract_commander(p),
-            }
-        )
+        name = p.get("name", "?")
+        entry: dict = {
+            "name": name,
+            "type": p.get("type", "?"),
+            "commander": _extract_commander(p),
+        }
+        if p.get("model"):
+            entry["model"] = p["model"]
+        if name in player_costs:
+            entry["totalCostUsd"] = round(player_costs[name], 4)
+        players_summary.append(entry)
 
     # Build output
     output = {
@@ -127,12 +225,13 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         "cardImages": card_images,
         "snapshots": snapshots,
         "actions": actions,
+        "llmEvents": llm_events,
         "gameOver": game_over,
     }
 
     website_games_dir.mkdir(parents=True, exist_ok=True)
     output_path = website_games_dir / f"{game_id}.json"
-    output_path.write_text(json.dumps(output, separators=(",", ":")))
+    output_path.write_text(json.dumps(output, indent=2))
 
     # Update index.json
     _update_index(website_games_dir, game_id, output)

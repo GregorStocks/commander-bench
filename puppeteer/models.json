@@ -1,0 +1,209 @@
+{
+  "_comment": "LLM models for Mage-Bench. Prices are $/million tokens via OpenRouter (Feb 2026). Reasoning tokens billed as output tokens.",
+  "models": [
+    {
+      "id": "google/gemini-2.5-flash",
+      "name": "Gemini 2.5 Flash",
+      "input_per_m": 0.30,
+      "output_per_m": 2.50,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Best bang for buck. Produces reasoning text with tool calls ~57% of the time. Already tested — works well, good at trash talk. Thinking mode available via effort param."
+    },
+    {
+      "id": "google/gemini-3-flash-preview",
+      "name": "Gemini 3 Flash",
+      "input_per_m": 0.50,
+      "output_per_m": 3.00,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Slightly pricier than 2.5 Flash but newer. Already tested — rarely produces reasoning text (4/346 responses). May improve with thinking mode enabled."
+    },
+    {
+      "id": "google/gemini-2.5-pro",
+      "name": "Gemini 2.5 Pro",
+      "input_per_m": 1.25,
+      "output_per_m": 10.00,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "Strong reasoning model. Should outperform Flash variants on complex board states and combat math. Worth testing with thinking mode on."
+    },
+    {
+      "id": "google/gemini-3-pro-preview",
+      "name": "Gemini 3 Pro",
+      "input_per_m": 2.00,
+      "output_per_m": 12.00,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "Latest Gemini Pro. Should have best Gemini-family strategic reasoning. Thinking mode available."
+    },
+    {
+      "id": "anthropic/claude-haiku-4.5",
+      "name": "Claude Haiku 4.5",
+      "input_per_m": 1.00,
+      "output_per_m": 5.00,
+      "context_k": 200,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Cheapest Claude with extended thinking (min 1024 tokens, max 128K). Good tool use. Likely solid at Magic — Claude models understand complex rules well. Extended thinking should help with combat math."
+    },
+    {
+      "id": "anthropic/claude-sonnet-4.5",
+      "name": "Claude Sonnet 4.5",
+      "input_per_m": 3.00,
+      "output_per_m": 15.00,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "Strong all-rounder with extended thinking. Excellent tool use and instruction following. Probably the best mid-tier option for strategic play. 1M context available."
+    },
+    {
+      "id": "anthropic/claude-opus-4.6",
+      "name": "Claude Opus 4.6",
+      "input_per_m": 5.00,
+      "output_per_m": 25.00,
+      "context_k": 1000,
+      "thinking": true,
+      "tier": "expensive",
+      "notes": "Most capable Claude. Extended thinking up to 128K tokens. Likely best strategic play but very expensive — a full Commander game could cost $5-10+. Use for showcase matches, not bulk testing."
+    },
+    {
+      "id": "openai/o4-mini",
+      "name": "o4-mini",
+      "input_per_m": 1.10,
+      "output_per_m": 4.40,
+      "context_k": 200,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "OpenAI's latest small reasoning model. Internal chain-of-thought (not visible in output). Good at structured reasoning tasks. Should handle Magic rules well but thinking is opaque — harder to debug."
+    },
+    {
+      "id": "openai/o3",
+      "name": "o3",
+      "input_per_m": 2.00,
+      "output_per_m": 8.00,
+      "context_k": 200,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "Strong reasoning model. Internal chain-of-thought with effort levels (low/medium/high). Likely good at complex game decisions. Thinking is opaque — reasoning_content not exposed."
+    },
+    {
+      "id": "openai/o3-mini",
+      "name": "o3-mini",
+      "input_per_m": 1.10,
+      "output_per_m": 4.40,
+      "context_k": 200,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Cheaper reasoning model. Similar to o4-mini but older. Internal reasoning only."
+    },
+    {
+      "id": "openai/gpt-5.2",
+      "name": "GPT-5.2",
+      "input_per_m": 1.75,
+      "output_per_m": 14.00,
+      "context_k": 400,
+      "thinking": false,
+      "tier": "mid",
+      "notes": "Latest GPT without explicit reasoning mode. 400K context is generous. Rarely includes reasoning text alongside tool calls (68/333 in GPT-4.1-mini test). Without thinking, probably worse than reasoning models at complex combat math."
+    },
+    {
+      "id": "openai/gpt-5.1",
+      "name": "GPT-5.1",
+      "input_per_m": 1.25,
+      "output_per_m": 10.00,
+      "context_k": 400,
+      "thinking": false,
+      "tier": "mid",
+      "notes": "Previous gen GPT. No reasoning mode. Large context but expensive output. Probably not worth it over o3/o4-mini for Magic."
+    },
+    {
+      "id": "deepseek/deepseek-r1",
+      "name": "DeepSeek R1",
+      "input_per_m": 0.56,
+      "output_per_m": 1.68,
+      "context_k": 164,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Very cheap reasoning model. Extended thinking with up to 32K reasoning tokens. Unclear how well it handles tool calling — DeepSeek models can be inconsistent with complex tool schemas. Worth testing."
+    },
+    {
+      "id": "deepseek/deepseek-v3.2",
+      "name": "DeepSeek V3.2",
+      "input_per_m": 0.25,
+      "output_per_m": 0.38,
+      "context_k": 164,
+      "thinking": false,
+      "tier": "dirt-cheap",
+      "notes": "Absurdly cheap. No reasoning mode. Good for bulk/baseline testing to see if a non-thinking model can play Magic at all. May struggle with complex tool schemas."
+    },
+    {
+      "id": "mistralai/mistral-large-2512",
+      "name": "Mistral Large",
+      "input_per_m": 0.50,
+      "output_per_m": 1.50,
+      "context_k": 262,
+      "thinking": false,
+      "tier": "cheap",
+      "notes": "No reasoning mode. Devstral (similar family) was tested and produced 0/255 reasoning text. Probably a weak Magic player without thinking. Skip unless specifically benchmarking non-thinking models."
+    }
+  ],
+  "recommendations": {
+    "primary_test_set": [
+      "anthropic/claude-sonnet-4.5",
+      "anthropic/claude-haiku-4.5",
+      "google/gemini-2.5-flash",
+      "openai/o4-mini"
+    ],
+    "reasoning": "These four cover the interesting quadrant: Claude (best tool use + visible thinking), Gemini (cheapest with visible thinking), OpenAI (strong reasoning but opaque thinking). All support extended thinking. A 4-player Commander game with these would cost roughly $0.50-2.00 depending on game length.",
+    "showcase_matches": [
+      "anthropic/claude-opus-4.6",
+      "google/gemini-3-pro-preview",
+      "openai/o3"
+    ],
+    "budget_baseline": [
+      "deepseek/deepseek-r1",
+      "deepseek/deepseek-v3.2",
+      "google/gemini-2.5-flash"
+    ],
+    "skip": [
+      "openai/gpt-5.2",
+      "openai/gpt-5.1",
+      "mistralai/mistral-large-2512",
+      "mistralai/devstral-small"
+    ],
+    "skip_reasoning": "Non-thinking models consistently produce empty reasoning text with tool calls, making them hard to debug and likely worse at strategic play. The cost savings vs cheap thinking models (Gemini 2.5 Flash, Haiku 4.5) aren't worth it."
+  },
+  "thinking_config": {
+    "_comment": "How to enable thinking for each provider via OpenRouter's unified reasoning param",
+    "anthropic": {
+      "param": "reasoning.max_tokens",
+      "min": 1024,
+      "max": 128000,
+      "recommended": 8192,
+      "notes": "Thinking content returned in reasoning_content field. Visible and loggable."
+    },
+    "google": {
+      "param": "reasoning.effort",
+      "values": ["minimal", "low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "Maps to Google's thinkingLevel. Thinking content may or may not be in reasoning_content depending on model version."
+    },
+    "openai": {
+      "param": "reasoning.effort",
+      "values": ["minimal", "low", "medium", "high", "xhigh"],
+      "recommended": "medium",
+      "notes": "Internal reasoning only — thinking tokens consumed and billed but NOT returned in response. Cannot log or display thinking trace."
+    },
+    "deepseek": {
+      "param": "reasoning.max_tokens",
+      "max": 32768,
+      "recommended": 8192,
+      "notes": "Thinking content returned in reasoning_content field."
+    }
+  }
+}
