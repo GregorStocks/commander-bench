@@ -415,15 +415,15 @@ public class SkeletonCallbackHandler {
 
             case GAME_GET_MULTI_AMOUNT:
                 GameClientMessage multiMsg = (GameClientMessage) data;
-                int count = multiMsg.getMessages() != null ? multiMsg.getMessages().size() : 0;
-                int multiMin = multiMsg.getMin();
                 StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < count; i++) {
-                    if (i > 0) sb.append(",");
-                    sb.append(i == 0 ? multiMin : 0);
+                if (multiMsg.getMessages() != null) {
+                    for (int i = 0; i < multiMsg.getMessages().size(); i++) {
+                        if (i > 0) sb.append(",");
+                        sb.append(multiMsg.getMessages().get(i).defaultValue);
+                    }
                 }
                 session.sendPlayerString(gameId, sb.toString());
-                result.put("action_taken", "selected_min_multi_amount");
+                result.put("action_taken", "selected_default_multi_amount");
                 break;
 
             default:
@@ -3072,16 +3072,17 @@ public class SkeletonCallbackHandler {
     private void handleGameGetMultiAmount(UUID gameId, ClientCallback callback) {
         GameClientMessage message = (GameClientMessage) callback.getData();
         int count = message.getMessages() != null ? message.getMessages().size() : 0;
-        int min = message.getMin();
 
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < count; i++) {
-            if (i > 0) sb.append(",");
-            sb.append(i == 0 ? min : 0);
+        if (message.getMessages() != null) {
+            for (int i = 0; i < count; i++) {
+                if (i > 0) sb.append(",");
+                sb.append(message.getMessages().get(i).defaultValue);
+            }
         }
 
         String result = sb.toString();
-        logger.info("[" + client.getUsername() + "] MultiAmount: " + count + " values, min=" + min + " -> " + result);
+        logger.info("[" + client.getUsername() + "] MultiAmount: " + count + " values, defaults -> " + result);
         sleepBeforeAction();
         session.sendPlayerString(gameId, result);
     }
