@@ -94,7 +94,7 @@ def _get_authenticated_service():
     except ImportError:
         raise ImportError(
             "YouTube upload requires google-api-python-client and google-auth-oauthlib.\n"
-            "Install with: uv add --project puppeteer google-api-python-client google-auth-oauthlib google-auth-httplib2"
+            "Run: cd puppeteer && uv sync"
         )
 
     creds = None

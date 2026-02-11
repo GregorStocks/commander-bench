@@ -52,4 +52,4 @@ python scripts/upload_youtube.py game_20260210_074307
 - Videos are uploaded as **unlisted** (accessible via URL, not searchable)
 - Category: Gaming
 - The YouTube URL is saved to `game_meta.json` and propagated to the website JSON on export
-- Install the optional dependencies: `uv pip install --project puppeteer "puppeteer[youtube]"`
+- YouTube dependencies are installed automatically with `uv sync --project puppeteer`
