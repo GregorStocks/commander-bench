@@ -1,7 +1,7 @@
 [project]
 name = "puppeteer"
 version = "0.1.0"
-description = "XMage AI Harness orchestration tool"
+description = "XMage AI Puppeteer orchestration tool"
 requires-python = ">=3.10"
 dependencies = [
     "psutil>=5.9.0",
@@ -60,11 +60,11 @@ ignore_missing_imports = true
 # Existing code uses dynamic player type patterns that mypy can't follow.
 # These per-module overrides prevent noise while still checking new code.
 [[tool.mypy.overrides]]
-module = ["puppeteer.harness", "puppeteer.config"]
+module = ["puppeteer.orchestrator", "puppeteer.config"]
 disable_error_code = ["assignment", "attr-defined", "arg-type"]
 
 [[tool.mypy.overrides]]
-module = ["puppeteer.sleepwalker", "puppeteer.chatterbox", "puppeteer.pilot", "puppeteer.auto_pass"]
+module = ["puppeteer.sleepwalker", "puppeteer.pilot", "puppeteer.auto_pass"]
 disable_error_code = ["assignment", "attr-defined", "union-attr", "call-overload", "arg-type"]
 
 [[tool.mypy.overrides]]

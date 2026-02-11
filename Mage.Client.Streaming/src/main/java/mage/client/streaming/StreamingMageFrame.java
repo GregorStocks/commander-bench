@@ -57,7 +57,7 @@ public class StreamingMageFrame extends MageFrame {
     }
 
     /**
-     * Hide the main application toolbar since streaming observers don't need it.
+     * Hide the main application toolbar since streaming spectators don't need it.
      */
     private void hideToolbar() {
         try {
@@ -125,12 +125,12 @@ public class StreamingMageFrame extends MageFrame {
     }
 
     /**
-     * Override to initialize lobby (for AI harness game creation) but keep it hidden.
-     * The parent method initializes TablesPane which handles auto-start in AI harness mode.
+     * Override to initialize lobby (for AI puppeteer game creation) but keep it hidden.
+     * The parent method initializes TablesPane which handles auto-start in AI puppeteer mode.
      */
     @Override
     public void prepareAndShowServerLobby() {
-        // Call parent to initialize TablesPane (needed for AI harness game creation)
+        // Call parent to initialize TablesPane (needed for AI puppeteer game creation)
         super.prepareAndShowServerLobby();
 
         // Then immediately hide the lobby

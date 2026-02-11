@@ -2,30 +2,24 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "action_pending",
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "action_type",
+      "properties": {
+        "action_type": {
           "description": "XMage callback method name (e.g. GAME_SELECT, GAME_TARGET)",
           "type": "string"
         },
-        {
-          "conditional": "action_pending=true",
-          "name": "message",
+        "game_over": {
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        },
+        "message": {
           "description": "Human-readable prompt for the action",
           "type": "string"
         },
-        {
-          "name": "game_over",
-          "description": "Whether the game has ended",
+        "action_pending": {
+          "description": "Whether a game action is waiting for your response",
           "type": "boolean"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -48,31 +42,24 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "success",
-          "description": "Whether the action was executed successfully",
-          "type": "boolean"
-        },
-        {
-          "conditional": "success=true",
-          "name": "action_type",
+      "properties": {
+        "action_type": {
           "description": "The callback method that was handled",
           "type": "string"
         },
-        {
-          "conditional": "success=true",
-          "name": "action_taken",
+        "success": {
+          "description": "Whether the action was executed successfully",
+          "type": "boolean"
+        },
+        "action_taken": {
           "description": "Description of what was done (e.g. \"passed_priority\")",
           "type": "string"
         },
-        {
-          "conditional": "success=false",
-          "name": "error",
+        "error": {
           "description": "Error message",
           "type": "string"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -95,23 +82,20 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "log",
+      "properties": {
+        "log": {
           "description": "Game log text (may be truncated if max_chars was set)",
           "type": "string"
         },
-        {
-          "name": "total_length",
-          "description": "Total length of the full game log in characters",
-          "type": "integer"
-        },
-        {
-          "name": "truncated",
+        "truncated": {
           "description": "Whether the log was truncated",
           "type": "boolean"
+        },
+        "total_length": {
+          "description": "Total length of the full game log in characters",
+          "type": "integer"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -135,13 +119,12 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "success",
+      "properties": {
+        "success": {
           "description": "Whether the message was sent",
           "type": "boolean"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -168,30 +151,24 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "action_pending",
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "action_type",
+      "properties": {
+        "action_type": {
           "description": "XMage callback method name",
           "type": "string"
         },
-        {
-          "conditional": "action_pending=true",
-          "name": "message",
+        "game_over": {
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        },
+        "message": {
           "description": "Human-readable prompt for the action",
           "type": "string"
         },
-        {
-          "name": "game_over",
-          "description": "Whether the game has ended",
+        "action_pending": {
+          "description": "Whether a game action is waiting for your response",
           "type": "boolean"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -219,54 +196,43 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "action_pending",
-          "description": "Whether a decision-requiring action was found",
-          "type": "boolean"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "action_type",
-          "description": "XMage callback method name",
-          "type": "string"
-        },
-        {
-          "name": "actions_passed",
-          "description": "Number of priority passes performed",
-          "type": "integer"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "has_playable_cards",
-          "description": "Whether you have playable cards in hand",
-          "type": "boolean"
-        },
-        {
-          "conditional": "In combat",
-          "name": "combat_phase",
+      "properties": {
+        "combat_phase": {
           "description": "\"declare_attackers\" or \"declare_blockers\"",
           "type": "string"
         },
-        {
-          "conditional": "Chat received",
-          "name": "recent_chat",
-          "description": "Chat messages received since last check",
-          "type": "array[string]"
+        "actions_passed": {
+          "description": "Number of priority passes performed",
+          "type": "integer"
         },
-        {
-          "conditional": "Player died",
-          "name": "player_dead",
-          "description": "Whether you died during priority passing",
+        "has_playable_cards": {
+          "description": "Whether you have playable cards in hand",
           "type": "boolean"
         },
-        {
-          "conditional": "Timeout",
-          "name": "timeout",
+        "action_type": {
+          "description": "XMage callback method name",
+          "type": "string"
+        },
+        "recent_chat": {
+          "description": "Chat messages received since last check",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeout": {
           "description": "Whether the operation timed out",
           "type": "boolean"
+        },
+        "action_pending": {
+          "description": "Whether a decision-requiring action was found",
+          "type": "boolean"
+        },
+        "player_dead": {
+          "description": "Whether you died during priority passing",
+          "type": "boolean"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -298,34 +264,28 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "event_occurred",
+      "properties": {
+        "event_occurred": {
           "description": "Whether a meaningful game state change was detected",
           "type": "boolean"
         },
-        {
-          "name": "new_log",
+        "new_log": {
           "description": "New game log entries since the call started",
           "type": "string"
         },
-        {
-          "name": "actions_taken",
+        "actions_taken": {
           "description": "Number of actions auto-handled",
           "type": "integer"
         },
-        {
-          "name": "game_over",
+        "game_over": {
           "description": "Whether the game has ended",
           "type": "boolean"
         },
-        {
-          "conditional": "Player died",
-          "name": "player_dead",
+        "player_dead": {
           "description": "Whether you died during auto-passing",
           "type": "boolean"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -353,60 +313,57 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "available",
-          "description": "Whether game state is available",
-          "type": "boolean"
-        },
-        {
-          "conditional": "available=false",
-          "name": "error",
-          "description": "Error message",
-          "type": "string"
-        },
-        {
-          "name": "turn",
-          "description": "Current turn number",
-          "type": "integer"
-        },
-        {
-          "name": "phase",
+      "properties": {
+        "phase": {
           "description": "Current phase (e.g. PRECOMBAT_MAIN, COMBAT)",
           "type": "string"
         },
-        {
-          "name": "step",
-          "description": "Current step within the phase",
-          "type": "string"
-        },
-        {
-          "name": "active_player",
-          "description": "Name of the player whose turn it is",
-          "type": "string"
-        },
-        {
-          "name": "priority_player",
+        "priority_player": {
           "description": "Name of the player who currently has priority",
           "type": "string"
         },
-        {
-          "name": "players",
-          "description": "Player objects: name, life, library_size, hand_size, is_active, is_you, hand (yours only), battlefield, graveyard, exile, mana_pool, counters, commanders",
-          "type": "array[object]"
-        },
-        {
-          "name": "stack",
+        "stack": {
           "description": "Stack objects: name, rules, target_count",
-          "type": "array[object]"
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         },
-        {
-          "conditional": "During combat",
-          "name": "combat",
+        "active_player": {
+          "description": "Name of the player whose turn it is",
+          "type": "string"
+        },
+        "players": {
+          "description": "Player objects: name, life, library_size, hand_size, is_active, is_you, hand (yours only), battlefield, graveyard, exile, mana_pool, counters, commanders",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "available": {
+          "description": "Whether game state is available",
+          "type": "boolean"
+        },
+        "step": {
+          "description": "Current step within the phase",
+          "type": "string"
+        },
+        "combat": {
           "description": "Combat groups: attackers, blockers, blocked, defending",
-          "type": "array[object]"
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "turn": {
+          "description": "Current turn number",
+          "type": "integer"
+        },
+        "error": {
+          "description": "Error message",
+          "type": "string"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -425,37 +382,34 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "success",
+      "properties": {
+        "cards": {
+          "description": "Array of {name, rules} or {name, error} per card",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "success": {
           "description": "Whether the lookup succeeded",
           "type": "boolean"
         },
-        {
-          "conditional": "Single card or object_id lookup",
-          "name": "name",
+        "name": {
           "description": "Card name",
           "type": "string"
         },
-        {
-          "conditional": "Single card or object_id lookup",
-          "name": "rules",
+        "rules": {
           "description": "Oracle text lines",
-          "type": "array[string]"
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
-        {
-          "conditional": "Batch lookup (card_names)",
-          "name": "cards",
-          "description": "Array of {name, rules} or {name, error} per card",
-          "type": "array[object]"
-        },
-        {
-          "conditional": "success=false",
-          "name": "error",
+        "error": {
           "description": "Error message",
           "type": "string"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -498,82 +452,66 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "action_pending",
-          "description": "Whether an action is pending (false if nothing to do)",
-          "type": "boolean"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "action_type",
-          "description": "XMage callback method name",
-          "type": "string"
-        },
-        {
-          "conditional": "action_pending=true",
-          "name": "message",
-          "description": "Human-readable prompt from XMage",
-          "type": "string"
-        },
-        {
-          "name": "response_type",
-          "description": "How to respond: \"select\", \"boolean\", \"index\", \"amount\", \"pile\", or \"multi_amount\"",
-          "type": "string"
-        },
-        {
-          "name": "context",
-          "description": "Turn/phase context (e.g. \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\")",
-          "type": "string"
-        },
-        {
-          "name": "players",
-          "description": "Life total summary (e.g. \"You(20), Opp(18)\")",
-          "type": "string"
-        },
-        {
-          "conditional": "select, index, or pile response_type",
-          "name": "choices",
-          "description": "Available choices with name, type, index, and type-specific fields",
-          "type": "array[object]"
-        },
-        {
-          "conditional": "Mulligan decisions",
-          "name": "your_hand",
-          "description": "Hand cards with name, mana_cost, mana_value",
-          "type": "array[object]"
-        },
-        {
-          "conditional": "During combat",
-          "name": "combat_phase",
+      "properties": {
+        "combat_phase": {
           "description": "\"declare_attackers\" or \"declare_blockers\"",
           "type": "string"
         },
-        {
-          "conditional": "Mana payment",
-          "name": "mana_pool",
-          "description": "Current mana pool {R, G, U, W, B, C}",
-          "type": "object"
+        "action_type": {
+          "description": "XMage callback method name",
+          "type": "string"
         },
-        {
-          "conditional": "Mana payment",
-          "name": "untapped_lands",
-          "description": "Number of untapped lands",
-          "type": "integer"
+        "players": {
+          "description": "Life total summary (e.g. \"You(20), Opp(18)\")",
+          "type": "string"
         },
-        {
-          "conditional": "amount response_type",
-          "name": "min_amount",
+        "min_amount": {
           "description": "Minimum allowed value",
           "type": "integer"
         },
-        {
-          "conditional": "amount response_type",
-          "name": "max_amount",
+        "response_type": {
+          "description": "How to respond: \"select\", \"boolean\", \"index\", \"amount\", \"pile\", or \"multi_amount\"",
+          "type": "string"
+        },
+        "untapped_lands": {
+          "description": "Number of untapped lands",
+          "type": "integer"
+        },
+        "message": {
+          "description": "Human-readable prompt from XMage",
+          "type": "string"
+        },
+        "mana_pool": {
+          "description": "Current mana pool {R, G, U, W, B, C}",
+          "type": "object"
+        },
+        "action_pending": {
+          "description": "Whether an action is pending (false if nothing to do)",
+          "type": "boolean"
+        },
+        "context": {
+          "description": "Turn/phase context (e.g. \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\")",
+          "type": "string"
+        },
+        "max_amount": {
           "description": "Maximum allowed value",
           "type": "integer"
+        },
+        "choices": {
+          "description": "Available choices with name, type, index, and type-specific fields",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "your_hand": {
+          "description": "Hand cards with name, mana_cost, mana_value",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -596,31 +534,24 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "success",
+      "properties": {
+        "success": {
           "description": "Whether the action was accepted",
           "type": "boolean"
         },
-        {
-          "conditional": "success=true",
-          "name": "action_taken",
+        "action_taken": {
           "description": "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\")",
           "type": "string"
         },
-        {
-          "conditional": "success=false",
-          "name": "error",
-          "description": "Error message",
-          "type": "string"
-        },
-        {
-          "conditional": "Loop detection",
-          "name": "warning",
+        "warning": {
           "description": "Warning (e.g. possible game loop detected)",
           "type": "string"
+        },
+        "error": {
+          "description": "Error message",
+          "type": "string"
         }
-      ]
+      }
     },
     "examples": [
       {
@@ -675,25 +606,20 @@
   {
     "outputSchema": {
       "type": "object",
-      "fields": [
-        {
-          "name": "cards",
+      "properties": {
+        "cards": {
           "description": "Main deck cards, one per line (e.g. \"4x Lightning Bolt\")",
           "type": "string"
         },
-        {
-          "conditional": "Deck has sideboard",
-          "name": "sideboard",
+        "sideboard": {
           "description": "Sideboard cards, same format",
           "type": "string"
         },
-        {
-          "conditional": "No deck loaded",
-          "name": "error",
+        "error": {
           "description": "Error message",
           "type": "string"
         }
-      ]
+      }
     },
     "examples": [
       {

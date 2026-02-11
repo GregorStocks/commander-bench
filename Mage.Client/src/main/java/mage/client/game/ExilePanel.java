@@ -21,7 +21,7 @@ import mage.view.CardsView;
 /**
  * Panel for displaying exiled cards in a stacked vertical layout.
  * Cards are stacked on top of each other with only the top portion visible.
- * Used in streaming/observer mode to show each player's exiled cards.
+ * Used in streaming/spectator mode to show each player's exiled cards.
  */
 public class ExilePanel extends JPanel {
 

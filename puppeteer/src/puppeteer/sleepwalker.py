@@ -52,7 +52,7 @@ async def run_sleepwalker(
     """Run the sleepwalker client."""
     _log(f"[sleepwalker] Starting for {username}@{server}:{port}")
 
-    # Build JVM args for the skeleton
+    # Build JVM args for the bridge
     jvm_args_list = [
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         f"-Dxmage.headless.server={server}",
@@ -81,7 +81,7 @@ async def run_sleepwalker(
         env=env,
     )
 
-    _log("[sleepwalker] Spawning skeleton client...")
+    _log("[sleepwalker] Spawning bridge client...")
 
     async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
         # Initialize MCP connection

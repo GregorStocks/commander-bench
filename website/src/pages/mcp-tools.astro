@@ -40,11 +40,12 @@ function getProperties(tool: any) {
 }
 
 function getOutputFields(tool: any) {
-  return (tool.outputSchema?.fields ?? []).map((f: any) => ({
-    name: f.name,
-    type: f.type,
-    description: f.description,
-    conditional: f.conditional || null,
+  const props = tool.outputSchema?.properties ?? {};
+  return Object.entries(props).map(([name, schema]: [string, any]) => ({
+    name,
+    type: schema.items ? `array[${schema.items.type}]` : schema.type,
+    description: schema.description,
+    conditional: null,
   }));
 }
 ---

@@ -335,7 +335,12 @@ When you see combat_phase="declare_blockers" in get_action_choices:
 
 STRATEGY NOTES:
 Call save_strategy(text) to save notes that persist if your context gets reset \
-(e.g. opponent playstyles, your game plan, key threats). Max 500 chars, overwrites previous.\
+(e.g. opponent playstyles, your game plan, key threats). Max 500 chars, overwrites previous.
+
+CHAT:
+Use send_chat_message to talk to your opponents during the game. React to big plays, \
+comment on the board state, or just have fun. Check the recent_chat field in pass_priority \
+results to see what others are saying.\
 """
 
 
@@ -784,7 +789,7 @@ async def run_pilot(
         max_retries=1,
     )
 
-    # Build JVM args for the skeleton (same as sleepwalker/chatterbox)
+    # Build JVM args for the bridge (same as sleepwalker)
     jvm_args_list = [
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         f"-Dxmage.headless.server={server}",
@@ -806,7 +811,7 @@ async def run_pilot(
         mvn_args.append(f"-Dxmage.headless.deck={deck_path}")
     if game_dir:
         mvn_args.append(f"-Dxmage.headless.errorlog={game_dir / f'{username}_errors.log'}")
-        mvn_args.append(f"-Dxmage.headless.skeletonlog={game_dir / f'{username}_skeleton.jsonl'}")
+        mvn_args.append(f"-Dxmage.headless.bridgelog={game_dir / f'{username}_bridge.jsonl'}")
     if max_interactions_per_turn is not None:
         mvn_args.append(f"-Dxmage.headless.maxInteractionsPerTurn={max_interactions_per_turn}")
     mvn_args.append("exec:java")
@@ -818,7 +823,7 @@ async def run_pilot(
         env=env,
     )
 
-    _log("[pilot] Spawning skeleton client...")
+    _log("[pilot] Spawning bridge client...")
 
     game_log = None
     trace_log = None

@@ -14,20 +14,20 @@ Avoid **modifying existing behavior** in Java outside of `Mage.Client.Streaming`
 **Additive changes are OK:** Adding new methods, fields, or classes to upstream modules is fine as long as existing behavior is untouched — these merge cleanly.
 
 **Our code (free to modify):**
-- `Mage.Client.Streaming` - streaming/observer client
-- `Mage.Client.Headless` - headless client for AI harness
+- `Mage.Client.Streaming` - streaming/spectator client
+- `Mage.Client.Headless` - headless bridge client
 - `puppeteer/` - Python orchestration
 
-## Architecture: MCP Layer vs Python Harness
+## Architecture: MCP Layer vs Puppeteer
 
-Game logic, Magic rules quirks, and XMage-specific workarounds belong in the **Java MCP layer** (`Mage.Client.Headless`), not in the Python harness. The MCP layer should handle things like:
+Game logic, Magic rules quirks, and XMage-specific workarounds belong in the **Java MCP layer** (`Mage.Client.Headless`), not in the puppeteer. The MCP layer should handle things like:
 
 - Auto-tapping and mana payment fallbacks
 - Filtering out unplayable actions (e.g. failed mana casts)
 - Auto-passing priority when there are no meaningful choices
 - Working around XMage UI quirks (modal dialogs, selection prompts)
 
-The **Python harness** (`puppeteer/`) should stay simple. Its job is to:
+The **puppeteer** (`puppeteer/`) should stay simple. Its job is to:
 
 - Connect the MCP server to the LLMs via tool calls
 - Provide additional tools for the LLMs (e.g. card lookup)
@@ -75,7 +75,7 @@ uv run python script.py
 uv run --project puppeteer python -m puppeteer
 ```
 
-## Running the AI Harness
+## Running Games
 
 Use `make run` with the `CONFIG` parameter:
 
@@ -84,7 +84,7 @@ Use `make run` with the `CONFIG` parameter:
 make run
 
 # 4 random LLM pilots, random personalities and decks (needs OPENROUTER_API_KEY)
-make run CONFIG=arena
+make run CONFIG=gauntlet
 
 # Frontier models: one from each major lab (needs OPENROUTER_API_KEY)
 make run CONFIG=frontier
@@ -113,7 +113,7 @@ make run                   # No API keys needed (4 CPU players)
 make run CONFIG=staller    # No API keys needed (burn vs staller)
 ```
 
-**Never run** `CONFIG=arena`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
+**Never run** `CONFIG=gauntlet`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
 
 ## Coding Style: Fail Fast
 
@@ -133,7 +133,7 @@ assert self.config_file is not None, "run_tag requires config_file to be set"
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
 Symlinks for quick access (all relative, inside `~/mage-bench-logs/`):
-- `last-dumb`, `last-arena`, `last-frontier`, etc. — most recent run per config name
+- `last-dumb`, `last-gauntlet`, `last-frontier`, etc. — most recent run per config name
 - `last-branch-{name}` — most recent run on a given git branch (slashes replaced with dashes)
 
 After running a game on your branch, check your branch symlink first:
@@ -154,9 +154,9 @@ When working on UI changes, take screenshots to verify your work. See `doc/scree
 
 ```bash
 make run                     # run a quick game (~2s)
-make screenshot              # final frame -> /tmp/mage-screenshot.png
+make screenshot              # final frame -> <game_dir>/screenshot.png
 make screenshot T=5          # frame at 5s into the game
-# Then: Read /tmp/mage-screenshot.png
+# Then: Read the screenshot path from the output
 ```
 
 **Website visualizer** (via Chrome browser automation):

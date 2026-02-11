@@ -22,10 +22,10 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 
    - **Error logs**: Read `*_errors.log` files. Look for Java exceptions (NPE, IndexOutOfBounds, ClassCast), MCP tool failures, and stack traces. Note the exact filename and line numbers.
    - **Pilot logs**: Read `*_pilot.log` files. Look for LLM decision failures, repeated tool call patterns (loops), models sending wrong parameters, empty responses, and context trimming warnings.
-   - **Skeleton logs**: Read `*_skeleton.jsonl` files. Look for repeated identical MCP calls (loop signatures), failed actions, "Index out of range" errors, and action sequences that suggest confusion (e.g., cast → cancel → cast → cancel).
+   - **Bridge logs**: Read `*_bridge.jsonl` files. Look for repeated identical MCP calls (loop signatures), failed actions, "Index out of range" errors, and action sequences that suggest confusion (e.g., cast → cancel → cast → cancel).
    - **Game events**: Read `game_events.jsonl`. Look for stalls (long gaps between events), excessive auto-passes, turn timeouts, and game flow anomalies.
 
-5. **Cross-reference findings** — a single bug often shows up across multiple log files. For example, an NPE in error logs corresponds to a failed tool call in skeleton logs and a confused retry loop in pilot logs. Group these into one issue, not three.
+5. **Cross-reference findings** — a single bug often shows up across multiple log files. For example, an NPE in error logs corresponds to a failed tool call in bridge logs and a confused retry loop in pilot logs. Group these into one issue, not three.
 
 6. **Distinguish code bugs from model issues**:
    - **Code bugs** (file issues): NPEs, wrong tool behavior, missing error handling, incorrect game state reporting — these need code fixes in Java or Python.
@@ -35,14 +35,14 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 7. For each code bug, **trace it to source code**. Read the relevant Java/Python files to identify the exact line and root cause. Include in the issue:
    - The game log path: `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`
    - Specific log files and approximate line numbers where the bug manifests
-   - The source code file and line where the fix should go (e.g., `SkeletonCallbackHandler.java:1407`)
+   - The source code file and line where the fix should go (e.g., `BridgeCallbackHandler.java:1407`)
    - A brief description of the root cause and suggested fix direction
 
 8. Create issue files in `issues/`:
    ```json
    {
      "title": "Short summary",
-     "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/mage-bench-logs/game_.../Player_errors.log: NPE at line 42\n- ~/mage-bench-logs/game_.../Player_skeleton.jsonl: repeated cast-cancel pattern\n\nSource: SkeletonCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
+     "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/mage-bench-logs/game_.../Player_errors.log: NPE at line 42\n- ~/mage-bench-logs/game_.../Player_bridge.jsonl: repeated cast-cancel pattern\n\nSource: BridgeCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
      "status": "open",
      "priority": N,
      "type": "task",

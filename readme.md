@@ -51,7 +51,7 @@ make run-dumb OUTPUT=/path/to/video.mov
 
 ### YouTube upload (optional)
 
-After a game finishes, the harness prompts to upload the recording to YouTube.
+After a game finishes, the puppeteer prompts to upload the recording to YouTube.
 
 1. Set up Google Cloud OAuth credentials (see `doc/youtube.md`).
 2. Save the client secrets to `~/.mage-bench/youtube-client-secrets.json`.
@@ -62,23 +62,22 @@ After a game finishes, the harness prompts to upload the recording to YouTube.
 Three layers:
 
 1. **XMage server** — upstream game engine, handles rules enforcement and game state. Unmodified from upstream.
-2. **Java clients** (`Mage.Client.Headless`, `Mage.Client.Streaming`) — a headless MCP server that lets LLMs play via tool calls, and a streaming observer that renders the game and records video.
-3. **Python harness** (`puppeteer/`) — orchestrates everything: spawns processes, connects LLMs to headless clients, tracks costs, manages recordings.
+2. **Java clients** (`Mage.Client.Headless`, `Mage.Client.Streaming`) — a headless bridge that lets LLMs play via MCP tool calls, and a streaming spectator that renders the game and records video.
+3. **Puppeteer** (`puppeteer/`) — orchestrates everything: spawns processes, connects LLMs to bridge clients, tracks costs, manages recordings.
 
-Game logic and XMage workarounds live in the Java MCP layer. The Python harness stays simple.
+Game logic and XMage workarounds live in the Java bridge layer. The puppeteer stays simple.
 
 ## Player types
 
 | Type | LLM? | Description |
 |------|------|-------------|
 | **Pilot** | Yes | Strategic LLM player — sees board state, chooses actions |
-| **Chatterbox** | Yes | LLM commentator — auto-plays but generates chat |
 | **Sleepwalker** | No | MCP auto-player with chat, no LLM |
 | **CPU** | No | XMage's built-in AI (COMPUTER_MAD) |
 | **Potato** | No | Dumbest auto-player |
 | **Staller** | No | Like potato but slow; stays connected between games |
 
-Configure players in JSON config files (see `puppeteer/ai-harness-*.json`).
+Configure players in JSON config files (see `configs/`).
 
 ## Streaming & recording
 

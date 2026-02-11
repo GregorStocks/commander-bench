@@ -8,21 +8,21 @@ import org.apache.log4j.Logger;
 
 /**
  * Headless MageClient implementation for bot/AI players.
- * Delegates callback handling to SkeletonCallbackHandler.
+ * Delegates callback handling to BridgeCallbackHandler.
  */
-public class SkeletonMageClient implements MageClient {
+public class BridgeMageClient implements MageClient {
 
-    private static final Logger logger = Logger.getLogger(SkeletonMageClient.class);
-    private static final MageVersion version = new MageVersion(SkeletonMageClient.class);
+    private static final Logger logger = Logger.getLogger(BridgeMageClient.class);
+    private static final MageVersion version = new MageVersion(BridgeMageClient.class);
 
     private final String username;
     private Session session;
-    private final SkeletonCallbackHandler callbackHandler;
+    private final BridgeCallbackHandler callbackHandler;
     private volatile boolean running = true;
 
-    public SkeletonMageClient(String username) {
+    public BridgeMageClient(String username) {
         this.username = username;
-        this.callbackHandler = new SkeletonCallbackHandler(this);
+        this.callbackHandler = new BridgeCallbackHandler(this);
     }
 
     public void setSession(Session session) {
@@ -38,7 +38,7 @@ public class SkeletonMageClient implements MageClient {
         return username;
     }
 
-    public SkeletonCallbackHandler getCallbackHandler() {
+    public BridgeCallbackHandler getCallbackHandler() {
         return callbackHandler;
     }
 

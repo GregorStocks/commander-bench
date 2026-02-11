@@ -122,7 +122,7 @@ public class StreamingGamePanel extends GamePanel {
     private final Map<String, Double> playerCosts = new HashMap<>();
     private Timer costPollTimer;
     private Path gameDirPath;
-    private final Set<String> chatterboxPlayerNames = new HashSet<>();
+    private final Set<String> llmPlayerNames = new HashSet<>();
     private boolean costPollingInitialized = false;
 
     // Overlay publishing support
@@ -171,7 +171,7 @@ public class StreamingGamePanel extends GamePanel {
         }
 
         try {
-            // Player chat panel (top) - shows player messages, no input for observers
+            // Player chat panel (top) - shows player messages, no input for spectators
             ChatPanelBasic playerChatPanel = new ChatPanelBasic();
             playerChatPanel.useExtendedView(ChatPanelBasic.VIEW_MODE.GAME);
             playerChatPanel.disableInput();
@@ -310,7 +310,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Override to auto-close the streaming observer after the game ends.
+     * Override to auto-close the streaming spectator after the game ends.
      * Waits 10 seconds then exits, which triggers recording finalization via shutdown hook.
      */
     @Override
@@ -333,7 +333,7 @@ public class StreamingGamePanel extends GamePanel {
         logger.info("Game ended, will auto-close in 10 seconds");
 
         Timer exitTimer = new Timer(10000, e -> {
-            logger.info("Auto-closing streaming observer");
+            logger.info("Auto-closing streaming spectator");
             System.exit(0);
         });
         exitTimer.setRepeats(false);
@@ -512,7 +512,7 @@ public class StreamingGamePanel extends GamePanel {
 
     /**
      * Hide the entire bottom commands area (hand, feedback, stack, skip buttons).
-     * Observers don't need any of these controls.
+     * Spectators don't need any of these controls.
      * This keeps all streaming-specific UI changes isolated to this class.
      */
     private void hideHandContainer() {
@@ -687,7 +687,7 @@ public class StreamingGamePanel extends GamePanel {
 
     /**
      * Hide the card preview panel on the right side.
-     * Observers don't need the enlarged card preview.
+     * Spectators don't need the enlarged card preview.
      */
     private void hideBigCardPanel() {
         try {
@@ -742,10 +742,14 @@ public class StreamingGamePanel extends GamePanel {
      * Must be called before super.init() triggers the first layout.
      */
     private void adjustBattlefieldCardSizes() {
-        // Cap max: ~100px wide (default is ~156px). Aspect ratio 312:445.
-        GUISizeHelper.battlefieldCardMaxDimension = new Dimension(100, 143);
-        // Lower min: ~20px wide (default is ~52px). Allows aggressive shrinking.
-        GUISizeHelper.battlefieldCardMinDimension = new Dimension(20, 29);
+        // Scale card size caps with monitor resolution (1.0 at 1080p, 2.0 at 4K)
+        double scale = computeScaleFactor(this);
+        int maxW = (int) (100 * scale);
+        int maxH = (int) (maxW * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        int minW = (int) (20 * scale);
+        int minH = (int) (minW * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
+        GUISizeHelper.battlefieldCardMaxDimension = new Dimension(maxW, maxH);
+        GUISizeHelper.battlefieldCardMinDimension = new Dimension(minW, minH);
         // Cap hand card size to match battlefield max so hand cards don't dwarf battlefield cards
         int maxWidth = GUISizeHelper.battlefieldCardMaxDimension.width;
         if (GUISizeHelper.handCardDimension.width > maxWidth) {
@@ -1193,14 +1197,17 @@ public class StreamingGamePanel extends GamePanel {
                     westPanel.remove(oldEx);
                 }
 
+                // Scale zone panel card sizes with monitor resolution
+                int zoneCardWidth = (int) (80 * computeScaleFactor(playArea));
+
                 // Create and inject our streaming zone panels
-                CommanderPanel commanderPanel = new CommanderPanel();
+                CommanderPanel commanderPanel = new CommanderPanel(zoneCardWidth);
                 commanderPanels.put(playerId, commanderPanel);
 
-                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel();
+                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel(zoneCardWidth);
                 streamingGraveyardPanels.put(playerId, graveyardPanel);
 
-                StreamingExilePanel exilePanel = new StreamingExilePanel();
+                StreamingExilePanel exilePanel = new StreamingExilePanel(zoneCardWidth);
                 streamingExilePanels.put(playerId, exilePanel);
 
                 // Layout: playerPanel (0), commanderPanel (1), graveyardPanel (2), exilePanel (3)
@@ -1392,7 +1399,7 @@ public class StreamingGamePanel extends GamePanel {
             PlayerPanelExt playerPanel = playArea.getPlayerPanel();
             cleanupPlayerPanel(playerPanel, player);
 
-            // Show cost label for chatterbox players
+            // Show cost label for LLM players
             updateCostLabel(player, playerPanel);
         }
     }
@@ -1419,7 +1426,7 @@ public class StreamingGamePanel extends GamePanel {
             setComponentVisible(playerPanel, "exileZone", false);
             setComponentVisible(playerPanel, "exileLabel", false);
 
-            // Hide zones panel (command zone, cheat, hints - observers can't use)
+            // Hide zones panel (command zone, cheat, hints - spectators can't use)
             setComponentVisible(playerPanel, "zonesPanel", false);
 
             // Conditional counters - show only when label value > 0
@@ -1459,6 +1466,20 @@ public class StreamingGamePanel extends GamePanel {
         } catch (Exception e) {
             // Silently ignore - field may not exist or may not be a Component
         }
+    }
+
+    /**
+     * Compute the UI scale factor based on window height.
+     * At 1080p returns 1.0 (original sizes). At 4K returns 2.0.
+     * Used to scale zone panels, battlefield cards, and other fixed-size elements.
+     */
+    private double computeScaleFactor(Component component) {
+        Window window = SwingUtilities.getWindowAncestor(component);
+        int windowHeight = window != null && window.getHeight() > 0
+                ? window.getHeight()
+                : Toolkit.getDefaultToolkit().getScreenSize().height;
+        double scale = windowHeight / 1080.0;
+        return Math.max(1.0, Math.min(scale, 2.5));
     }
 
     /**
@@ -1586,7 +1607,7 @@ public class StreamingGamePanel extends GamePanel {
     // ---- LLM cost display ----
 
     /**
-     * Initialize cost file polling for chatterbox (LLM) players.
+     * Initialize cost file polling for LLM players.
      * Reads the game directory and player config from system properties/environment,
      * then starts a Swing timer to poll cost files every 2 seconds.
      */
@@ -1602,17 +1623,17 @@ public class StreamingGamePanel extends GamePanel {
         }
         gameDirPath = Paths.get(gameDirStr);
 
-        // Parse players config to find chatterbox player names
-        String configJson = System.getenv("XMAGE_AI_HARNESS_PLAYERS_CONFIG");
+        // Parse players config to find LLM player names
+        String configJson = System.getenv("XMAGE_AI_PUPPETEER_PLAYERS_CONFIG");
         if (configJson != null && !configJson.isEmpty()) {
-            parseChatterboxPlayers(configJson);
+            parseLlmPlayers(configJson);
         }
 
-        if (chatterboxPlayerNames.isEmpty()) {
+        if (llmPlayerNames.isEmpty()) {
             return;
         }
 
-        logger.info("Cost polling enabled for chatterbox players: " + chatterboxPlayerNames);
+        logger.info("Cost polling enabled for LLM players: " + llmPlayerNames);
 
         // Poll cost files every 2 seconds
         costPollTimer = new Timer(2000, e -> pollCostFiles());
@@ -1742,7 +1763,7 @@ public class StreamingGamePanel extends GamePanel {
             }
             playerJson.add("graveyard", gyArray);
 
-            // Hand cards (observer has permission to see all hands)
+            // Hand cards (spectator has permission to see all hands)
             CardsView handCards = getHandCardsForPlayer(player, game, loadedCards);
             JsonArray handArray = new JsonArray();
             if (handCards != null) {
@@ -1796,33 +1817,33 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Parse the players config JSON to extract chatterbox player names.
+     * Parse the players config JSON to extract LLM player names.
      */
-    private void parseChatterboxPlayers(String configJson) {
+    private void parseLlmPlayers(String configJson) {
         try {
             JsonObject root = JsonParser.parseString(configJson).getAsJsonObject();
             if (root.has("players")) {
                 for (com.google.gson.JsonElement elem : root.getAsJsonArray("players")) {
                     JsonObject player = elem.getAsJsonObject();
                     String type = player.has("type") ? player.get("type").getAsString() : "";
-                    if ("chatterbox".equals(type) || "pilot".equals(type)) {
-                        chatterboxPlayerNames.add(player.get("name").getAsString());
+                    if ("pilot".equals(type)) {
+                        llmPlayerNames.add(player.get("name").getAsString());
                     }
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to parse chatterbox players from config", e);
+            logger.warn("Failed to parse LLM players from config", e);
         }
     }
 
     /**
-     * Poll cost JSON files written by chatterbox processes.
+     * Poll cost JSON files written by LLM processes.
      */
     private void pollCostFiles() {
         if (gameDirPath == null) {
             return;
         }
-        for (String username : chatterboxPlayerNames) {
+        for (String username : llmPlayerNames) {
             Path costFile = gameDirPath.resolve(username + "_cost.json");
             try {
                 if (Files.exists(costFile)) {
@@ -1838,11 +1859,11 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Update or create the cost label for a player if they are a chatterbox.
+     * Update or create the cost label for a player if they are an LLM.
      */
     private void updateCostLabel(PlayerView player, PlayerPanelExt playerPanel) {
         String playerName = player.getName();
-        if (!chatterboxPlayerNames.contains(playerName)) {
+        if (!llmPlayerNames.contains(playerName)) {
             return;
         }
 
@@ -1856,12 +1877,15 @@ public class StreamingGamePanel extends GamePanel {
 
         if (costLabel == null) {
             // Create and inject cost label into the west panel
+            double scale = computeScaleFactor(playerPanel);
+            int costW = (int) (94 * scale);
+            int costH = (int) (16 * scale);
             costLabel = new JLabel();
             costLabel.setHorizontalAlignment(SwingConstants.CENTER);
             costLabel.setForeground(new Color(0, 200, 0));
-            costLabel.setFont(costLabel.getFont().deriveFont(Font.BOLD, 11f));
-            costLabel.setPreferredSize(new Dimension(94, 16));
-            costLabel.setMaximumSize(new Dimension(94, 16));
+            costLabel.setFont(costLabel.getFont().deriveFont(Font.BOLD, (float) (11 * scale)));
+            costLabel.setPreferredSize(new Dimension(costW, costH));
+            costLabel.setMaximumSize(new Dimension(costW, costH));
 
             Container westPanel = playerPanel.getParent();
             if (westPanel instanceof JPanel) {
