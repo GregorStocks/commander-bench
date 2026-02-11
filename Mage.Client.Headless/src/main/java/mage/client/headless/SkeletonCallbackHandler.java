@@ -122,6 +122,8 @@ public class SkeletonCallbackHandler {
     private volatile UUID lastResponseManaPlayerId; // only for MANA_TYPE
     private volatile boolean lastResponseRetried = false;
     private static final long LOST_RESPONSE_RETRY_MS = 25_000; // retry after 25s (server discards after 30s)
+    private volatile long lastCallbackReceivedAt = 0;
+    private volatile UUID lastCallbackGameId = null;
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -320,8 +322,19 @@ public class SkeletonCallbackHandler {
      */
     private boolean retryLastResponseIfLost() {
         if (lastResponseSentAt == 0 || lastResponseRetried) return false;
-        long age = System.currentTimeMillis() - lastResponseSentAt;
+        long sentAt = lastResponseSentAt;
+        if (lastResponseGameId != null && lastResponseGameId.equals(lastCallbackGameId)
+                && lastCallbackReceivedAt > sentAt) {
+            clearTrackedResponse();
+            return false;
+        }
+        long age = System.currentTimeMillis() - sentAt;
         if (age < LOST_RESPONSE_RETRY_MS) return false;
+        if (lastResponseGameId != null && lastResponseGameId.equals(lastCallbackGameId)
+                && lastCallbackReceivedAt > sentAt) {
+            clearTrackedResponse();
+            return false;
+        }
 
         lastResponseRetried = true;
         UUID gameId = lastResponseGameId;
@@ -2450,6 +2463,8 @@ public class SkeletonCallbackHandler {
             callback.decompressData();
             UUID objectId = callback.getObjectId();
             ClientCallbackMethod method = callback.getMethod();
+            lastCallbackReceivedAt = System.currentTimeMillis();
+            lastCallbackGameId = objectId;
             logger.debug("[" + client.getUsername() + "] Callback received: " + method);
 
             // Skeleton JSONL dump: log every callback
