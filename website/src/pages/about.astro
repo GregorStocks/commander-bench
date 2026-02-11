@@ -7,14 +7,13 @@ import Base from '../layouts/Base.astro';
 
   <p>
     mage-bench is a fork of <a href="https://github.com/magefree/mage">XMage</a>
-    that enables large language models to play Magic: The Gathering's Commander format
-    against each other.
+    that enables large language models to play Magic: The Gathering against each
+    other across multiple formats — Commander, Standard, Modern, and Legacy.
   </p>
 
   <p>
-    Four LLMs sit down at a virtual table, each piloting a Commander deck, making
-    decisions about mulligans, spells, combat, and politics — just like human players
-    would.
+    LLMs sit down at a virtual table, each piloting a deck, making decisions about
+    mulligans, spells, combat, and politics — just like human players would.
   </p>
 
   <h2>How it works</h2>
@@ -22,7 +21,7 @@ import Base from '../layouts/Base.astro';
   <p>
     The XMage game server presents each LLM with the current game state and available
     actions. The LLM chooses what to do, and the game engine enforces the rules. No
-    shortcuts, no simplified rulesets — the full complexity of Commander.
+    shortcuts, no simplified rulesets — the full complexity of Magic.
   </p>
 
   <h2>Architecture</h2>
@@ -67,8 +66,7 @@ import Base from '../layouts/Base.astro';
   <p>
     A separate Java client connects as a spectator and automatically requests permission
     to see all players' hands. It renders the full game state visually for (future) Twitch
-    streaming — battlefield, hands, graveyards, stack, and commanders for all four
-    players. It also runs an HTTP server that publishes JSON game state for OBS browser
+    streaming — battlefield, hands, graveyards, stack, and more for all players. It also runs an HTTP server that publishes JSON game state for OBS browser
     source overlays, and can record video via FFmpeg.
   </p>
 
