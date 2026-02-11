@@ -70,10 +70,16 @@
   color: #e0e0e0;
 }
 
-.player-name.active-player {
+.player-name.has-priority {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Active turn: accent-colored outline on entire player card */
+.player-card.player-0.active-turn { border: 2px solid #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.3); }
+.player-card.player-1.active-turn { border: 2px solid #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.3); }
+.player-card.player-2.active-turn { border: 2px solid #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.3); }
+.player-card.player-3.active-turn { border: 2px solid #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.3); }
 
 .player-life {
   font-size: 0.85rem;

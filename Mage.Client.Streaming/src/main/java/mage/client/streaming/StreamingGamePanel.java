@@ -46,6 +46,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import javax.swing.*;
+import javax.swing.border.Border;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.FileWriter;
@@ -223,6 +224,7 @@ public class StreamingGamePanel extends GamePanel {
             }
         }
         stylePlayerPanels();
+        updatePlayerHighlights(game);
         // Schedule auto-dismissal of any popup dialogs created during init
         schedulePopupDismissal();
         pushOverlayState(game, true);
@@ -253,6 +255,8 @@ public class StreamingGamePanel extends GamePanel {
         replaceAvatarsWithCommanderArt(game);
         // Clean up player panels (hide redundant elements)
         updatePlayerPanelVisibility(game);
+        // Update active turn / priority borders
+        updatePlayerHighlights(game);
         // Re-layout stack cards vertically (parent lays them out horizontally)
         relayoutStackVertically();
         writeStateSnapshotIfChanged(game);
@@ -359,9 +363,9 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
-     * Apply per-player background colors and accent borders to PlayAreaPanels.
-     * Each player gets a distinct dark-tinted background and a colored left border
-     * matching the website accent colors.
+     * Apply per-player background colors to PlayAreaPanels (one-shot).
+     * Each player gets a distinct dark-tinted background matching the website accent colors.
+     * Borders are handled dynamically by updatePlayerHighlights().
      */
     private void stylePlayerPanels() {
         if (playerPanelsStyled || playerColorIndices.isEmpty()) {
@@ -378,18 +382,62 @@ public class StreamingGamePanel extends GamePanel {
                 continue;
             }
 
-            Color accent = PLAYER_ACCENT_COLORS[colorIdx];
             Color bgTint = PLAYER_BG_COLORS[colorIdx];
-
             playArea.setOpaque(true);
             playArea.setBackground(bgTint);
-            playArea.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Color.WHITE, 2),
-                BorderFactory.createEmptyBorder(2, 2, 2, 2)
-            ));
         }
 
         playerPanelsStyled = true;
+    }
+
+    /**
+     * Update player panel borders dynamically based on game state.
+     * - Active turn player: thick (3px) accent-colored border
+     * - Priority player (when different from active): white 2px border
+     * - Other players: dim gray 1px border
+     */
+    private void updatePlayerHighlights(GameView game) {
+        if (game == null || game.getPlayers() == null || playerColorIndices.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            PlayAreaPanel playArea = players.get(playerId);
+            if (playArea == null) {
+                continue;
+            }
+
+            Integer colorIdx = playerColorIndices.get(playerId);
+            if (colorIdx == null) {
+                continue;
+            }
+
+            Border border;
+            if (player.isActive()) {
+                // Active turn: thick accent-colored border
+                Color accent = PLAYER_ACCENT_COLORS[colorIdx];
+                border = BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(accent, 3),
+                    BorderFactory.createEmptyBorder(1, 1, 1, 1)
+                );
+            } else if (player.hasPriority()) {
+                // Has priority but not active turn: white border
+                border = BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(Color.WHITE, 2),
+                    BorderFactory.createEmptyBorder(2, 2, 2, 2)
+                );
+            } else {
+                // Neither: dim border
+                border = BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(0x44, 0x44, 0x44), 1),
+                    BorderFactory.createEmptyBorder(3, 3, 3, 3)
+                );
+            }
+            playArea.setBorder(border);
+        }
     }
 
     /**
@@ -1784,6 +1832,7 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.addProperty("libraryCount", player.getLibraryCount());
             playerJson.addProperty("handCount", player.getHandCount());
             playerJson.addProperty("isActive", player.isActive());
+            playerJson.addProperty("hasPriority", player.hasPriority());
             playerJson.addProperty("hasLeft", player.hasLeft());
             playerJson.addProperty("timerActive", player.isTimerActive());
             playerJson.addProperty("priorityTimeLeftSecs", player.getPriorityTimeLeftSecs());
