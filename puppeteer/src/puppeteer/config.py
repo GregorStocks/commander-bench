@@ -99,6 +99,20 @@ class Config:
             opts.append("-Dapple.awt.UIElement=true")
         return " ".join(opts)
 
+    @property
+    def run_tag(self) -> str:
+        """Derive run tag from config filename for per-target last symlinks."""
+        assert self.config_file is not None, "run_tag requires config_file to be set"
+        name = self.config_file.name
+        if name == "ai-harness-config.json":
+            return "dumb"
+        stem = self.config_file.stem
+        prefix = "ai-harness-"
+        suffix = "-config"
+        if stem.startswith(prefix) and stem.endswith(suffix):
+            return stem[len(prefix) : -len(suffix)]
+        return stem
+
     # CLI options
     config_file: Path | None = None
     streaming: bool = False

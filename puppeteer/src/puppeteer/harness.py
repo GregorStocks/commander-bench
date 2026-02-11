@@ -851,10 +851,18 @@ def main() -> int:
         server_log = game_dir / "server.log"
         observer_log = game_dir / "observer.log"
 
-        # Update "last" symlink to point to this game directory
-        last_link = log_dir / "last"
+        # Update per-target "last-{tag}" symlink to point to this game directory
+        last_link = log_dir / f"last-{config.run_tag}"
         last_link.unlink(missing_ok=True)
         last_link.symlink_to(game_dir.name)
+
+        # Update per-branch symlink so agents can find their own recent runs
+        branch = _git("rev-parse --abbrev-ref HEAD")
+        if branch:
+            safe_branch = branch.replace("/", "-")
+            branch_link = log_dir / f"last-branch-{safe_branch}"
+            branch_link.unlink(missing_ok=True)
+            branch_link.symlink_to(game_dir.name)
 
         print(f"Game logs: {game_dir}")
         print(f"Server log: {server_log}")

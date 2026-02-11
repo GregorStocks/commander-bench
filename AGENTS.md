@@ -98,9 +98,44 @@ make run-dumb ARGS="--config myconfig.json"
 
 Recordings are saved to `~/mage-bench-logs/` by default.
 
+## Local Testing
+
+When running games for testing or verification, **only use free targets** that don't consume API tokens:
+
+```bash
+make run-dumb          # No API keys needed
+make run-legacy-dumb   # No API keys needed (Legacy format)
+make run-staller       # No API keys needed (standalone staller server)
+```
+
+**Never run** `run-llm`, `run-llm4`, or `run-legacy-llm` — these consume real API tokens and cost money.
+
+## Coding Style: Fail Fast
+
+Don't invent default behavior for unexpected states. If a value shouldn't be None, assert or raise — don't silently return a made-up fallback. Failing loudly surfaces bugs immediately; silent defaults hide them.
+
+```python
+# Bad: hides the bug
+if self.config_file is None:
+    return "dumb"
+
+# Good: surfaces the bug
+assert self.config_file is not None, "run_tag requires config_file to be set"
+```
+
 ## Logging
 
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
+
+Symlinks for quick access (all relative, inside `~/mage-bench-logs/`):
+- `last-dumb`, `last-llm4`, etc. — most recent run per Makefile target
+- `last-branch-{name}` — most recent run on a given git branch (slashes replaced with dashes)
+
+After running a game on your branch, check your branch symlink first:
+
+```bash
+ls -l ~/mage-bench-logs/last-branch-GregorStocks-my-branch
+```
 
 ## UI Terminology
 

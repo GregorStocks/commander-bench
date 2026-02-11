@@ -4,6 +4,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from puppeteer.config import ChatterboxPlayer, Config, CpuPlayer, PilotPlayer, PotatoPlayer
 
 
@@ -138,3 +140,39 @@ def test_config_default_player_name():
         assert config.cpu_players[0].name == "player-1"
     finally:
         config_path.unlink()
+
+
+def test_run_tag_no_config_file_raises():
+    config = Config()
+    with pytest.raises(AssertionError, match="run_tag requires config_file"):
+        _ = config.run_tag
+
+
+def test_run_tag_dumb():
+    config = Config(config_file=Path("puppeteer/ai-harness-config.json"))
+    assert config.run_tag == "dumb"
+
+
+def test_run_tag_llm():
+    config = Config(config_file=Path("puppeteer/ai-harness-llm-config.json"))
+    assert config.run_tag == "llm"
+
+
+def test_run_tag_llm4():
+    config = Config(config_file=Path("puppeteer/ai-harness-llm4-config.json"))
+    assert config.run_tag == "llm4"
+
+
+def test_run_tag_legacy_dumb():
+    config = Config(config_file=Path("puppeteer/ai-harness-legacy-dumb-config.json"))
+    assert config.run_tag == "legacy-dumb"
+
+
+def test_run_tag_legacy_llm():
+    config = Config(config_file=Path("puppeteer/ai-harness-legacy-llm-config.json"))
+    assert config.run_tag == "legacy-llm"
+
+
+def test_run_tag_unknown_format():
+    config = Config(config_file=Path("custom-thing.json"))
+    assert config.run_tag == "custom-thing"
