@@ -1,5 +1,42 @@
 [
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "action_pending",
+          "description": "Whether a game action is waiting for your response",
+          "type": "boolean"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "action_type",
+          "description": "XMage callback method name (e.g. GAME_SELECT, GAME_TARGET)",
+          "type": "string"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "message",
+          "description": "Human-readable prompt for the action",
+          "type": "string"
+        },
+        {
+          "name": "game_over",
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Action pending",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
+      },
+      {
+        "label": "No action",
+        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -9,6 +46,44 @@
     "description": "Check if game action is currently required. Returns action_pending, and if true: action_type and message."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "success",
+          "description": "Whether the action was executed successfully",
+          "type": "boolean"
+        },
+        {
+          "conditional": "success=true",
+          "name": "action_type",
+          "description": "The callback method that was handled",
+          "type": "string"
+        },
+        {
+          "conditional": "success=true",
+          "name": "action_taken",
+          "description": "Description of what was done (e.g. \"passed_priority\")",
+          "type": "string"
+        },
+        {
+          "conditional": "success=false",
+          "name": "error",
+          "description": "Error message",
+          "type": "string"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Success",
+        "value": "{\n  \"success\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"action_taken\": \"passed_priority\"\n}"
+      },
+      {
+        "label": "No pending action",
+        "value": "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -18,6 +93,32 @@
     "description": "Execute default action (pass priority or first available choice)"
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "log",
+          "description": "Game log text (may be truncated if max_chars was set)",
+          "type": "string"
+        },
+        {
+          "name": "total_length",
+          "description": "Total length of the full game log in characters",
+          "type": "integer"
+        },
+        {
+          "name": "truncated",
+          "description": "Whether the log was truncated",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Truncated log",
+        "value": "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\",\n  \"total_length\": 5234,\n  \"truncated\": true\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -32,6 +133,22 @@
     "description": "Get game log text. Returns log, total_length, truncated. Use max_chars for recent entries only."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "success",
+          "description": "Whether the message was sent",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Success",
+        "value": "{\n  \"success\": true\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -49,6 +166,43 @@
     "description": "Send a chat message to the game"
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "action_pending",
+          "description": "Whether a game action is waiting for your response",
+          "type": "boolean"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "action_type",
+          "description": "XMage callback method name",
+          "type": "string"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "message",
+          "description": "Human-readable prompt for the action",
+          "type": "string"
+        },
+        {
+          "name": "game_over",
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Action arrived",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
+      },
+      {
+        "label": "Timeout",
+        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -63,6 +217,71 @@
     "description": "Block until a game action is required, or timeout. Returns action_pending, action_type, message."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "action_pending",
+          "description": "Whether a decision-requiring action was found",
+          "type": "boolean"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "action_type",
+          "description": "XMage callback method name",
+          "type": "string"
+        },
+        {
+          "name": "actions_passed",
+          "description": "Number of priority passes performed",
+          "type": "integer"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "has_playable_cards",
+          "description": "Whether you have playable cards in hand",
+          "type": "boolean"
+        },
+        {
+          "conditional": "In combat",
+          "name": "combat_phase",
+          "description": "\"declare_attackers\" or \"declare_blockers\"",
+          "type": "string"
+        },
+        {
+          "conditional": "Chat received",
+          "name": "recent_chat",
+          "description": "Chat messages received since last check",
+          "type": "array[string]"
+        },
+        {
+          "conditional": "Player died",
+          "name": "player_dead",
+          "description": "Whether you died during priority passing",
+          "type": "boolean"
+        },
+        {
+          "conditional": "Timeout",
+          "name": "timeout",
+          "description": "Whether the operation timed out",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Playable cards found",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 3,\n  \"has_playable_cards\": true\n}"
+      },
+      {
+        "label": "Combat phase",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\"\n}"
+      },
+      {
+        "label": "Timeout",
+        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -74,9 +293,46 @@
       }
     },
     "name": "pass_priority",
-    "description": "Auto-pass priority until you need to make a decision: playable cards, combat (declare attackers/blockers), or non-priority actions. Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. On timeout: action_pending\u003dfalse, timeout\u003dtrue."
+    "description": "Auto-pass priority until you need to make a decision: playable cards, combat (declare attackers/blockers), or non-priority actions. Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. On timeout: action_pending=false, timeout=true."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "event_occurred",
+          "description": "Whether a meaningful game state change was detected",
+          "type": "boolean"
+        },
+        {
+          "name": "new_log",
+          "description": "New game log entries since the call started",
+          "type": "string"
+        },
+        {
+          "name": "actions_taken",
+          "description": "Number of actions auto-handled",
+          "type": "integer"
+        },
+        {
+          "name": "game_over",
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        },
+        {
+          "conditional": "Player died",
+          "name": "player_dead",
+          "description": "Whether you died during auto-passing",
+          "type": "boolean"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Event occurred",
+        "value": "{\n  \"event_occurred\": true,\n  \"new_log\": \"Player2 casts Lightning Bolt targeting Player1.\\nPlayer1 loses 3 life.\",\n  \"actions_taken\": 4,\n  \"game_over\": false\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -95,6 +351,69 @@
     "description": "Auto-handle all actions and block until meaningful game state change. Returns event_occurred, new_log, actions_taken."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "available",
+          "description": "Whether game state is available",
+          "type": "boolean"
+        },
+        {
+          "conditional": "available=false",
+          "name": "error",
+          "description": "Error message",
+          "type": "string"
+        },
+        {
+          "name": "turn",
+          "description": "Current turn number",
+          "type": "integer"
+        },
+        {
+          "name": "phase",
+          "description": "Current phase (e.g. PRECOMBAT_MAIN, COMBAT)",
+          "type": "string"
+        },
+        {
+          "name": "step",
+          "description": "Current step within the phase",
+          "type": "string"
+        },
+        {
+          "name": "active_player",
+          "description": "Name of the player whose turn it is",
+          "type": "string"
+        },
+        {
+          "name": "priority_player",
+          "description": "Name of the player who currently has priority",
+          "type": "string"
+        },
+        {
+          "name": "players",
+          "description": "Player objects: name, life, library_size, hand_size, is_active, is_you, hand (yours only), battlefield, graveyard, exile, mana_pool, counters, commanders",
+          "type": "array[object]"
+        },
+        {
+          "name": "stack",
+          "description": "Stack objects: name, rules, target_count",
+          "type": "array[object]"
+        },
+        {
+          "conditional": "During combat",
+          "name": "combat",
+          "description": "Combat groups: attackers, blockers, blocked, defending",
+          "type": "array[object]"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Mid-game state",
+        "value": "{\n  \"available\": true,\n  \"turn\": 4,\n  \"phase\": \"PRECOMBAT_MAIN\",\n  \"step\": \"PRECOMBAT_MAIN\",\n  \"active_player\": \"Player1\",\n  \"priority_player\": \"Player1\",\n  \"players\": [\n    {\n      \"name\": \"Player1\",\n      \"life\": 18,\n      \"library_size\": 49,\n      \"hand_size\": 5,\n      \"is_active\": true,\n      \"is_you\": true,\n      \"hand\": [\n        { \"name\": \"Lightning Bolt\", \"mana_cost\": \"{R}\", \"mana_value\": 1, \"playable\": true },\n        { \"name\": \"Mountain\", \"mana_value\": 0, \"is_land\": true, \"playable\": true }\n      ],\n      \"battlefield\": [\n        { \"name\": \"Mountain\", \"tapped\": false },\n        { \"name\": \"Goblin Guide\", \"tapped\": false, \"power\": 2, \"toughness\": 2 }\n      ],\n      \"mana_pool\": { \"R\": 0 }\n    },\n    {\n      \"name\": \"Player2\",\n      \"life\": 20,\n      \"library_size\": 52,\n      \"hand_size\": 7,\n      \"is_active\": false,\n      \"is_you\": false,\n      \"battlefield\": [\n        { \"name\": \"Island\", \"tapped\": false }\n      ]\n    }\n  ],\n  \"stack\": []\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -104,6 +423,54 @@
     "description": "Get full game state: turn, phase, players, stack, combat. Each player has life, mana_pool, hand (yours only), battlefield (name, tapped, P/T, counters, token/copy/face_down flags), graveyard, exile, commanders."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "success",
+          "description": "Whether the lookup succeeded",
+          "type": "boolean"
+        },
+        {
+          "conditional": "Single card or object_id lookup",
+          "name": "name",
+          "description": "Card name",
+          "type": "string"
+        },
+        {
+          "conditional": "Single card or object_id lookup",
+          "name": "rules",
+          "description": "Oracle text lines",
+          "type": "array[string]"
+        },
+        {
+          "conditional": "Batch lookup (card_names)",
+          "name": "cards",
+          "description": "Array of {name, rules} or {name, error} per card",
+          "type": "array[object]"
+        },
+        {
+          "conditional": "success=false",
+          "name": "error",
+          "description": "Error message",
+          "type": "string"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Single card",
+        "value": "{\n  \"success\": true,\n  \"name\": \"Lightning Bolt\",\n  \"rules\": [\"Deal 3 damage to any target.\"]\n}"
+      },
+      {
+        "label": "Batch lookup",
+        "value": "{\n  \"success\": true,\n  \"cards\": [\n    { \"name\": \"Lightning Bolt\", \"rules\": [\"Deal 3 damage to any target.\"] },\n    { \"name\": \"Counterspell\", \"rules\": [\"Counter target spell.\"] }\n  ]\n}"
+      },
+      {
+        "label": "Not found",
+        "value": "{\n  \"success\": false,\n  \"error\": \"not found\"\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -129,6 +496,95 @@
     "description": "Get oracle text (rules) for cards. Provide exactly one of: card_name (single), card_names (batch array), or object_id (in-game object). Single returns {name, rules}. Batch returns {cards: [{name, rules}, ...]}."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "action_pending",
+          "description": "Whether an action is pending (false if nothing to do)",
+          "type": "boolean"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "action_type",
+          "description": "XMage callback method name",
+          "type": "string"
+        },
+        {
+          "conditional": "action_pending=true",
+          "name": "message",
+          "description": "Human-readable prompt from XMage",
+          "type": "string"
+        },
+        {
+          "name": "response_type",
+          "description": "How to respond: \"select\", \"boolean\", \"index\", \"amount\", \"pile\", or \"multi_amount\"",
+          "type": "string"
+        },
+        {
+          "name": "context",
+          "description": "Turn/phase context (e.g. \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\")",
+          "type": "string"
+        },
+        {
+          "name": "players",
+          "description": "Life total summary (e.g. \"You(20), Opp(18)\")",
+          "type": "string"
+        },
+        {
+          "conditional": "select, index, or pile response_type",
+          "name": "choices",
+          "description": "Available choices with name, type, index, and type-specific fields",
+          "type": "array[object]"
+        },
+        {
+          "conditional": "Mulligan decisions",
+          "name": "your_hand",
+          "description": "Hand cards with name, mana_cost, mana_value",
+          "type": "array[object]"
+        },
+        {
+          "conditional": "During combat",
+          "name": "combat_phase",
+          "description": "\"declare_attackers\" or \"declare_blockers\"",
+          "type": "string"
+        },
+        {
+          "conditional": "Mana payment",
+          "name": "mana_pool",
+          "description": "Current mana pool {R, G, U, W, B, C}",
+          "type": "object"
+        },
+        {
+          "conditional": "Mana payment",
+          "name": "untapped_lands",
+          "description": "Number of untapped lands",
+          "type": "integer"
+        },
+        {
+          "conditional": "amount response_type",
+          "name": "min_amount",
+          "description": "Minimum allowed value",
+          "type": "integer"
+        },
+        {
+          "conditional": "amount response_type",
+          "name": "max_amount",
+          "description": "Maximum allowed value",
+          "type": "integer"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Select (play cards)",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"response_type\": \"select\",\n  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n  \"players\": \"You(20), Opp(18)\",\n  \"choices\": [\n    { \"name\": \"Lightning Bolt\", \"type\": \"card\", \"mana_cost\": \"{R}\", \"mana_value\": 1, \"playable_abilities\": [\"Cast Lightning Bolt\"], \"index\": 0 },\n    { \"name\": \"Mountain\", \"type\": \"card\", \"playable_abilities\": [\"Play Mountain\"], \"index\": 1 }\n  ],\n  \"untapped_lands\": 2\n}"
+      },
+      {
+        "label": "Boolean (mulligan)",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_ASK\",\n  \"message\": \"Mulligan hand?\",\n  \"response_type\": \"boolean\",\n  \"context\": \"T0 PREGAME\",\n  \"players\": \"You(20), Opp(20)\",\n  \"your_hand\": [\n    { \"name\": \"Mountain\", \"mana_value\": 0, \"is_land\": true },\n    { \"name\": \"Lightning Bolt\", \"mana_cost\": \"{R}\", \"mana_value\": 1 }\n  ],\n  \"hand_size\": 7,\n  \"land_count\": 3\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -138,6 +594,48 @@
     "description": "Get available choices for the current pending action. Call before choose_action. Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "success",
+          "description": "Whether the action was accepted",
+          "type": "boolean"
+        },
+        {
+          "conditional": "success=true",
+          "name": "action_taken",
+          "description": "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\")",
+          "type": "string"
+        },
+        {
+          "conditional": "success=false",
+          "name": "error",
+          "description": "Error message",
+          "type": "string"
+        },
+        {
+          "conditional": "Loop detection",
+          "name": "warning",
+          "description": "Warning (e.g. possible game loop detected)",
+          "type": "string"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Index selection",
+        "value": "{\n  \"success\": true,\n  \"action_taken\": \"selected_0\"\n}"
+      },
+      {
+        "label": "Boolean answer",
+        "value": "{\n  \"success\": true,\n  \"action_taken\": \"no\"\n}"
+      },
+      {
+        "label": "Error",
+        "value": "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
@@ -147,7 +645,7 @@
           "type": "integer"
         },
         "answer": {
-          "description": "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. For mulligan: true \u003d YES MULLIGAN (discard hand, draw new cards), false \u003d NO KEEP (keep this hand). For GAME_SELECT: false \u003d pass priority (done playing cards this phase), true \u003d confirm combat (done declaring attackers/blockers). Also false to cancel target/mana selection.",
+          "description": "Yes/No response. For GAME_ASK: true means YES to the question, false means NO. For mulligan: true = YES MULLIGAN (discard hand, draw new cards), false = NO KEEP (keep this hand). For GAME_SELECT: false = pass priority (done playing cards this phase), true = confirm combat (done declaring attackers/blockers). Also false to cancel target/mana selection.",
           "type": "boolean"
         },
         "amounts": {
@@ -172,9 +670,37 @@
       }
     },
     "name": "choose_action",
-    "description": "Respond to pending action. Use index to pick a choice (card, attacker, blocker, target, ability, mana source). Use answer for yes/no, pass priority, or confirm combat (true\u003dconfirm attackers/blockers). Call get_action_choices first."
+    "description": "Respond to pending action. Use index to pick a choice (card, attacker, blocker, target, ability, mana source). Use answer for yes/no, pass priority, or confirm combat (true=confirm attackers/blockers). Call get_action_choices first."
   },
   {
+    "outputSchema": {
+      "type": "object",
+      "fields": [
+        {
+          "name": "cards",
+          "description": "Main deck cards, one per line (e.g. \"4x Lightning Bolt\")",
+          "type": "string"
+        },
+        {
+          "conditional": "Deck has sideboard",
+          "name": "sideboard",
+          "description": "Sideboard cards, same format",
+          "type": "string"
+        },
+        {
+          "conditional": "No deck loaded",
+          "name": "error",
+          "description": "Error message",
+          "type": "string"
+        }
+      ]
+    },
+    "examples": [
+      {
+        "label": "Decklist loaded",
+        "value": "{\n  \"cards\": \"4x Lightning Bolt\\n4x Goblin Guide\\n20x Mountain\",\n  \"sideboard\": \"2x Smash to Smithereens\\n3x Eidolon of the Great Revel\"\n}"
+      }
+    ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",

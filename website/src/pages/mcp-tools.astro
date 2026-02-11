@@ -16,7 +16,7 @@ const categories = [
   {
     title: 'Game State',
     description: 'Tools for observing the game.',
-    tools: ['get_game_state', 'get_game_log', 'get_oracle_text'],
+    tools: ['get_game_state', 'get_game_log', 'get_oracle_text', 'get_my_decklist'],
   },
   {
     title: 'Communication',
@@ -36,6 +36,15 @@ function getProperties(tool: any) {
     required: required.includes(name),
     description: schema.description,
     items: schema.items,
+  }));
+}
+
+function getOutputFields(tool: any) {
+  return (tool.outputSchema?.fields ?? []).map((f: any) => ({
+    name: f.name,
+    type: f.type,
+    description: f.description,
+    conditional: f.conditional || null,
   }));
 }
 ---
@@ -60,34 +69,78 @@ function getProperties(tool: any) {
         if (!tool) return null;
         const props = getProperties(tool);
 
+        const outputFields = getOutputFields(tool);
+        const examples = tool.examples ?? [];
+
         return (
           <div class="tool">
             <h3><code>{tool.name}</code></h3>
             <p class="tool-desc">{tool.description}</p>
 
             {props.length > 0 ? (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Parameter</th>
-                    <th>Type</th>
-                    <th>Required</th>
-                    <th>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {props.map(prop => (
+              <>
+                <h4>Parameters</h4>
+                <table>
+                  <thead>
                     <tr>
-                      <td><code>{prop.name}</code></td>
-                      <td>{prop.type}{prop.items ? `[${prop.items.type}]` : ''}</td>
-                      <td>{prop.required ? 'Yes' : 'No'}</td>
-                      <td>{prop.description}</td>
+                      <th>Parameter</th>
+                      <th>Type</th>
+                      <th>Required</th>
+                      <th>Description</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {props.map(prop => (
+                      <tr>
+                        <td><code>{prop.name}</code></td>
+                        <td>{prop.type}{prop.items ? `[${prop.items.type}]` : ''}</td>
+                        <td>{prop.required ? 'Yes' : 'No'}</td>
+                        <td>{prop.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
             ) : (
               <p class="no-params">No parameters.</p>
+            )}
+
+            {outputFields.length > 0 && (
+              <>
+                <h4>Response</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Field</th>
+                      <th>Type</th>
+                      <th>Condition</th>
+                      <th>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outputFields.map(field => (
+                      <tr>
+                        <td><code>{field.name}</code></td>
+                        <td>{field.type}</td>
+                        <td class="condition">{field.conditional ?? 'Always'}</td>
+                        <td>{field.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {examples.length > 0 && (
+              <details class="examples">
+                <summary>Example response{examples.length > 1 ? 's' : ''}</summary>
+                {examples.map(ex => (
+                  <div class="example">
+                    {ex.label && <p class="example-label">{ex.label}</p>}
+                    <pre><code>{ex.value}</code></pre>
+                  </div>
+                ))}
+              </details>
             )}
           </div>
         );
@@ -181,6 +234,59 @@ function getProperties(tool: any) {
     font-style: italic;
     font-size: 0.9rem;
     margin-bottom: 0;
+  }
+
+  h4 {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    margin: 1rem 0 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .condition {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .examples {
+    margin-top: 0.75rem;
+  }
+
+  .examples summary {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    padding: 0.25rem 0;
+  }
+
+  .examples summary:hover {
+    color: #e94560;
+  }
+
+  .example-label {
+    color: #a0a0b8;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin: 0.5rem 0 0.25rem;
+  }
+
+  pre {
+    background: #0d1b2a;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 0.75rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    margin: 0 0 0.5rem;
+    line-height: 1.5;
+  }
+
+  pre code {
+    color: #c0c0d0;
   }
 
   .source-link {
