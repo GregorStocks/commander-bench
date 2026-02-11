@@ -194,8 +194,6 @@
     "anthropic/claude-haiku-4.5",
     "google/gemini-2.5-flash",
     "google/gemini-3-flash-preview",
-    "openai/o3"
-    "deepseek/deepseek-r1"
   ],
   "recommendations": {
     "primary_test_set": [
