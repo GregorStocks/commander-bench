@@ -18,8 +18,11 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
    for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r .title "$f")"; done
    ```
 
-4. **Use parallel agents** to analyze different log types simultaneously:
+4. **Use parallel agents** to analyze different log types simultaneously.
 
+   **Pay particular attention to chat messages** — they're the most human-readable signal about what went wrong. XMage sends game-state information, error messages, and rule explanations through chat. Players also chat when confused or stuck. Always read chat messages early and use them to guide your investigation of other log files.
+
+   - **Chat messages**: Extract `player_chat` events from `game_events.jsonl` (`jq 'select(.type=="player_chat")' game_events.jsonl`). Look for XMage system messages about illegal actions, failed spell resolutions, mana payment problems, and rule enforcement. Look for player messages that reveal confusion or frustration. Chat messages often point directly at the root cause before you even open error logs.
    - **Error logs**: Read `*_errors.log` files. Look for Java exceptions (NPE, IndexOutOfBounds, ClassCast), MCP tool failures, and stack traces. Note the exact filename and line numbers.
    - **Pilot logs**: Read `*_pilot.log` files. Look for LLM decision failures, repeated tool call patterns (loops), models sending wrong parameters, empty responses, and context trimming warnings.
    - **Bridge logs**: Read `*_bridge.jsonl` files. Look for repeated identical MCP calls (loop signatures), failed actions, "Index out of range" errors, and action sequences that suggest confusion (e.g., cast → cancel → cast → cancel).
@@ -63,3 +66,5 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 9. **Optionally check multiple recent games** — if the most recent game is clean, look at 2-3 recent games to find patterns. Bugs that reproduce across games are higher priority.
 
 10. Present a summary of all issues created, grouped by priority. For model-only issues, mention them in the summary but note they don't need code fixes.
+
+11. **Document useful log investigation tricks.** If you discovered any useful jq queries, grep patterns, cross-referencing techniques, or other tricks for investigating game logs during this analysis, append them to `doc/investigating-game-logs.md`. Don't duplicate what's already there — read the file first. This builds up a shared knowledge base over time.
