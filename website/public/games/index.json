@@ -1,5 +1,42 @@
 [
   {
+    "id": "game_20260210_194959",
+    "timestamp": "20260210_194959",
+    "totalTurns": 11,
+    "winner": "Haiku4.5 Sarge",
+    "players": [
+      {
+        "name": "Gem3 ESPN",
+        "type": "pilot",
+        "commander": "Wyleth, Soul of Steel",
+        "model": "google/gemini-3-flash-preview",
+        "totalCostUsd": 1.7678
+      },
+      {
+        "name": "Haiku4.5 Sarge",
+        "type": "pilot",
+        "commander": "Saskia the Unyielding",
+        "model": "anthropic/claude-haiku-4.5",
+        "totalCostUsd": 3.4747
+      },
+      {
+        "name": "Gem2.5 Villain",
+        "type": "pilot",
+        "commander": "Kalemne, Disciple of Iroas",
+        "model": "google/gemini-2.5-flash",
+        "totalCostUsd": 0.8769
+      },
+      {
+        "name": "Haiku4.5 Truth",
+        "type": "pilot",
+        "commander": "Kathril, Aspect Warper",
+        "model": "anthropic/claude-haiku-4.5",
+        "totalCostUsd": 0.9937
+      }
+    ],
+    "youtubeUrl": "https://youtu.be/Buya5Be3Z40"
+  },
+  {
     "id": "game_20260210_170138",
     "timestamp": "20260210_170138",
     "totalTurns": 12,
