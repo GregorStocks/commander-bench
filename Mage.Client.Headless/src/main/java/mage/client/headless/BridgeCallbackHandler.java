@@ -1593,6 +1593,14 @@ public class BridgeCallbackHandler {
         return "";
     }
 
+    private String safeDisplayName(CardView cv) {
+        String name = cv.getDisplayName();
+        if (name == null) {
+            name = cv.getName() != null ? cv.getName() : "Unknown";
+        }
+        return name;
+    }
+
     private String buildCardDescription(CardView cv) {
         String displayName = cv.getDisplayName();
         if (displayName == null) {
@@ -2082,7 +2090,7 @@ public class BridgeCallbackHandler {
                 for (Map.Entry<UUID, CardView> handEntry : gameView.getMyHand().entrySet()) {
                     CardView card = handEntry.getValue();
                     Map<String, Object> cardInfo = new HashMap<>();
-                    cardInfo.put("name", card.getDisplayName());
+                    cardInfo.put("name", safeDisplayName(card));
 
                     String manaCost = card.getManaCostStr();
                     if (manaCost != null && !manaCost.isEmpty()) {
@@ -2111,7 +2119,7 @@ public class BridgeCallbackHandler {
             if (player.getBattlefield() != null) {
                 for (PermanentView perm : player.getBattlefield().values()) {
                     Map<String, Object> permInfo = new HashMap<>();
-                    permInfo.put("name", perm.getDisplayName());
+                    permInfo.put("name", safeDisplayName(perm));
                     permInfo.put("tapped", perm.isTapped());
 
                     // P/T for creatures
@@ -2166,7 +2174,7 @@ public class BridgeCallbackHandler {
             List<String> graveyard = new ArrayList<>();
             if (player.getGraveyard() != null) {
                 for (CardView card : player.getGraveyard().values()) {
-                    graveyard.add(card.getDisplayName());
+                    graveyard.add(safeDisplayName(card));
                 }
             }
             if (!graveyard.isEmpty()) {
@@ -2177,7 +2185,7 @@ public class BridgeCallbackHandler {
             List<String> exileCards = new ArrayList<>();
             if (player.getExile() != null) {
                 for (CardView card : player.getExile().values()) {
-                    exileCards.add(card.getDisplayName());
+                    exileCards.add(safeDisplayName(card));
                 }
             }
             if (!exileCards.isEmpty()) {
@@ -2228,7 +2236,7 @@ public class BridgeCallbackHandler {
         if (gameView.getStack() != null) {
             for (CardView card : gameView.getStack().values()) {
                 Map<String, Object> stackItem = new HashMap<>();
-                stackItem.put("name", card.getDisplayName());
+                stackItem.put("name", safeDisplayName(card));
                 stackItem.put("rules", card.getRules());
                 if (card.getTargets() != null && !card.getTargets().isEmpty()) {
                     stackItem.put("target_count", card.getTargets().size());
@@ -2246,7 +2254,7 @@ public class BridgeCallbackHandler {
                 List<Map<String, Object>> attackers = new ArrayList<>();
                 for (CardView attacker : group.getAttackers().values()) {
                     Map<String, Object> aInfo = new HashMap<>();
-                    aInfo.put("name", attacker.getDisplayName());
+                    aInfo.put("name", safeDisplayName(attacker));
                     if (attacker.getPower() != null) {
                         aInfo.put("power", attacker.getPower());
                         aInfo.put("toughness", attacker.getToughness());
@@ -2257,7 +2265,7 @@ public class BridgeCallbackHandler {
                 List<Map<String, Object>> blockers = new ArrayList<>();
                 for (CardView blocker : group.getBlockers().values()) {
                     Map<String, Object> bInfo = new HashMap<>();
-                    bInfo.put("name", blocker.getDisplayName());
+                    bInfo.put("name", safeDisplayName(blocker));
                     if (blocker.getPower() != null) {
                         bInfo.put("power", blocker.getPower());
                         bInfo.put("toughness", blocker.getToughness());

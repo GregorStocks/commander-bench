@@ -722,8 +722,8 @@ async def run_pilot_loop(
                 game_log.emit("llm_error", error_type=type(e).__name__, error_message=error_str[:500])
 
             # Permanent failures - fall back to auto-pass mode forever
-            if "402" in error_str or "404" in error_str:
-                reason = "Credits exhausted" if "402" in error_str else "Model not found"
+            if "402" in error_str or "403" in error_str or "404" in error_str:
+                reason = "Credits exhausted" if ("402" in error_str or "403" in error_str) else "Model not found"
                 _log_error(game_dir, username, f"[pilot] {reason}, switching to auto-pass mode")
                 if game_log:
                     game_log.emit("auto_pilot_mode", reason=reason)
