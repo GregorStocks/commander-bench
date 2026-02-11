@@ -1,0 +1,10 @@
+{
+  "title": "choose_action error responses don't include available choices",
+  "description": "When choose_action returns a validation error (wrong index, missing parameter), the error response doesn't include the available choices. The model has to make a separate get_action_choices call to discover valid options, wasting a round trip and causing retry loops.\n\nIn game_20260210_194959, Gem2.5 Villain hit this 10 times across mana payment (3 errors), target selection (2 errors), and index-out-of-range (5 errors). Each error required at least one extra round trip to recover.\n\nFixed by adding attachChoicesToError() helper that calls getActionChoices() and merges the choices into the error response. Applied to all 10 error paths in choose_action where the model could self-correct with choices:\n- GAME_SELECT: index out of range, no index/answer\n- GAME_PLAY_MANA: index out of range, no index/answer\n- GAME_TARGET: optional index out of range, optional no index/answer\n- GAME_CHOOSE_ABILITY: no index, index out of range\n- GAME_CHOOSE_CHOICE: no index/text, index out of range\n\nSource: SkeletonCallbackHandler.java — all error returns that set pendingAction = action",
+  "status": "resolved",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["headless-client"],
+  "created_at": "2026-02-10T20:00:00.000000-08:00",
+  "updated_at": "2026-02-10T20:00:00.000000-08:00"
+}

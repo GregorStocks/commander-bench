@@ -1041,6 +1041,17 @@ public class SkeletonCallbackHandler {
     }
 
     /**
+     * When choose_action fails validation, attach the available choices to the error response
+     * so the model can self-correct without a separate get_action_choices round trip.
+     */
+    private void attachChoicesToError(Map<String, Object> errorResult) {
+        Map<String, Object> choicesResult = getActionChoices();
+        if (choicesResult.containsKey("choices")) {
+            errorResult.put("choices", choicesResult.get("choices"));
+        }
+    }
+
+    /**
      * Respond to the current pending action with a specific choice.
      * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
      */
@@ -1122,6 +1133,7 @@ public class SkeletonCallbackHandler {
                                 result.put("success", false);
                                 result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                                 pendingAction = action;
+                                attachChoicesToError(result);
                                 return result;
                             }
                         } else {
@@ -1150,6 +1162,7 @@ public class SkeletonCallbackHandler {
                             result.put("success", false);
                             result.put("error", "Provide 'index' to play a card or 'answer: false' to pass priority");
                             pendingAction = action;
+                            attachChoicesToError(result);
                             return result;
                         }
                     }
@@ -1171,6 +1184,7 @@ public class SkeletonCallbackHandler {
                                 result.put("success", false);
                                 result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                                 pendingAction = action;
+                                attachChoicesToError(result);
                                 return result;
                             }
                         } else {
@@ -1212,6 +1226,7 @@ public class SkeletonCallbackHandler {
                             result.put("success", false);
                             result.put("error", "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel");
                             pendingAction = action;
+                            attachChoicesToError(result);
                             return result;
                         }
                     }
@@ -1240,6 +1255,7 @@ public class SkeletonCallbackHandler {
                             result.put("success", false);
                             result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                             pendingAction = action;
+                            attachChoicesToError(result);
                             return result;
                         }
                         logger.warn("[" + client.getUsername() + "] choose_action: index " + index
@@ -1259,6 +1275,7 @@ public class SkeletonCallbackHandler {
                         result.put("success", false);
                         result.put("error", "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
                         pendingAction = action;
+                        attachChoicesToError(result);
                         return result;
                     }
 
@@ -1283,6 +1300,7 @@ public class SkeletonCallbackHandler {
                         result.put("success", false);
                         result.put("error", "Integer 'index' required for GAME_CHOOSE_ABILITY");
                         pendingAction = action;
+                        attachChoicesToError(result);
                         return result;
                     }
                     List<Object> abilityChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
@@ -1290,6 +1308,7 @@ public class SkeletonCallbackHandler {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
+                        attachChoicesToError(result);
                         return result;
                     }
                     session.sendPlayerUUID(gameId, (UUID) abilityChoices.get(index));
@@ -1355,6 +1374,7 @@ public class SkeletonCallbackHandler {
                         result.put("success", false);
                         result.put("error", "Integer 'index' or string 'text' required for GAME_CHOOSE_CHOICE");
                         pendingAction = action;
+                        attachChoicesToError(result);
                         return result;
                     }
                     List<Object> choiceChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
@@ -1362,6 +1382,7 @@ public class SkeletonCallbackHandler {
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
+                        attachChoicesToError(result);
                         return result;
                     }
                     session.sendPlayerString(gameId, (String) choiceChoices.get(index));
