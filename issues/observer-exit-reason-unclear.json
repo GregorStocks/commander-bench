@@ -1,0 +1,10 @@
+{
+  "title": "Harness uses generic 'timeout_or_killed' when observer exits — no way to distinguish manual close from crash",
+  "description": "When the user manually closes the observer window, the harness injects a timeout_or_killed game_over event identical to what it writes for a server timeout or process crash. The game summary prints 'Game did not finish (killed or disconnected)' with no indication the user intentionally stopped it.\n\nMeanwhile the headless client processes keep running — in game_20260210_090609, the match continued for ~18 minutes after the observer was closed, wasting API credits.\n\nEvidence:\n- game_events.jsonl:436: {\"type\":\"game_over\",\"reason\":\"timeout_or_killed\",\"message\":\"Game ended (no GAME_OVER received)\"}\n- server.log:72: Second game started at 09:33:46, ~15 min after observer closed\n- Pilot error logs show continued activity until ~09:37\n- harness.py:954-960: observer_proc.wait() then _ensure_game_over_event() with no exit code inspection\n\nFix: Check observer process exit code (0 = window closed, non-zero = crash) and use specific reasons in the synthetic event. Update summary messages accordingly.",
+  "status": "closed",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-10T09:30:00.000000-08:00",
+  "updated_at": "2026-02-10T09:30:00.000000-08:00"
+}

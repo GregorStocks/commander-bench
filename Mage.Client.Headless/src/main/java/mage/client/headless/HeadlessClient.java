@@ -1,6 +1,7 @@
 package mage.client.headless;
 
 import mage.cards.decks.DeckCardLists;
+import mage.cards.repository.CardScanner;
 import mage.constants.TableState;
 import mage.players.PlayerType;
 import mage.players.net.UserData;
@@ -89,6 +90,11 @@ public class HeadlessClient {
         } catch (Exception ignored) {}
 
         logger.info("Starting headless client: " + username + "@" + server + ":" + port + " [" + personality + "]");
+
+        // Initialize card database so get_oracle_text can look up cards by name
+        logger.info("Loading card database...");
+        CardScanner.scan();
+        logger.info("Card database loaded.");
 
         SkeletonMageClient client = new SkeletonMageClient(username);
         Session session = new SessionImpl(client);
