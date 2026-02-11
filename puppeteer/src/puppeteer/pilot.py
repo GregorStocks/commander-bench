@@ -426,6 +426,9 @@ async def run_pilot_loop(
                 timeout=LLM_REQUEST_TIMEOUT_SECS,
             )
             consecutive_timeouts = 0
+            if not response.choices:
+                _log("[pilot] LLM returned empty/null choices, retrying...")
+                continue
             choice = response.choices[0]
 
             # Log full LLM request/response to trace file

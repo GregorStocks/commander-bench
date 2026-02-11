@@ -63,7 +63,7 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 
    Labels: `headless-client`, `puppeteer`, `pilot`, `streaming-client`
 
-9. **Optionally check multiple recent games** — if the most recent game is clean, look at 2-3 recent games to find patterns. Bugs that reproduce across games are higher priority.
+9. **Focus on a single game.** Only analyze the most recent game found in step 1. Do not look at older games — each analysis run should be scoped to one game to keep context focused and output actionable.
 
 10. Present a summary of all issues created, grouped by priority. For model-only issues, mention them in the summary but note they don't need code fixes.
 
