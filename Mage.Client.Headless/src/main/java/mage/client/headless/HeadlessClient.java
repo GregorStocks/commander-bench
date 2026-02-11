@@ -93,7 +93,12 @@ public class HeadlessClient {
 
         // Initialize card database so get_oracle_text can look up cards by name
         logger.info("Loading card database...");
-        CardScanner.scan();
+        java.io.File lockFile = new java.io.File("./db/cards.lock");
+        lockFile.getParentFile().mkdirs();
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(lockFile, "rw");
+             java.nio.channels.FileLock lock = raf.getChannel().lock()) {
+            CardScanner.scan();
+        }
         logger.info("Card database loaded.");
 
         BridgeMageClient client = new BridgeMageClient(username);
