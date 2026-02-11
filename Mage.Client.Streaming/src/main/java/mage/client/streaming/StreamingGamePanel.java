@@ -2152,10 +2152,19 @@ public class StreamingGamePanel extends GamePanel {
         }
 
         String cardName = safe(card.getName());
+        // Tokens in XMage are named "Foo Token" but Scryfall names them "Foo"
+        if (card.isToken() && cardName.endsWith(" Token")) {
+            cardName = cardName.substring(0, cardName.length() - " Token".length());
+        }
         if (!cardName.isEmpty()) {
-            return "https://api.scryfall.com/cards/named?exact="
+            String url = "https://api.scryfall.com/cards/named?exact="
                     + encodeUrlComponent(cardName)
                     + "&format=image&version=normal";
+            // For tokens, scope to the token set (Scryfall uses 't' prefix)
+            if (card.isToken() && !setCode.isEmpty()) {
+                url += "&set=t" + encodeUrlComponent(setCode.toLowerCase(Locale.ROOT));
+            }
+            return url;
         }
 
         return "";
