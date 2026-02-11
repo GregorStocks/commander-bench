@@ -25,6 +25,7 @@ public class FFmpegEncoder implements FrameConsumer {
     private int width;
     private int height;
     private byte[] rgbBuffer;
+    private volatile boolean pipeBroken;
 
     public FFmpegEncoder(Path outputPath) {
         this.outputPath = outputPath;
@@ -70,7 +71,7 @@ public class FFmpegEncoder implements FrameConsumer {
 
     @Override
     public void consumeFrame(BufferedImage frame, long frameNumber) {
-        if (stdin == null) {
+        if (stdin == null || pipeBroken) {
             return;
         }
 
@@ -79,7 +80,8 @@ public class FFmpegEncoder implements FrameConsumer {
             convertToRgb24(frame, rgbBuffer);
             stdin.write(rgbBuffer);
         } catch (IOException e) {
-            logger.error("Failed to write frame " + frameNumber, e);
+            pipeBroken = true;
+            logger.error("Failed to write frame " + frameNumber + ", stopping further writes", e);
         }
     }
 

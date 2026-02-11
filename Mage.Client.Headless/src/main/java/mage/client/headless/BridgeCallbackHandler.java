@@ -858,8 +858,6 @@ public class BridgeCallbackHandler {
             case GAME_PLAY_XMANA: {
                 // Auto-tap couldn't find a source — show available mana sources to the LLM
                 GameClientMessage manaMsg = (GameClientMessage) data;
-                result.put("response_type", "select");
-
                 PlayableObjectsList manaPlayable = gameView != null ? gameView.getCanPlayObjects() : null;
                 List<Map<String, Object>> manaChoiceList = new ArrayList<>();
                 List<Object> manaIndexToChoice = new ArrayList<>();
@@ -914,8 +912,14 @@ public class BridgeCallbackHandler {
                     }
                 }
 
-                result.put("choices", manaChoiceList);
-                lastChoices = manaIndexToChoice;
+                if (!manaChoiceList.isEmpty()) {
+                    result.put("response_type", "select");
+                    result.put("choices", manaChoiceList);
+                    lastChoices = manaIndexToChoice;
+                } else {
+                    result.put("response_type", "boolean");
+                    lastChoices = null;
+                }
                 break;
             }
 
