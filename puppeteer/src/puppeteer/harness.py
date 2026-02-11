@@ -10,10 +10,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from puppeteer.chatterbox import DEFAULT_SYSTEM_PROMPT as CHATTERBOX_DEFAULT_SYSTEM_PROMPT
 from puppeteer.config import ChatterboxPlayer, Config, PilotPlayer
 from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
+from puppeteer.pilot import DEFAULT_SYSTEM_PROMPT as PILOT_DEFAULT_SYSTEM_PROMPT
 from puppeteer.port import can_bind_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
@@ -182,6 +184,8 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
                 entry["decklist"] = read_decklist(deck_file)
         if hasattr(player, "model") and player.model:
             entry["model"] = player.model
+        if hasattr(player, "personality") and player.personality:
+            entry["personality"] = player.personality
         if hasattr(player, "system_prompt") and player.system_prompt:
             entry["system_prompt"] = player.system_prompt
         players.append(entry)
@@ -598,8 +602,12 @@ def start_chatterbox_client(
         args.extend(["--model", player.model])
     if player.base_url:
         args.extend(["--base-url", player.base_url])
-    if player.system_prompt:
-        args.extend(["--system-prompt", player.system_prompt])
+    # Determine effective system prompt: explicit system_prompt > personality suffix > default
+    effective_prompt = player.system_prompt
+    if not effective_prompt and player.prompt_suffix:
+        effective_prompt = CHATTERBOX_DEFAULT_SYSTEM_PROMPT + "\n\n" + player.prompt_suffix
+    if effective_prompt:
+        args.extend(["--system-prompt", effective_prompt])
     if game_dir:
         args.extend(["--game-dir", str(game_dir)])
 
@@ -656,8 +664,12 @@ def start_pilot_client(
         args.extend(["--model", player.model])
     if player.base_url:
         args.extend(["--base-url", player.base_url])
-    if player.system_prompt:
-        args.extend(["--system-prompt", player.system_prompt])
+    # Determine effective system prompt: explicit system_prompt > personality suffix > default
+    effective_prompt = player.system_prompt
+    if not effective_prompt and player.prompt_suffix:
+        effective_prompt = PILOT_DEFAULT_SYSTEM_PROMPT + "\n\n" + player.prompt_suffix
+    if effective_prompt:
+        args.extend(["--system-prompt", effective_prompt])
     if player.max_interactions_per_turn is not None:
         args.extend(["--max-interactions-per-turn", str(player.max_interactions_per_turn)])
     if player.reasoning_effort:

@@ -1,0 +1,10 @@
+{
+  "matchTimeLimit": "MIN__20",
+  "matchBufferTime": "NONE",
+  "players": [
+    {"type": "pilot", "personality": "villain-gemini", "deck": "random"},
+    {"type": "pilot", "personality": "commentator-sonnet", "deck": "random"},
+    {"type": "pilot", "personality": "drill-sergeant-haiku", "deck": "random"},
+    {"type": "pilot", "personality": "valley-girl-gemini", "deck": "random"}
+  ]
+}
