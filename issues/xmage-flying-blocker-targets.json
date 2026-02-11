@@ -1,0 +1,10 @@
+{
+  "title": "XMage computes empty possibleAttackersToBlock for flying blocker vs ground attackers",
+  "description": "When declaring blockers, XMage sometimes returns an empty target set (possibleAttackersToBlock) for a creature selected as a blocker, even though there are valid attackers to block. Observed in game_20260211_002821 (Gem3F Libby, T7): after selecting a flying creature as a blocker via GAME_SELECT, the follow-up GAME_TARGET \"Select attacker to block\" arrived with zero choices, despite 3 attackers (Lightning Rager, Edric, Squid Token) all attacking Libby. The same flow worked correctly on T6 with 2 choices.\n\nSuspected cause: the server-side blocker legality check incorrectly filters ground attackers when the blocker has flying (flying means it CAN block fliers, not that it can ONLY block fliers). This is a rules engine bug in the upstream XMage combat code.\n\nClient-side workaround: auto-cancel optional GAME_TARGET with empty choices (see blocker-target-empty-choices fix).\n\nServer-side fix would be in Mage.Server or Mage.Common combat logic — requires investigation of how possibleAttackersToBlock is computed.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["upstream-xmage", "combat"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}
