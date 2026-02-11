@@ -621,6 +621,31 @@
   margin-left: 6px;
 }
 
+/* Full LLM I/O trace (expandable) */
+.llm-trace-block {
+  margin: 4px 0;
+  font-size: 0.72rem;
+}
+
+.llm-trace-block summary {
+  color: #60a5fa;
+  cursor: pointer;
+  font-style: italic;
+}
+
+.llm-trace-text {
+  color: #94a3b8;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.68rem;
+  max-height: 30rem;
+  overflow-y: auto;
+  margin-top: 2px;
+  padding: 4px;
+  background: rgba(59, 130, 246, 0.06);
+  border-radius: 4px;
+}
+
 /* Player-colored left borders for LLM thoughts */
 .llm-thought.llm-player-0 { border-left-color: #3b82f6; }
 .llm-thought.llm-player-1 { border-left-color: #ef4444; }

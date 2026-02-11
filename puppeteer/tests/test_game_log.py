@@ -99,6 +99,30 @@ def test_game_log_writer_cost_tracking():
         writer.close()
 
 
+def test_game_log_writer_custom_suffix():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        writer = GameLogWriter(game_dir, "alice", suffix="llm_trace")
+        writer.emit(
+            "llm_call",
+            request={"model": "test", "messages": [{"role": "user", "content": "hi"}]},
+            response={"choices": [{"message": {"content": "hello"}}]},
+        )
+        writer.close()
+
+        log_path = game_dir / "alice_llm_trace.jsonl"
+        assert log_path.exists()
+        # Default suffix file should NOT exist
+        assert not (game_dir / "alice_llm.jsonl").exists()
+
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["type"] == "llm_call"
+        assert event["request"]["model"] == "test"
+        assert event["response"]["choices"][0]["message"]["content"] == "hello"
+
+
 def test_merge_game_log():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
@@ -127,3 +151,26 @@ def test_merge_game_log():
 
         types = [json.loads(line)["type"] for line in lines]
         assert types == ["game_start", "llm_call", "game_over"]
+
+
+def test_merge_excludes_trace_files():
+    """Trace files (*_llm_trace.jsonl) should NOT be included in the merge."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+
+        events = game_dir / "game_events.jsonl"
+        events.write_text(json.dumps({"ts": "2024-06-15T10:00:01.000-07:00", "type": "game_start"}) + "\n")
+
+        # Write an LLM trace file — should NOT appear in merge
+        trace = game_dir / "alice_llm_trace.jsonl"
+        trace.write_text(
+            json.dumps({"ts": "2024-06-15T10:00:02.000-07:00", "type": "llm_call", "player": "alice"}) + "\n"
+        )
+
+        merge_game_log(game_dir)
+
+        merged = game_dir / "game.jsonl"
+        assert merged.exists()
+        lines = merged.read_text().strip().splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["type"] == "game_start"

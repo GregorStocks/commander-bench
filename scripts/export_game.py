@@ -140,6 +140,35 @@ def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
     return events, player_costs
 
 
+def _read_llm_trace(game_dir: Path) -> list[dict]:
+    """Read full LLM request/response traces from *_llm_trace.jsonl files.
+
+    Returns trace events sorted by timestamp.
+    """
+    events = []
+    for path in sorted(game_dir.glob("*_llm_trace.jsonl")):
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                raw = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if raw.get("type") != "llm_call":
+                continue
+            events.append(
+                {
+                    "ts": raw.get("ts", ""),
+                    "player": raw.get("player", ""),
+                    "request": raw.get("request", {}),
+                    "response": raw.get("response", {}),
+                }
+            )
+    events.sort(key=lambda e: e.get("ts", ""))
+    return events
+
+
 def export_game(game_dir: Path, website_games_dir: Path) -> Path:
     """Export a game directory to a website JSON file. Returns the output path."""
     events_path = game_dir / "game_events.jsonl"
@@ -187,6 +216,7 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
 
     # Read LLM logs
     llm_events, player_costs = _read_llm_events(game_dir)
+    llm_trace = _read_llm_trace(game_dir)
 
     # Build card images map from decklists
     card_images = _build_card_images(meta.get("players", []))
@@ -228,6 +258,7 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         "snapshots": snapshots,
         "actions": actions,
         "llmEvents": llm_events,
+        "llmTrace": llm_trace,
         "gameOver": game_over,
     }
     if meta.get("youtube_url"):

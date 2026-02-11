@@ -21,8 +21,9 @@ Machine-readable JSONL files for post-game analysis. Each line is a compact JSON
 | `game_meta.json` | `harness.py` at game start | Decklists, models, system prompts, format, git info |
 | `game_events.jsonl` | Observer (`StreamingGamePanel`) | Game actions, player chat, state snapshots (all hands visible), game over |
 | `{name}_llm.jsonl` | `pilot.py` per player | LLM reasoning, tool calls + results, costs, errors, stalls, context trims |
+| `{name}_llm_trace.jsonl` | `pilot.py` per player | Full LLM request/response pairs (messages array + complete API response) |
 | `{name}_skeleton.jsonl` | `SkeletonCallbackHandler` per player | Raw callback dump — every callback the skeleton sees (data hoarding) |
-| `game.jsonl` | `harness.py` post-game merge | Unified log: `game_events.jsonl` + all `*_llm.jsonl` sorted by timestamp |
+| `game.jsonl` | `harness.py` post-game merge | Unified log: `game_events.jsonl` + all `*_llm.jsonl` sorted by timestamp (excludes trace files) |
 
 ### Event types in game_events.jsonl
 
@@ -35,13 +36,17 @@ Machine-readable JSONL files for post-game analysis. Each line is a compact JSON
 
 - `game_start` — model, system prompt, available tools, deck path
 - `llm_response` — reasoning text, tool calls, token usage, cost, cumulative cost
-- `tool_call` — tool name, arguments, result (truncated to 2000 chars), latency
+- `tool_call` — tool name, arguments, full result, latency
 - `context_trim` — messages before/after count
 - `context_reset` — reason (e.g. "repeated_timeouts")
 - `llm_error` — error type and message
 - `stall` — turns without progress count
 - `auto_pilot_mode` — reason for switching to auto-pass
 - `game_end` — final cost
+
+### Event types in {name}_llm_trace.jsonl
+
+- `llm_call` — full LLM API request (`model`, `messages`, `tools`, `tool_choice`, `max_tokens`) and response (`choices`, `usage`, `id`, `model`). Each line is a self-contained, replayable LLM call. Not included in `game.jsonl` merge.
 
 ### Querying with jq
 

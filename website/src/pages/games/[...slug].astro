@@ -354,6 +354,7 @@ const { slug } = Astro.params;
     var playerMeta = {};
     var turnStartIndices = [];
     var showLlm = true;
+    var traceByTs = {};  // ts -> trace event lookup for LLM I/O display
 
     // LLM toggle
     var llmToggleLabel = document.getElementById("llm-toggle-label");
@@ -461,6 +462,23 @@ const { slug } = Astro.params;
             div.appendChild(reasoningEl);
           }
 
+          // Full LLM I/O trace (expandable)
+          var trace = traceByTs[event.ts + "|" + event.player];
+          if (trace) {
+            var traceDetails = document.createElement("details");
+            traceDetails.className = "llm-trace-block";
+            var traceSummary = document.createElement("summary");
+            var promptTok = (event.usage && event.usage.promptTokens) || "?";
+            var compTok = (event.usage && event.usage.completionTokens) || "?";
+            traceSummary.textContent = "Full LLM I/O (" + promptTok + "\u2192" + compTok + " tokens)";
+            traceDetails.appendChild(traceSummary);
+            var tracePre = document.createElement("pre");
+            tracePre.className = "llm-trace-text";
+            tracePre.textContent = JSON.stringify({request: trace.request, response: trace.response}, null, 2);
+            traceDetails.appendChild(tracePre);
+            div.appendChild(traceDetails);
+          }
+
           if (hasToolCalls) {
             var tcEl = document.createElement("div");
             tcEl.className = "llm-tool-calls";
@@ -472,7 +490,7 @@ const { slug } = Astro.params;
 
           return div;
         } else if (hasToolCalls) {
-          // Compact tool-call-only line
+          // Compact tool-call-only line (no reasoning text)
           var div = document.createElement("div");
           div.className = "llm-event llm-compact";
           var toolNames = event.toolCalls.map(function (tc) { return tc.name; }).join(", ");
@@ -480,6 +498,24 @@ const { slug } = Astro.params;
           if (event.costUsd != null) {
             div.innerHTML += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
           }
+
+          // Full LLM I/O trace for compact events too
+          var trace = traceByTs[event.ts + "|" + event.player];
+          if (trace) {
+            var traceDetails = document.createElement("details");
+            traceDetails.className = "llm-trace-block";
+            var traceSummary = document.createElement("summary");
+            var promptTok = (event.usage && event.usage.promptTokens) || "?";
+            var compTok = (event.usage && event.usage.completionTokens) || "?";
+            traceSummary.textContent = "Full LLM I/O (" + promptTok + "\u2192" + compTok + " tokens)";
+            traceDetails.appendChild(traceSummary);
+            var tracePre = document.createElement("pre");
+            tracePre.className = "llm-trace-text";
+            tracePre.textContent = JSON.stringify({request: trace.request, response: trace.response}, null, 2);
+            traceDetails.appendChild(tracePre);
+            div.appendChild(traceDetails);
+          }
+
           return div;
         }
         return null; // Empty response, skip
@@ -682,6 +718,13 @@ const { slug } = Astro.params;
         // Show LLM toggle if we have LLM events
         if (game.llmEvents && game.llmEvents.length > 0) {
           llmToggleLabel.classList.remove("hidden");
+        }
+
+        // Build trace lookup by timestamp
+        if (game.llmTrace) {
+          game.llmTrace.forEach(function (t) {
+            traceByTs[t.ts + "|" + t.player] = t;
+          });
         }
 
         // Build turn start indices
