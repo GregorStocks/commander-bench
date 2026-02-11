@@ -1,5 +1,5 @@
 {
-  "_comment": "LLM models for Mage-Bench. Prices are $/million tokens via OpenRouter (Feb 2026). Reasoning tokens billed as output tokens.",
+  "_comment": "LLM models for mage-bench. Prices are $/million tokens via OpenRouter (Feb 2026). Reasoning tokens billed as output tokens.",
   "models": [
     {
       "id": "google/gemini-2.5-flash",
