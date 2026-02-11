@@ -238,6 +238,8 @@ public class StreamingGamePanel extends GamePanel {
     public synchronized void init(int messageId, GameView game, boolean callGameUpdateAfterInit) {
         // Disable tooltips so they don't appear in video recordings
         ToolTipManager.sharedInstance().setEnabled(false);
+        // Also disable custom card popup tooltips (these bypass ToolTipManager)
+        PreferencesDialog.saveValue(PreferencesDialog.KEY_SHOW_TOOLTIPS_DELAY, "0");
         // Adjust battlefield card size bounds before the first layout
         adjustBattlefieldCardSizes();
         super.init(messageId, game, callGameUpdateAfterInit);
