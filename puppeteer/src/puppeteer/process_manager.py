@@ -64,7 +64,7 @@ class ProcessManager:
 
     def __init__(self):
         self._processes: list[tuple[subprocess.Popen, IO | None]] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._cleaned_up = False
 
         self._setup_signal_handlers()
@@ -73,13 +73,24 @@ class ProcessManager:
 
     def _setup_signal_handlers(self):
         """Register signal handlers for SIGINT, SIGTERM, and SIGHUP."""
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGINT, self._sigint_handler)
+        signal.signal(signal.SIGTERM, self._fatal_signal_handler)
         if hasattr(signal, "SIGHUP"):
-            signal.signal(signal.SIGHUP, self._signal_handler)
+            signal.signal(signal.SIGHUP, self._fatal_signal_handler)
 
-    def _signal_handler(self, signum, frame):
-        """Handle termination signals by cleaning up all processes."""
+    def _sigint_handler(self, signum, frame):
+        """Handle Ctrl-C: kill children but let the main flow continue.
+
+        First Ctrl-C kills child processes and returns so the caller can
+        run post-game cleanup (cost summary, YouTube upload, etc.).
+        A second Ctrl-C triggers the default handler (immediate exit).
+        """
+        print("\nReceived SIGINT, stopping all processes...")
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        self.cleanup()
+
+    def _fatal_signal_handler(self, signum, frame):
+        """Handle SIGTERM/SIGHUP: cleanup and exit immediately."""
         print(f"\nReceived signal {signum}, stopping all processes...")
         self.cleanup()
         sys.exit(0)
