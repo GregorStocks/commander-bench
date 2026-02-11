@@ -5,7 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
-from puppeteer.port import can_bind_port, find_available_port, is_port_in_use, wait_for_port
+from puppeteer.port import (
+    can_bind_port,
+    find_available_overlay_port,
+    find_available_port,
+    is_port_in_use,
+    wait_for_port,
+)
 
 
 def test_is_port_in_use_open():
@@ -55,19 +61,85 @@ def test_can_bind_port_occupied():
 
 
 def test_find_available_port():
-    """Should find an available port in a range."""
-    port = find_available_port("localhost", 19000, max_attempts=100)
-    assert port >= 19000
-    assert port < 19100
+    """Should find an available port and return a PortReservation."""
+    reservation = find_available_port("localhost", 19000, max_attempts=100)
+    try:
+        assert reservation.port >= 19000
+        assert reservation.port < 19100
+    finally:
+        reservation.release()
 
 
 def test_find_available_port_exhausted():
-    """Should raise RuntimeError when no ports are available."""
+    """Should raise RuntimeError when all ports are locked."""
     with (
-        patch("puppeteer.port.can_bind_port", return_value=False),
+        patch("puppeteer.port._try_lock_port", return_value=None),
         pytest.raises(RuntimeError, match="No available port found"),
     ):
         find_available_port("localhost", 19000, max_attempts=5)
+
+
+def test_port_reservation_release():
+    """Releasing a reservation makes the port re-acquirable."""
+    reservation = find_available_port("localhost", 19200, max_attempts=100)
+    port = reservation.port
+    reservation.release()
+
+    # Should be able to lock the same port again
+    reservation2 = find_available_port("localhost", port, max_attempts=1)
+    try:
+        assert reservation2.port == port
+    finally:
+        reservation2.release()
+
+
+def test_port_reservation_context_manager():
+    """PortReservation works as a context manager."""
+    with find_available_port("localhost", 19300, max_attempts=100) as reservation:
+        assert reservation.port >= 19300
+    # After exiting, locks are released — fds list is empty
+    assert reservation._lock_fds == []
+
+
+def test_port_reservation_prevents_duplicate():
+    """A held reservation forces the next caller to skip that port."""
+    reservation = find_available_port("localhost", 19400, max_attempts=100)
+    try:
+        # The next call starting at the same port should get a different one
+        reservation2 = find_available_port("localhost", reservation.port, max_attempts=100)
+        try:
+            assert reservation2.port != reservation.port
+        finally:
+            reservation2.release()
+    finally:
+        reservation.release()
+
+
+def test_port_reservation_double_release():
+    """Calling release() twice is safe (idempotent)."""
+    reservation = find_available_port("localhost", 19500, max_attempts=100)
+    reservation.release()
+    reservation.release()  # Should not raise
+    assert reservation._lock_fds == []
+
+
+def test_find_available_overlay_port():
+    """Should find an available overlay port and return a PortReservation."""
+    reservation = find_available_overlay_port(19600, max_attempts=100)
+    try:
+        assert reservation.port >= 19600
+        assert reservation.port < 19700
+    finally:
+        reservation.release()
+
+
+def test_find_available_overlay_port_exhausted():
+    """Should raise RuntimeError when all overlay ports are locked."""
+    with (
+        patch("puppeteer.port._try_lock_port", return_value=None),
+        pytest.raises(RuntimeError, match="No available overlay port found"),
+    ):
+        find_available_overlay_port(19700, max_attempts=5)
 
 
 def test_wait_for_port_immediate():
