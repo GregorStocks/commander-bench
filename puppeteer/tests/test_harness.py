@@ -1,12 +1,19 @@
 """Tests for harness helper functions."""
 
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from puppeteer.config import Config, PilotPlayer
-from puppeteer.harness import _ensure_game_over_event, _missing_llm_api_keys, _print_game_summary, _write_error_log
+from puppeteer.harness import (
+    _ensure_game_over_event,
+    _git,
+    _missing_llm_api_keys,
+    _print_game_summary,
+    _write_error_log,
+)
 
 
 def test_missing_llm_api_keys_none():
@@ -255,3 +262,24 @@ def test_write_error_log_empty():
         error_log = game_dir / "errors.log"
         assert error_log.exists()
         assert "No errors detected" in error_log.read_text()
+
+
+def test_git_returns_output():
+    """Should return stripped stdout from a successful git command."""
+    with patch("puppeteer.harness.subprocess.check_output", return_value="  main\n") as mock:
+        result = _git("rev-parse --abbrev-ref HEAD", Path("/fake"))
+    assert result == "main"
+    mock.assert_called_once_with(
+        "git rev-parse --abbrev-ref HEAD",
+        shell=True,
+        cwd=Path("/fake"),
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+
+
+def test_git_returns_empty_on_failure():
+    """Should return empty string when git command fails."""
+    with patch("puppeteer.harness.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "git")):
+        result = _git("rev-parse HEAD", Path("/fake"))
+    assert result == ""

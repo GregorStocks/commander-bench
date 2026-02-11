@@ -23,6 +23,20 @@ from puppeteer.xml_config import modify_server_config
 _OBSERVER_TABLE_READY = "AI Harness: waiting for"
 
 
+def _git(cmd: str, cwd: Path) -> str:
+    """Run a git command and return stripped output, or "" on failure."""
+    try:
+        return subprocess.check_output(
+            f"git {cmd}",
+            shell=True,
+            cwd=cwd,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return ""
+
+
 def _wait_for_observer_table(log_path: Path, proc: subprocess.Popen, timeout: int = 300) -> None:
     """Block until the observer log indicates the game table is ready.
 
@@ -153,19 +167,6 @@ def _write_error_log(game_dir: Path) -> None:
 
 def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None:
     """Write game_meta.json with player configs, decklists, format, and git info."""
-
-    def _git(cmd: str) -> str:
-        try:
-            return subprocess.check_output(
-                f"git {cmd}",
-                shell=True,
-                cwd=project_root,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            ).strip()
-        except Exception:
-            return ""
-
     players = []
     all_players = [
         *((p, "pilot") for p in config.pilot_players),
@@ -195,8 +196,8 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
         "game_type": config.game_type,
         "deck_type": config.deck_type,
         "players": players,
-        "git_branch": _git("rev-parse --abbrev-ref HEAD"),
-        "git_commit": _git("rev-parse --short HEAD"),
+        "git_branch": _git("rev-parse --abbrev-ref HEAD", project_root),
+        "git_commit": _git("rev-parse --short HEAD", project_root),
     }
     (game_dir / "game_meta.json").write_text(json.dumps(meta, indent=2) + "\n")
 
@@ -874,23 +875,11 @@ def main() -> int:
         game_dir.mkdir(parents=True, exist_ok=True)
 
         # Write provenance manifest
-        def _git(cmd: str) -> str:
-            try:
-                return subprocess.check_output(
-                    f"git {cmd}",
-                    shell=True,
-                    cwd=project_root,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                ).strip()
-            except Exception:
-                return ""
-
         manifest = {
             "timestamp": config.timestamp,
-            "branch": _git("rev-parse --abbrev-ref HEAD"),
-            "commit": _git("rev-parse HEAD"),
-            "commit_log": _git("log --oneline -10").splitlines(),
+            "branch": _git("rev-parse --abbrev-ref HEAD", project_root),
+            "commit": _git("rev-parse HEAD", project_root),
+            "commit_log": _git("log --oneline -10", project_root).splitlines(),
             "command": sys.argv,
             "config_file": str(config.config_file) if config.config_file else None,
         }
@@ -937,7 +926,7 @@ def main() -> int:
         last_link.symlink_to(game_dir.name)
 
         # Update per-branch symlink so agents can find their own recent runs
-        branch = _git("rev-parse --abbrev-ref HEAD")
+        branch = _git("rev-parse --abbrev-ref HEAD", project_root)
         if branch:
             safe_branch = branch.replace("/", "-")
             branch_link = log_dir / f"last-branch-{safe_branch}"
