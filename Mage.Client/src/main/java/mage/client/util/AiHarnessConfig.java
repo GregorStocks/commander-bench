@@ -19,6 +19,7 @@ import java.util.List;
  * - "chatterbox": LLM-powered headless client with MCP control (creates HUMAN slot)
  * - "pilot": LLM-powered strategic game player with MCP control (creates HUMAN slot)
  * - "potato": Headless client with auto-response (creates HUMAN slot)
+ * - "staller": Headless client with slow auto-response (creates HUMAN slot)
  * - "skeleton": Legacy headless client (creates HUMAN slot)
  *
  * Example config file (.context/ai-harness-config.json):
@@ -89,7 +90,7 @@ public class AiHarnessConfig {
     }
 
     public static class PlayerConfig {
-        public String type; // "cpu"/"bot", "sleepwalker", "pilot", "potato", "skeleton"
+        public String type; // "cpu"/"bot", "sleepwalker", "pilot", "potato", "staller", "skeleton"
         public String ai;   // for bots: "COMPUTER_MAD", "COMPUTER_MONTE_CARLO"
         public String name;
         public String deck; // optional path to .dck file (relative to project root)
@@ -105,7 +106,7 @@ public class AiHarnessConfig {
          * Returns true if this is a headless client player (needs HUMAN slot).
          */
         public boolean isHeadless() {
-            return "skeleton".equals(type) || "sleepwalker".equals(type) || "potato".equals(type) || "chatterbox".equals(type) || "pilot".equals(type);
+            return "skeleton".equals(type) || "sleepwalker".equals(type) || "potato".equals(type) || "staller".equals(type) || "chatterbox".equals(type) || "pilot".equals(type);
         }
 
         public PlayerType getPlayerType() {
@@ -114,7 +115,7 @@ public class AiHarnessConfig {
             }
             if (!isBot()) {
                 throw new IllegalArgumentException("Unknown player type: \"" + type + "\". " +
-                        "Valid types: cpu, bot, sleepwalker, chatterbox, pilot, potato, skeleton");
+                        "Valid types: cpu, bot, sleepwalker, chatterbox, pilot, potato, staller, skeleton");
             }
             // Bot/CPU player
             if (ai == null || ai.isEmpty()) {
