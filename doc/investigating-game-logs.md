@@ -69,3 +69,53 @@ tail -1 "$GAME_DIR/game_events.jsonl" | jq -r .timestamp
 # Turn count
 jq -r 'select(.type=="turn") | "\(.timestamp) Turn \(.turn_number) - \(.active_player)"' "$GAME_DIR/game_events.jsonl" | tail -5
 ```
+
+## LLM cost analysis
+
+```bash
+# Cost per player
+for f in "$GAME_DIR"/*_cost.json; do echo "$(basename "$f" _cost.json): $(cat "$f")"; done
+```
+
+## Blocking and combat issues
+
+```bash
+# Find empty-choices GAME_TARGET events (e.g. blocker assignment bugs)
+grep -c "Select attacker to block" "$GAME_DIR"/*_pilot.log
+
+# Look for repeated GAME_TARGET patterns in LLM logs
+jq -r 'select(.type=="tool_result") | select(.result | contains("Select attacker to block"))' "$GAME_DIR"/*_llm.jsonl | head -5
+```
+
+## Priority desync detection
+
+When a player is desynced, `pass_priority` returns timeout but the game is progressing for others.
+
+```bash
+# Count consecutive pass_priority timeouts (desync signature)
+jq -r 'select(.type=="tool_result") | select(.result | contains("timeout")) | .ts' "$GAME_DIR"/*_llm.jsonl | head -20
+
+# Cross-reference: does get_game_state show game progressing while pass_priority times out?
+# Look for changing turn numbers in game_state responses during timeout periods
+jq -r 'select(.type=="tool_result") | select(.tool=="get_game_state") | .result' "$GAME_DIR"/*_llm.jsonl | jq -r '.turn' | uniq -c
+```
+
+## Context trimming pressure
+
+```bash
+# Count context_trim events per player (high counts = LLM was looping)
+jq -r 'select(.type=="context_trim")' "$GAME_DIR"/*_llm.jsonl | wc -l
+
+# Check rendered_size after trims (should be ~62 when trimming is active)
+jq -r 'select(.type=="context_trim") | .rendered_size' "$GAME_DIR"/*_llm.jsonl | sort -n | uniq -c
+```
+
+## Mana payment errors
+
+```bash
+# Find GAME_CHOOSE_ABILITY errors (dual land mana selection)
+grep "GAME_CHOOSE_ABILITY" "$GAME_DIR"/*_errors.log
+
+# Find GAME_PLAY_MANA answer=true rejections
+grep "choose mana source/pool" "$GAME_DIR"/*_errors.log
+```
