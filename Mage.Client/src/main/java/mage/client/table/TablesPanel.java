@@ -1730,6 +1730,11 @@ public class TablesPanel extends javax.swing.JPanel {
             options.setMatchTimeLimit(timeLimitEnv != null ? MatchTimeLimit.valueOf(timeLimitEnv) : MatchTimeLimit.NONE);
             String bufferTimeEnv = System.getenv("XMAGE_AI_HARNESS_MATCH_BUFFER_TIME");
             options.setMatchBufferTime(bufferTimeEnv != null ? MatchBufferTime.valueOf(bufferTimeEnv) : MatchBufferTime.NONE);
+            String customLifeEnv = System.getenv("XMAGE_AI_HARNESS_CUSTOM_START_LIFE");
+            if (customLifeEnv != null) {
+                options.setCustomStartLifeEnabled(true);
+                options.setCustomStartLife(Integer.parseInt(customLifeEnv));
+            }
             options.setFreeMulligans(gameTypeStr.toLowerCase().contains("commander") ? 2 : 0);
             options.setSkillLevel(SkillLevel.CASUAL);
             options.setRollbackTurnsAllowed(true);

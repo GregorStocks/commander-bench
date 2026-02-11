@@ -84,6 +84,8 @@ public class SkeletonCallbackHandler {
     // MCP mode fields
     private volatile boolean mcpMode = false;
     private volatile int actionDelayMs = DEFAULT_ACTION_DELAY_MS;
+    private volatile int actionsProcessed = 0;
+    private static final int STALLER_WARMUP_ACTIONS = 20;
     private volatile boolean keepAliveAfterGame = false;
     private volatile PendingAction pendingAction = null;
     private final Object actionLock = new Object(); // For wait_for_action blocking
@@ -261,6 +263,7 @@ public class SkeletonCallbackHandler {
         currentGameId = null;
         lastGameView = null;
         lastChoices = null;
+        actionsProcessed = 0;
         synchronized (gameLog) {
             gameLog.setLength(0);
             gameLogTrimmedChars = 0;
@@ -268,8 +271,13 @@ public class SkeletonCallbackHandler {
     }
 
     private void sleepBeforeAction() {
+        int delay = actionDelayMs;
+        if (actionsProcessed < STALLER_WARMUP_ACTIONS) {
+            delay = Math.min(delay, DEFAULT_ACTION_DELAY_MS);
+            actionsProcessed++;
+        }
         try {
-            Thread.sleep(actionDelayMs);
+            Thread.sleep(delay);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

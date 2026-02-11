@@ -64,22 +64,28 @@ package:
 .PHONY: install
 install: clean build package
 
+# Build the website (Astro static site) so the overlay server can serve it.
+# Only rebuilds when dist/ is missing; delete dist/ to force a rebuild.
+.PHONY: website-build
+website-build:
+	@if [ ! -d website/dist ]; then echo "Building website..."; cd website && npm install --prefer-offline --no-audit --no-fund && npx astro build; fi
+
 # Default: streaming with recording enabled
 # Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
 # Overlay controls: make run-dumb ARGS="--overlay-port 18080"
 # Disable overlay: make run-dumb ARGS="--no-overlay"
 .PHONY: run-dumb
-run-dumb:
+run-dumb: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
 
 # LLM player mode: pilot AI + CPU opponents (consumes API tokens)
 .PHONY: run-llm
-run-llm:
+run-llm: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
 
 # 4-LLM mode: 4 different LLM pilots battle each other (consumes API tokens)
 .PHONY: run-llm4
-run-llm4:
+run-llm4: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
 
 # Generate mcp-tools.json with MCP tool definitions
@@ -89,12 +95,12 @@ mcp-tools:
 
 # 1v1 Legacy: CPU players, no API keys needed
 .PHONY: run-legacy-dumb
-run-legacy-dumb:
+run-legacy-dumb: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-dumb-config.json $(ARGS)
 
 # 1v1 Legacy: Gemini vs Claude (consumes API tokens)
 .PHONY: run-legacy-llm
-run-legacy-llm:
+run-legacy-llm: website-build
 	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-llm-config.json $(ARGS)
 
 # Launch the desktop client (for image downloads, deck building, etc.)
@@ -139,14 +145,7 @@ screenshot:
 	fi && \
 	echo "Screenshot saved to $$OUT (T=$$TIME from $$VIDEO)"
 
-# Standalone test server (stays running until Ctrl-C)
-# Optional: make run-staller PORT=18080
+# Long-running game: 3 burn CPUs + 1 staller, 200 life, no time limit
 .PHONY: run-staller
-run-staller:
-	@PORT_VALUE=$${PORT:-17171}; \
-	CONFIG_PATH="$(PWD)/.context/ai-harness-logs/server_config_$${PORT_VALUE}.xml"; \
-	mkdir -p "$(PWD)/.context/ai-harness-logs"; \
-	PORT=$$PORT_VALUE CONFIG_PATH="$$CONFIG_PATH" uv run --project puppeteer python -c "import os; from pathlib import Path; from puppeteer.xml_config import modify_server_config; modify_server_config(Path('Mage.Server/config/config.xml'), Path(os.environ['CONFIG_PATH']), int(os.environ['PORT']))"; \
-	echo "Starting staller server on localhost:$$PORT_VALUE"; \
-	echo "Config: $$CONFIG_PATH"; \
-	cd Mage.Server && MAVEN_OPTS="-Dxmage.testMode=true -Dxmage.config.path=$$CONFIG_PATH" mvn -q exec:java
+run-staller: website-build
+	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-staller-config.json $(ARGS)

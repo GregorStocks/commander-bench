@@ -86,7 +86,7 @@ import Base from '../../layouts/Base.astro';
   (function () {
     var R = window.GameRenderer;
     var params = new URLSearchParams(window.location.search);
-    var apiBase = params.get("api") || "http://127.0.0.1:17888";
+    var apiBase = params.get("api") || window.location.origin;
     var pollMs = Math.max(250, Number(params.get("pollMs") || 700));
     var usePositioned = params.get("positions") === "1";
     var useMock = params.get("mock") === "1";

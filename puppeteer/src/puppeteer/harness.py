@@ -450,6 +450,8 @@ def start_gui_client(
         env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
         env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+    if config.custom_start_life:
+        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
@@ -712,6 +714,8 @@ def start_streaming_client(
     jvm_args_list.append(f"-Dxmage.streaming.overlay.enabled={'true' if config.overlay else 'false'}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.port={config.overlay_port}")
     jvm_args_list.append(f"-Dxmage.streaming.overlay.host={config.overlay_host}")
+    webroot = project_root / "website" / "dist"
+    jvm_args_list.append(f"-Dxmage.streaming.overlay.webroot={webroot}")
 
     jvm_args = " ".join(jvm_args_list)
 
@@ -729,6 +733,8 @@ def start_streaming_client(
         env["XMAGE_AI_HARNESS_MATCH_TIME_LIMIT"] = config.match_time_limit
     if config.match_buffer_time:
         env["XMAGE_AI_HARNESS_MATCH_BUFFER_TIME"] = config.match_buffer_time
+    if config.custom_start_life:
+        env["XMAGE_AI_HARNESS_CUSTOM_START_LIFE"] = str(config.custom_start_life)
 
     return pm.start_process(
         args=["mvn", "-q", "exec:java"],
@@ -935,8 +941,8 @@ def main() -> int:
         if config.streaming and config.overlay:
             base = f"http://{config.overlay_host}:{config.overlay_port}"
             print(f"Overlay API: {base}/api/state")
-            print(f"Live viewer: http://localhost:4321/games/live?api={base}")
-            print(f"OBS source:  http://localhost:4321/games/live?api={base}&positions=1&obs=1")
+            print(f"Live viewer: {base}/live")
+            print(f"OBS source:  {base}/live?positions=1&obs=1")
 
         # Start server
         print("Starting XMage server...")

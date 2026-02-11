@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -32,6 +35,7 @@ public final class LocalOverlayServer {
     private final String host;
     private final int requestedPort;
     private final int portSearchAttempts;
+    private final Path webroot;
     private final AtomicReference<String> stateJson = new AtomicReference<>(WAITING_STATE_JSON);
 
     private HttpServer server;
@@ -47,6 +51,8 @@ public final class LocalOverlayServer {
                 System.getProperty("xmage.streaming.overlay.portSearchAttempts"),
                 DEFAULT_PORT_SEARCH_ATTEMPTS
         );
+        String webrootProp = System.getProperty("xmage.streaming.overlay.webroot");
+        this.webroot = webrootProp != null ? Paths.get(webrootProp) : null;
         this.boundPort = this.requestedPort;
 
         if (enabled) {
@@ -180,26 +186,29 @@ public final class LocalOverlayServer {
             return;
         }
 
-        // Serve a simple info page pointing to the website live viewer
-        String apiUrl = getBaseUrl();
-        String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
-                + "<title>Mage-Bench Overlay API</title>"
-                + "<style>body{font-family:system-ui;background:#1a1a2e;color:#e0e0e0;padding:2rem;}"
-                + "a{color:#e94560;}</style></head><body>"
-                + "<h1>Mage-Bench Overlay API</h1>"
-                + "<p>This server provides live game state at <code>" + apiUrl + "/api/state</code></p>"
-                + "<p>Open the live viewer in the website:</p>"
-                + "<pre>http://localhost:4321/games/live?api=" + apiUrl + "</pre>"
-                + "<p>For OBS (positioned mode, transparent background):</p>"
-                + "<pre>http://localhost:4321/games/live?api=" + apiUrl + "&amp;positions=1&amp;obs=1</pre>"
-                + "</body></html>";
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
+        // /live is an alias for /games/live/index.html (Astro build output)
+        if ("/live".equals(path)) {
+            path = "/games/live/index.html";
+        }
+
+        // Serve static files from webroot (Astro build output)
+        if (webroot != null && path != null && path.startsWith("/")) {
+            String relative = path.substring(1);
+            // Block path traversal
+            if (!relative.contains("..")) {
+                Path file = webroot.resolve(relative);
+                if (Files.isRegularFile(file) && file.startsWith(webroot)) {
+                    byte[] content = Files.readAllBytes(file);
+                    respondBytes(exchange, 200, detectContentType(path), content);
+                    return;
+                }
+            }
+        }
+
+        // Default: redirect to /live
         Headers headers = exchange.getResponseHeaders();
-        addCorsHeaders(headers);
-        headers.set("Content-Type", "text/html; charset=utf-8");
-        headers.set("Cache-Control", "no-store");
-        exchange.sendResponseHeaders(200, bytes.length);
-        exchange.getResponseBody().write(bytes);
+        headers.set("Location", "/live");
+        exchange.sendResponseHeaders(302, -1);
         exchange.close();
     }
 
@@ -217,6 +226,16 @@ public final class LocalOverlayServer {
         Headers headers = exchange.getResponseHeaders();
         addCorsHeaders(headers);
         headers.set("Content-Type", "application/json; charset=utf-8");
+        headers.set("Cache-Control", "no-store");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+
+    private static void respondBytes(HttpExchange exchange, int status, String contentType, byte[] bytes) throws IOException {
+        Headers headers = exchange.getResponseHeaders();
+        addCorsHeaders(headers);
+        headers.set("Content-Type", contentType);
         headers.set("Cache-Control", "no-store");
         exchange.sendResponseHeaders(status, bytes.length);
         exchange.getResponseBody().write(bytes);
