@@ -33,7 +33,7 @@ def test_config_load_players_from_json():
             {"type": "pilot", "name": "ace", "model": "test/model"},
             {"type": "chatterbox", "name": "chatty", "model": "test/chat"},
         ],
-        "matchTimeLimit": "MIN__20",
+        "matchTimeLimit": "MIN__60",
         "gameType": "Two Player Duel",
     }
 
@@ -53,7 +53,7 @@ def test_config_load_players_from_json():
         assert isinstance(config.pilot_players[0], PilotPlayer)
         assert len(config.chatterbox_players) == 1
         assert isinstance(config.chatterbox_players[0], ChatterboxPlayer)
-        assert config.match_time_limit == "MIN__20"
+        assert config.match_time_limit == "MIN__60"
         assert config.game_type == "Two Player Duel"
     finally:
         config_path.unlink()

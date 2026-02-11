@@ -1,5 +1,5 @@
 {
-  "matchTimeLimit": "MIN__20",
+  "matchTimeLimit": "MIN__60",
   "matchBufferTime": "NONE",
   "players": [
     {"type": "pilot", "personality": "commentator-gemini3", "deck": "random"},

@@ -37,7 +37,7 @@ test:
 
 .PHONY: test-js
 test-js:
-	cd website && npx vitest run
+	cd website && npm install --prefer-offline --no-audit --no-fund && npx vitest run
 
 .PHONY: check
 check: lint format-check typecheck test test-js
