@@ -15,7 +15,7 @@ from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
 from puppeteer.pilot import DEFAULT_SYSTEM_PROMPT as PILOT_DEFAULT_SYSTEM_PROMPT
-from puppeteer.port import can_bind_port, find_available_port, wait_for_port
+from puppeteer.port import find_available_overlay_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
@@ -364,15 +364,6 @@ def refresh_streaming_resources(project_root: Path) -> bool:
         cwd=project_root,
     )
     return result.returncode == 0
-
-
-def find_available_overlay_port(start_port: int, max_attempts: int = 100) -> int:
-    """Find a free local port for the overlay server."""
-    for offset in range(max_attempts):
-        port = start_port + offset
-        if can_bind_port(port):
-            return port
-    raise RuntimeError(f"No available overlay port found in range {start_port}-{start_port + max_attempts - 1}")
 
 
 def start_server(
@@ -770,6 +761,8 @@ def main() -> int:
     config = parse_args()
     project_root = Path.cwd().resolve()
     pm = ProcessManager()
+    port_reservation = None
+    overlay_reservation = None
 
     try:
         # Load player config as early as possible so invalid LLM setup fails fast.
@@ -822,13 +815,15 @@ def main() -> int:
 
         # Find available port
         print(f"Finding available port starting from {config.start_port}...")
-        config.port = find_available_port(config.server, config.start_port)
+        port_reservation = find_available_port(config.server, config.start_port)
+        config.port = port_reservation.port
         print(f"Using port {config.port}")
 
         # Pick an available overlay port for this run to support parallel spectators.
         if config.streaming and config.overlay:
             requested_overlay_port = config.overlay_port
-            config.overlay_port = find_available_overlay_port(requested_overlay_port)
+            overlay_reservation = find_available_overlay_port(requested_overlay_port)
+            config.overlay_port = overlay_reservation.port
             if config.overlay_port != requested_overlay_port:
                 print(f"Overlay port {requested_overlay_port} unavailable, using {config.overlay_port}")
 
@@ -878,6 +873,10 @@ def main() -> int:
             print(f"Check {server_log} for details")
             return 1
 
+        # Server has bound the port — release the reservation lock
+        port_reservation.release()
+        port_reservation = None
+
         print("Server is ready!")
 
         # Player config was already loaded above (passed to spectator/GUI via environment variable)
@@ -920,6 +919,11 @@ def main() -> int:
             # delay that races against variable DB-init times.
             _wait_for_spectator_table(spectator_log, spectator_proc, timeout=300)
 
+            # Spectator has bound the overlay port — release the reservation lock
+            if overlay_reservation is not None:
+                overlay_reservation.release()
+                overlay_reservation = None
+
             # Start sleepwalker clients (MCP-based, Python controls bridge)
             for player in config.sleepwalker_players:
                 log_path = game_dir / f"{player.name}_mcp.log"
@@ -953,6 +957,11 @@ def main() -> int:
                 )
 
             # Note: CPU players are handled by the GUI client/server
+        else:
+            # No headless clients — release overlay reservation now
+            if overlay_reservation is not None:
+                overlay_reservation.release()
+                overlay_reservation = None
 
         # Wait for spectator client to exit
         spectator_rc = spectator_proc.wait()
@@ -977,5 +986,10 @@ def main() -> int:
 
         return 0
     finally:
+        # Release any held port reservations (safety net for early exits)
+        if port_reservation is not None:
+            port_reservation.release()
+        if overlay_reservation is not None:
+            overlay_reservation.release()
         # Always cleanup child processes, even on exceptions
         pm.cleanup()

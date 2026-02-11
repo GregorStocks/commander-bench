@@ -1,7 +1,61 @@
 """Port availability checking."""
 
+import fcntl
+import os
 import socket
 import time
+from types import TracebackType
+
+
+class PortReservation:
+    """Holds flock-based reservations on one or more ports.
+
+    The locks prevent concurrent processes from selecting the same port.
+    Release after the Java server has bound the port.
+    """
+
+    def __init__(self, port: int, lock_fds: list[int]) -> None:
+        self.port = port
+        self._lock_fds = lock_fds
+
+    def release(self) -> None:
+        """Release all held locks (idempotent)."""
+        for fd in self._lock_fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self._lock_fds.clear()
+
+    def __enter__(self) -> "PortReservation":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.release()
+
+
+def _try_lock_port(port: int) -> int | None:
+    """Try to acquire an exclusive flock on a per-port lock file.
+
+    Returns the open file descriptor on success, or None if another
+    process already holds the lock.
+    """
+    lock_path = f"/tmp/mage-port-{port}.lock"
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except OSError:
+        os.close(fd)
+        return None
 
 
 def is_port_in_use(host: str, port: int, timeout: float = 1.0) -> bool:
@@ -28,15 +82,44 @@ def can_bind_port(port: int) -> bool:
         sock.close()
 
 
-def find_available_port(host: str, start_port: int, max_attempts: int = 100) -> int:
-    """Find an available port starting from start_port.
-    Uses bind() to check availability, which catches TIME_WAIT and other
-    states that connect-based checks miss. Also checks secondary port (port+8)."""
+def find_available_port(host: str, start_port: int, max_attempts: int = 100) -> PortReservation:
+    """Find an available port starting from start_port, holding flock reservations.
+
+    Returns a PortReservation that holds exclusive locks on the primary port
+    and the secondary port (port+8). Caller must release() the reservation
+    after the server has bound the port.
+    """
     for offset in range(max_attempts):
         port = start_port + offset
+        fd_primary = _try_lock_port(port)
+        if fd_primary is None:
+            continue
+        fd_secondary = _try_lock_port(port + 8)
+        if fd_secondary is None:
+            os.close(fd_primary)
+            continue
         if can_bind_port(port) and can_bind_port(port + 8):
-            return port
+            return PortReservation(port, [fd_primary, fd_secondary])
+        os.close(fd_primary)
+        os.close(fd_secondary)
     raise RuntimeError(f"No available port found in range {start_port}-{start_port + max_attempts}")
+
+
+def find_available_overlay_port(start_port: int, max_attempts: int = 100) -> PortReservation:
+    """Find a free local port for the overlay server, holding an flock reservation.
+
+    Returns a PortReservation that holds an exclusive lock on the port.
+    Caller must release() the reservation after the overlay server has bound.
+    """
+    for offset in range(max_attempts):
+        port = start_port + offset
+        fd = _try_lock_port(port)
+        if fd is None:
+            continue
+        if can_bind_port(port):
+            return PortReservation(port, [fd])
+        os.close(fd)
+    raise RuntimeError(f"No available overlay port found in range {start_port}-{start_port + max_attempts - 1}")
 
 
 def wait_for_port(host: str, port: int, timeout: int, poll_interval: float = 1.0) -> bool:
