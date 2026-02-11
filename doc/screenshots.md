@@ -10,10 +10,10 @@ Every game run with `--streaming --record` (the default for `make run-dumb`, `ma
 make screenshot
 ```
 
-This saves `/tmp/mage-screenshot.png` from the most recent game recording (~0.5s before the end). Then view it:
+This saves `screenshot.png` inside the game's log directory from the most recent game recording (~0.5s before the end). Then view it:
 
 ```
-Read /tmp/mage-screenshot.png
+Read ~/mage-bench-logs/game_.../screenshot.png
 ```
 
 ### Parameters
@@ -22,7 +22,7 @@ Read /tmp/mage-screenshot.png
 |-------|---------|-------------|
 | `T` | `-0.5` | Time position. Negative = seconds before end, positive = seconds from start |
 | `GAME` | most recent | Path to game log directory |
-| `FILE` | `/tmp/mage-screenshot.png` | Output file path |
+| `FILE` | `<game_dir>/screenshot.png` | Output file path |
 
 ### Examples
 
