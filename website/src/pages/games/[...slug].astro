@@ -5,12 +5,12 @@ import path from 'node:path';
 
 export function getStaticPaths() {
   const gamesDir = path.join(process.cwd(), 'public', 'games');
-  const indexPath = path.join(gamesDir, 'index.json');
-  if (!fs.existsSync(indexPath)) {
+  if (!fs.existsSync(gamesDir)) {
     return [];
   }
-  const games = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
-  return games.map((g: { id: string }) => ({ params: { slug: g.id } }));
+  return fs.readdirSync(gamesDir)
+    .filter((f: string) => f.startsWith('game_') && f.endsWith('.json'))
+    .map((f: string) => ({ params: { slug: f.replace('.json', '') } }));
 }
 
 const { slug } = Astro.params;
