@@ -106,33 +106,5 @@
         "totalCostUsd": 0.0891
       }
     ]
-  },
-  {
-    "id": "game_20260208_220934",
-    "timestamp": "20260208_220934",
-    "totalTurns": 10,
-    "winner": "Mad AI 3",
-    "players": [
-      {
-        "name": "Mad AI 1",
-        "type": "cpu",
-        "commander": "Wyleth, Soul of Steel"
-      },
-      {
-        "name": "Mad AI 2",
-        "type": "cpu",
-        "commander": "Oloro, Ageless Ascetic"
-      },
-      {
-        "name": "Mad AI 3",
-        "type": "cpu",
-        "commander": "Atraxa, Praetors' Voice"
-      },
-      {
-        "name": "Mad AI 4",
-        "type": "cpu",
-        "commander": "Kalamax, the Stormsire"
-      }
-    ]
   }
 ]
