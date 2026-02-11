@@ -174,11 +174,26 @@ public class McpServer {
     private static Map<String, Object> outputSchema(Map<String, Object>... fields) {
         Map<String, Object> schema = new HashMap<>();
         schema.put("type", "object");
-        List<Map<String, Object>> fieldList = new ArrayList<>();
+        Map<String, Object> properties = new HashMap<>();
         for (Map<String, Object> fld : fields) {
-            fieldList.add(fld);
+            String name = (String) fld.get("name");
+            String type = (String) fld.get("type");
+            Map<String, Object> prop = new HashMap<>();
+            // Convert "array[X]" to proper JSON Schema array type
+            if (type.startsWith("array[") && type.endsWith("]")) {
+                prop.put("type", "array");
+                Map<String, Object> items = new HashMap<>();
+                items.put("type", type.substring(6, type.length() - 1));
+                prop.put("items", items);
+            } else {
+                prop.put("type", type);
+            }
+            if (fld.containsKey("description")) {
+                prop.put("description", fld.get("description"));
+            }
+            properties.put(name, prop);
         }
-        schema.put("fields", fieldList);
+        schema.put("properties", properties);
         return schema;
     }
 
@@ -738,6 +753,7 @@ public class McpServer {
         textContent.put("text", gson.toJson(toolResult));
         content.add(textContent);
         result.put("content", content);
+        result.put("structuredContent", toolResult);
         result.put("isError", false);
 
         return result;
