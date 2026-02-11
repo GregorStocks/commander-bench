@@ -1,0 +1,10 @@
+{
+  "title": "Explore get_turn_recap MCP tool for multiplayer event summaries",
+  "description": "In 4-player Commander, 3 opponents take full turns between yours. The LLM currently must call get_game_state (verbose, ~500 tokens) or get_game_log (unstructured wall of text) to figure out what changed. A get_turn_recap tool could return a compressed event list since the player's last turn.\n\nKey design question: can this maintain the 'MCP server reports game state, doesn't give strategic advice' invariant?\n\nA raw event list is factual ('Alice cast Wrath of God, 7 creatures destroyed'), but any summarization or prioritization ('the key event was...') crosses into strategic advice. The tool must be a factual event log, not an analysis.\n\nDesign work needed:\n1. Define exactly which events get included (spells cast, combat damage, life changes, permanents entering/leaving, card draws?)\n2. Define the output format - structured JSON events vs human-readable strings\n3. Decide whether this belongs in Java (MCP layer, has access to game events) or Python (harness, would need to parse game log)\n4. Consider: is this just a filtered/formatted view of get_game_log? Could we add a 'since_turn' parameter to get_game_log instead of a whole new tool?\n5. Token budget: estimate output size per turn cycle to ensure this actually saves tokens vs get_game_state",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer", "mcp"],
+  "created_at": "2026-02-10T00:00:00.000000-08:00",
+  "updated_at": "2026-02-10T00:00:00.000000-08:00"
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Evaluate structured reasoning / think tool for LLM pilots",
+  "description": "Concept: a think(text) tool that's a deliberate no-op (returns {ok: true}) but lets the LLM explicitly mark reasoning as important. The harness could then treat think() calls differently from regular assistant content.\n\nPotential benefits:\n- Context summarization could preserve think() calls more aggressively than generic reasoning text (currently all assistant content gets dropped when context ages out)\n- Game logs would have clearly labeled strategic reasoning vs casual chatter\n- think() calls could auto-populate save_strategy if the LLM forgets to call it\n\nPotential problems:\n- Models already have chain-of-thought in their response content. A tool for it may be redundant.\n- Adds ~150 tokens to the tool definition permanently\n- save_strategy already handles the 'persist important reasoning' use case\n- LLMs might over-use it, burning output tokens on think() calls instead of actually playing\n\nQuestions to answer:\n1. Is there a meaningful difference between 'important reasoning the LLM wants to preserve' (save_strategy) and 'intermediate reasoning the LLM wants visible during summarization' (think)?\n2. Would auto-populating save_strategy from think() calls be useful, or would it just overwrite intentional strategy notes with noise?\n3. Review game logs to see: does valuable reasoning get lost during context summarization? If so, would think() actually help, or would better summarization heuristics be simpler?",
+  "status": "open",
+  "priority": 4,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-10T00:00:00.000000-08:00",
+  "updated_at": "2026-02-10T00:00:00.000000-08:00"
+}
