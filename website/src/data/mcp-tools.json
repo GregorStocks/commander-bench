@@ -708,22 +708,5 @@
     },
     "name": "get_my_decklist",
     "description": "Get your original decklist (card names and quantities)."
-  },
-  {
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "text": {
-          "description": "Strategy notes to save",
-          "type": "string"
-        }
-      },
-      "required": [
-        "text"
-      ]
-    },
-    "name": "save_strategy",
-    "description": "Save strategy notes that persist even if your context is reset (e.g. opponent playstyles, your game plan, key threats to track). Max 500 chars. Overwrites previous notes."
   }
 ]
