@@ -2,6 +2,7 @@
 """Upload a game recording to YouTube."""
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -16,7 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube",
 ]
 
-PLAYLIST_ID = "PLZkLbT-AmvhB66wstXYqn4AmCYn4hmQ34"
+DEFAULT_PLAYLIST_ID = "PLZkLbT-AmvhB66wstXYqn4AmCYn4hmQ34"
+PLAYLIST_ID = os.environ.get("YOUTUBE_PLAYLIST_ID", DEFAULT_PLAYLIST_ID)
 
 DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
 
