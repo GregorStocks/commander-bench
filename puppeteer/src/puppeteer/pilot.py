@@ -27,6 +27,7 @@ DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
+MAX_GAME_DURATION_SECS = 3 * 3600  # 3 hours absolute maximum
 
 # Context window management.
 # History is append-only; before each LLM call we render a bounded context
@@ -395,8 +396,15 @@ async def run_pilot_loop(
     consecutive_timeouts = 0
     turns_without_progress = 0  # LLM turns without a successful game action
     MAX_TURNS_WITHOUT_PROGRESS = 20
+    game_start = time.monotonic()
 
     while True:
+        if time.monotonic() - game_start > MAX_GAME_DURATION_SECS:
+            _log_error(game_dir, username, "[pilot] Maximum game duration exceeded, switching to auto-pass")
+            if game_log:
+                game_log.emit("auto_pilot_mode", reason="max_duration_exceeded")
+            await auto_pass_loop(session, game_dir, username, "pilot")
+            return
         try:
             # Render context from history; fetch fresh state summary when needed
             if len(history) > CONTEXT_RECENT_COUNT:
@@ -562,6 +570,12 @@ async def run_pilot_loop(
                     elif fn.name == "pass_priority":
                         try:
                             result_data = json.loads(result_text)
+                            if result_data.get("game_over"):
+                                _log("[pilot] Game over detected, switching to auto-pass")
+                                if game_log:
+                                    game_log.emit("auto_pilot_mode", reason="game_over")
+                                await auto_pass_loop(session, game_dir, username, "pilot")
+                                return
                             if result_data.get("player_dead"):
                                 _log("[pilot] Player is dead, switching to auto-pass")
                                 if game_log:

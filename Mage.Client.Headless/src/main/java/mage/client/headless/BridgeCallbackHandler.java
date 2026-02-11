@@ -1680,6 +1680,9 @@ public class BridgeCallbackHandler {
         if (playerDead) {
             result.put("player_dead", true);
         }
+        if (activeGames.isEmpty()) {
+            result.put("game_over", true);
+        }
         synchronized (unseenChat) {
             if (!unseenChat.isEmpty()) {
                 result.put("recent_chat", new ArrayList<>(unseenChat));

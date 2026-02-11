@@ -1,0 +1,10 @@
+{
+  "title": "Screen recordings play faster than real time",
+  "description": "Game recordings run faster than wall-clock time, causing video timestamps to drift from actual game event timestamps. In game_20260210_234611, a game that lasted ~2h02m in real time (23:47 to 01:49) produced a recording where the win appeared at ~5390s (~1h30m) instead of the expected ~7320s. That's roughly 75% of real-time duration — about 25% of frames are being dropped.\n\nThe FrameCaptureService uses a Swing Timer at 30fps to capture frames, but under CPU load the timer likely fires slower than requested, producing fewer frames per real-time second. FFmpeg encodes at a fixed 30fps output rate, so the resulting video plays back faster than real time.\n\nPossible fixes:\n- Embed real timestamps in the video stream so playback matches wall-clock time\n- Use variable frame rate encoding that respects actual capture intervals\n- Log frame timestamps and post-process to correct playback speed",
+  "status": "open",
+  "priority": 3,
+  "type": "bug",
+  "labels": ["streaming-client"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}
