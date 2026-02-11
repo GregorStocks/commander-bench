@@ -163,14 +163,21 @@
     var chip = document.createElement("span");
     chip.className = "card-chip" + (isTapped ? " tapped" : "");
 
+    if (cardObj && cardObj.owner) {
+      var ownerSpan = document.createElement("span");
+      ownerSpan.className = "chip-owner";
+      ownerSpan.textContent = cardObj.owner + " \u2192 ";
+      chip.appendChild(ownerSpan);
+    }
+
     if (cardObj && (cardObj.power || cardObj.toughness)) {
-      chip.textContent = cardName + " ";
+      chip.appendChild(document.createTextNode(cardName + " "));
       var pt = document.createElement("span");
       pt.className = "pt";
       pt.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
       chip.appendChild(pt);
     } else {
-      chip.textContent = cardName;
+      chip.appendChild(document.createTextNode(cardName));
     }
 
     chip.addEventListener("mouseenter", function () {

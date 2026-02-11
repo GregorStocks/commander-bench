@@ -76,6 +76,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Streaming-optimized game panel that automatically requests hand permission
@@ -129,6 +131,11 @@ public class StreamingGamePanel extends GamePanel {
     private static final int OVERLAY_PUSH_INTERVAL_MS = 200;
     private long lastOverlayPushMs = 0L;
     private final List<JsonObject> overlayEvents = Collections.synchronizedList(new ArrayList<>());
+
+    // Cast owner tracking: objectId → playerName, parsed from game chat HTML
+    private static final Pattern CAST_OWNER_PATTERN = Pattern.compile(
+            "<font[^>]*>([^<]+)</font>\\s+casts\\s+.*?object_id='([^']+)'");
+    private final Map<String, String> castOwners = new HashMap<>();
 
     // Player color styling (matches website PLAYER_COLOR_HEX in game-renderer.js)
     private static final Color[] PLAYER_ACCENT_COLORS = {
@@ -1786,6 +1793,12 @@ public class StreamingGamePanel extends GamePanel {
             for (CardView card : game.getStack().values()) {
                 JsonObject stackJson = new JsonObject();
                 stackJson.addProperty("name", safe(card.getDisplayName()));
+                if (card.getId() != null) {
+                    String owner = castOwners.get(card.getId().toString());
+                    if (owner != null) {
+                        stackJson.addProperty("owner", owner);
+                    }
+                }
                 stackArray.add(stackJson);
             }
         }
@@ -1798,6 +1811,14 @@ public class StreamingGamePanel extends GamePanel {
      * Log a game event from the chat panel (game action or player chat).
      */
     void logChatEvent(String type, String message, String username) {
+        // Track cast owners from game action messages
+        if ("game_action".equals(type) && message != null && message.contains(" casts ")) {
+            Matcher castMatcher = CAST_OWNER_PATTERN.matcher(message);
+            if (castMatcher.find()) {
+                castOwners.put(castMatcher.group(2), castMatcher.group(1));
+            }
+        }
+
         JsonObject event = new JsonObject();
         if ("player_chat".equals(type)) {
             event.addProperty("from", username != null ? username : "");
@@ -1942,7 +1963,7 @@ public class StreamingGamePanel extends GamePanel {
         root.addProperty("activePlayer", safe(game.getActivePlayerName()));
         root.addProperty("priorityPlayer", safe(game.getPriorityPlayerName()));
         root.add("players", buildOverlayPlayers(game, layout));
-        root.add("stack", cardsToJson(game.getStack(), "stack", null, layout));
+        root.add("stack", stackToOverlayJson(game.getStack(), layout));
         root.add("layout", buildOverlayLayoutJson(layout));
         // Include accumulated game events for the live web UI
         JsonArray eventsArray = new JsonArray();
@@ -2029,6 +2050,26 @@ public class StreamingGamePanel extends GamePanel {
         sorted.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
         for (CardView card : sorted) {
             cards.add(cardToJson(card, zone, playerId, layout));
+        }
+        return cards;
+    }
+
+    private JsonArray stackToOverlayJson(CardsView stackView, OverlayLayoutSnapshot layout) {
+        JsonArray cards = new JsonArray();
+        if (stackView == null || stackView.isEmpty()) {
+            return cards;
+        }
+        List<CardView> sorted = new ArrayList<>(stackView.values());
+        sorted.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
+        for (CardView card : sorted) {
+            JsonObject cardJson = cardToJson(card, "stack", null, layout);
+            if (card.getId() != null) {
+                String owner = castOwners.get(card.getId().toString());
+                if (owner != null) {
+                    cardJson.addProperty("owner", owner);
+                }
+            }
+            cards.add(cardJson);
         }
         return cards;
     }

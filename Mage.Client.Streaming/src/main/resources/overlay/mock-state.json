@@ -23,7 +23,8 @@
       "cardNumber": "146",
       "imageUrl": "https://api.scryfall.com/cards/named?exact=Lightning%20Bolt&format=image&version=normal",
       "tapped": false,
-      "damage": 0
+      "damage": 0,
+      "owner": "Krenko"
     },
     {
       "id": "s2",
@@ -40,7 +41,8 @@
       "cardNumber": "267",
       "imageUrl": "https://api.scryfall.com/cards/named?exact=Counterspell&format=image&version=normal",
       "tapped": false,
-      "damage": 0
+      "damage": 0,
+      "owner": "Talrand"
     }
   ],
   "layout": {
