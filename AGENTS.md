@@ -154,9 +154,9 @@ When working on UI changes, take screenshots to verify your work. See `doc/scree
 
 ```bash
 make run                     # run a quick game (~2s)
-make screenshot              # final frame -> /tmp/mage-screenshot.png
+make screenshot              # final frame -> <game_dir>/screenshot.png
 make screenshot T=5          # frame at 5s into the game
-# Then: Read /tmp/mage-screenshot.png
+# Then: Read the screenshot path from the output
 ```
 
 **Website visualizer** (via Chrome browser automation):
