@@ -70,12 +70,16 @@ def bring_to_foreground_macos() -> None:
     )
 
 
-def _ensure_game_over_event(game_dir: Path) -> None:
+def _ensure_game_over_event(game_dir: Path, observer_exit_code: int = -1) -> None:
     """Append a game_over event to game_events.jsonl if one is missing.
 
-    When the game ends via time limit or process kill, XMage may not fire a
-    GAME_OVER callback. This ensures the event log always has a termination
-    record for downstream analysis.
+    When the game ends via time limit, user closing the observer window, or
+    process kill, XMage may not fire a GAME_OVER callback. This ensures the
+    event log always has a termination record for downstream analysis.
+
+    The observer_exit_code is used to distinguish reasons:
+    - 0: observer exited cleanly (user closed window or normal shutdown)
+    - non-zero / -1: observer crashed or was killed
     """
     events_file = game_dir / "game_events.jsonl"
     has_game_over = False
@@ -101,13 +105,19 @@ def _ensure_game_over_event(game_dir: Path) -> None:
             pass
 
     if not has_game_over:
+        if observer_exit_code == 0:
+            reason = "observer_closed"
+            message = "Game interrupted (observer window closed)"
+        else:
+            reason = "observer_crashed"
+            message = f"Game ended (observer exited with code {observer_exit_code})"
         ts = datetime.now().isoformat(timespec="milliseconds")
         event = {
             "ts": ts,
             "seq": max_seq + 1,
             "type": "game_over",
-            "message": "Game ended (no GAME_OVER received)",
-            "reason": "timeout_or_killed",
+            "message": message,
+            "reason": reason,
         }
         try:
             with open(events_file, "a") as f:
@@ -221,8 +231,12 @@ def _print_game_summary(game_dir: Path) -> None:
                     except json.JSONDecodeError:
                         continue
                     if event.get("type") == "game_over":
+                        reason = event.get("reason", "")
                         msg = event.get("message", "")
-                        if msg and event.get("reason") != "timeout_or_killed":
+                        if reason == "observer_closed":
+                            game_over_found = True
+                            print(f"  {msg}")
+                        elif reason not in ("timeout_or_killed", "observer_crashed") and msg:
                             game_over_found = True
                             print(f"  Game over: {msg}")
                         break
@@ -952,12 +966,14 @@ def main() -> int:
             # Note: CPU players are handled by the GUI client/server
 
         # Wait for observer client to exit
-        observer_proc.wait()
+        observer_rc = observer_proc.wait()
 
         # Ensure a game_over event exists in game_events.jsonl.
-        # When the game ends via time limit, XMage may not send a GAME_OVER
-        # callback, leaving the event log without a termination record.
-        _ensure_game_over_event(game_dir)
+        # When the game ends via time limit or window close, XMage may not
+        # send a GAME_OVER callback, leaving the event log without a
+        # termination record.  Pass the exit code so the reason can
+        # distinguish "user closed window" (exit 0) from crashes.
+        _ensure_game_over_event(game_dir, observer_rc)
 
         _write_error_log(game_dir)
         try:

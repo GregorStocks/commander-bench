@@ -67,8 +67,43 @@ def test_ensure_game_over_event_appended():
         assert len(lines) == 2
         last_event = json.loads(lines[-1])
         assert last_event["type"] == "game_over"
-        assert last_event["reason"] == "timeout_or_killed"
+        assert last_event["reason"] == "observer_crashed"
         assert last_event["seq"] == 43
+
+
+def test_ensure_game_over_event_observer_closed():
+    """Exit code 0 should produce reason 'observer_closed'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 10, "type": "game_start"}) + "\n")
+
+        _ensure_game_over_event(game_dir, observer_exit_code=0)
+
+        lines = events_file.read_text().strip().splitlines()
+        assert len(lines) == 2
+        last_event = json.loads(lines[-1])
+        assert last_event["type"] == "game_over"
+        assert last_event["reason"] == "observer_closed"
+        assert "observer window closed" in last_event["message"]
+        assert last_event["seq"] == 11
+
+
+def test_ensure_game_over_event_observer_crashed():
+    """Non-zero exit code should produce reason 'observer_crashed'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(json.dumps({"ts": "2024-01-01T00:00:00", "seq": 10, "type": "game_start"}) + "\n")
+
+        _ensure_game_over_event(game_dir, observer_exit_code=1)
+
+        lines = events_file.read_text().strip().splitlines()
+        assert len(lines) == 2
+        last_event = json.loads(lines[-1])
+        assert last_event["type"] == "game_over"
+        assert last_event["reason"] == "observer_crashed"
+        assert "code 1" in last_event["message"]
 
 
 def test_ensure_game_over_event_no_file():
@@ -136,6 +171,53 @@ def test_print_game_summary_synthetic_game_over(capsys):
                     "type": "game_over",
                     "message": "Game ended (no GAME_OVER received)",
                     "reason": "timeout_or_killed",
+                }
+            )
+            + "\n"
+        )
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "did not finish" in output
+
+
+def test_print_game_summary_observer_closed(capsys):
+    """observer_closed reason should show the interrupted message, not 'did not finish'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(
+            json.dumps(
+                {
+                    "ts": "2024-01-01T00:05:00",
+                    "type": "game_over",
+                    "message": "Game interrupted (observer window closed)",
+                    "reason": "observer_closed",
+                }
+            )
+            + "\n"
+        )
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "observer window closed" in output
+        assert "did not finish" not in output
+
+
+def test_print_game_summary_observer_crashed(capsys):
+    """observer_crashed reason should show 'did not finish'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(
+            json.dumps(
+                {
+                    "ts": "2024-01-01T00:05:00",
+                    "type": "game_over",
+                    "message": "Game ended (observer exited with code 1)",
+                    "reason": "observer_crashed",
                 }
             )
             + "\n"

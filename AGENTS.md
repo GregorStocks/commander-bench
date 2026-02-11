@@ -55,6 +55,14 @@ make test
 
 Tests run in CI alongside lint and typecheck. Keep tests fast and self-contained — use `tempfile` for file I/O, `unittest.mock.patch` for external dependencies.
 
+## Pre-PR Checklist
+
+Always run `make check` before creating a PR. This runs lint, typecheck, and tests in one shot:
+
+```bash
+make check
+```
+
 ## Python
 
 Always use `uv` for Python. Never use system Python directly.
