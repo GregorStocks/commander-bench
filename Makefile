@@ -142,7 +142,7 @@ screenshot:
 # Standalone test server (stays running until Ctrl-C)
 # Optional: make run-staller PORT=18080
 .PHONY: run-staller
-run-staller:
+run-staller: build
 	@PORT_VALUE=$${PORT:-17171}; \
 	CONFIG_PATH="$(PWD)/.context/ai-harness-logs/server_config_$${PORT_VALUE}.xml"; \
 	mkdir -p "$(PWD)/.context/ai-harness-logs"; \
