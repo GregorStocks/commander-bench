@@ -2623,10 +2623,11 @@ public class SkeletonCallbackHandler {
             logger.error("[" + client.getUsername() + "] Failed to join game: " + gameId);
         }
 
-        // Get chat ID for this game
+        // Get chat ID for this game and join to receive incoming messages
         session.getGameChatId(gameId).ifPresent(chatId -> {
             gameChatIds.put(gameId, chatId);
-            logger.info("[" + client.getUsername() + "] Game chat ID: " + chatId);
+            session.joinChat(chatId);
+            logger.info("[" + client.getUsername() + "] Joined game chat: " + chatId);
         });
 
         logger.info("[" + client.getUsername() + "] Game started: gameId=" + gameId + ", playerId=" + playerId);
@@ -3089,6 +3090,10 @@ public class SkeletonCallbackHandler {
     private void handleGameOver(UUID gameId, ClientCallback callback) {
         GameClientMessage message = (GameClientMessage) callback.getData();
         activeGames.remove(gameId);
+        UUID chatId = gameChatIds.remove(gameId);
+        if (chatId != null) {
+            session.leaveChat(chatId);
+        }
         logger.info("[" + client.getUsername() + "] Game over: " + message.getMessage());
 
         if (mcpMode) {
