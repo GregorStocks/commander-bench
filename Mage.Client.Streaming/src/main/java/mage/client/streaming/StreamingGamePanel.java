@@ -49,6 +49,8 @@ import com.google.gson.JsonParser;
 import javax.swing.*;
 import javax.swing.border.Border;
 import java.awt.*;
+import java.awt.event.MouseListener;
+import javax.swing.event.HyperlinkListener;
 import java.awt.image.BufferedImage;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -198,14 +200,42 @@ public class StreamingGamePanel extends GamePanel {
                 splitChat.setResizeWeight(0.5);  // Split evenly between chat and game log
             }
 
+            // Strip hover effects from game log so they don't appear in recordings
+            stripChatHoverEffects(playerChatPanel);
+            stripChatHoverEffects(combinedChatPanel);
+
             chatPanelReplaced = true;
         } catch (NoSuchFieldException | IllegalAccessException e) {
             logger.warn("Failed to setup chat panels", e);
         }
     }
 
+    /**
+     * Remove hyperlink hover effects (underline, cursor change, card popups)
+     * from a chat panel's text pane so they don't appear in recordings.
+     */
+    private void stripChatHoverEffects(ChatPanelBasic chatPanel) {
+        try {
+            Field txtField = ChatPanelBasic.class.getDeclaredField("txtConversation");
+            txtField.setAccessible(true);
+            JEditorPane textPane = (JEditorPane) txtField.get(chatPanel);
+            if (textPane != null) {
+                for (HyperlinkListener hl : textPane.getHyperlinkListeners()) {
+                    textPane.removeHyperlinkListener(hl);
+                }
+                for (MouseListener ml : textPane.getMouseListeners()) {
+                    textPane.removeMouseListener(ml);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to strip chat hover effects", e);
+        }
+    }
+
     @Override
     public synchronized void init(int messageId, GameView game, boolean callGameUpdateAfterInit) {
+        // Disable tooltips so they don't appear in video recordings
+        ToolTipManager.sharedInstance().setEnabled(false);
         // Adjust battlefield card size bounds before the first layout
         adjustBattlefieldCardSizes();
         super.init(messageId, game, callGameUpdateAfterInit);
@@ -1400,8 +1430,32 @@ public class StreamingGamePanel extends GamePanel {
             // Resize the panel to be shorter since we've hidden many elements
             resizePlayerPanel(playerPanel);
 
+            // Strip mouse listeners from HoverButtons so hover effects
+            // don't appear in video recordings
+            stripMouseListeners(playerPanel, "avatar");
+            stripMouseListeners(playerPanel, "btnPlayer");
+
         } catch (Exception e) {
             logger.warn("Failed to cleanup player panel via reflection", e);
+        }
+    }
+
+    /**
+     * Remove all MouseListeners from a component accessed by field name.
+     * Prevents hover visual changes from showing up in recordings.
+     */
+    private void stripMouseListeners(PlayerPanelExt playerPanel, String fieldName) {
+        try {
+            Field field = PlayerPanelExt.class.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            Component comp = (Component) field.get(playerPanel);
+            if (comp != null) {
+                for (MouseListener ml : comp.getMouseListeners()) {
+                    comp.removeMouseListener(ml);
+                }
+            }
+        } catch (Exception e) {
+            // Silently ignore - field may not exist or may not be a Component
         }
     }
 
