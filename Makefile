@@ -70,38 +70,35 @@ install: clean build package
 website-build:
 	@if [ ! -d website/dist ]; then echo "Building website..."; cd website && npm install --prefer-offline --no-audit --no-fund && npx astro build; fi
 
-# Default: streaming with recording enabled
-# Pass OUTPUT to specify recording path: make run-dumb OUTPUT=/path/to/video.mov
-# Overlay controls: make run-dumb ARGS="--overlay-port 18080"
-# Disable overlay: make run-dumb ARGS="--no-overlay"
-.PHONY: run-dumb
-run-dumb: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) $(ARGS)
+# Run a game. CONFIG selects a config from configs/ (or a path to a custom file).
+# Default: 4 CPU players, no API keys needed.
+#   make run                        # free, no API keys (4 CPU players)
+#   make run CONFIG=arena           # 4 random LLM pilots (needs OPENROUTER_API_KEY)
+#   make run CONFIG=frontier        # frontier models from 4 major labs
+#   make run CONFIG=path/to/x.json  # custom config file
+# Pass OUTPUT to specify recording path: make run OUTPUT=/path/to/video.mov
+# Overlay controls: make run ARGS="--overlay-port 18080"
+# Disable overlay: make run ARGS="--no-overlay"
+CONFIG ?= dumb
+.PHONY: run
+run: website-build
+	@CONFIG_PATH="$(CONFIG)"; \
+	case "$$CONFIG_PATH" in \
+	  */*|*.json) ;; \
+	  *) CONFIG_PATH="configs/$$CONFIG_PATH.json" ;; \
+	esac; \
+	uv run --project puppeteer python -m puppeteer --streaming \
+	  --record$(if $(OUTPUT),=$(OUTPUT)) --config "$$CONFIG_PATH" $(ARGS)
 
-# LLM player mode: pilot AI + CPU opponents (consumes API tokens)
-.PHONY: run-llm
-run-llm: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm-config.json $(ARGS)
-
-# 4-LLM mode: 4 different LLM pilots battle each other (consumes API tokens)
-.PHONY: run-llm4
-run-llm4: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-llm4-config.json $(ARGS)
+# List available configs
+.PHONY: configs
+configs:
+	@for f in configs/*.json; do printf "  %s\n" "$$(basename $$f .json)"; done
 
 # Generate mcp-tools.json with MCP tool definitions
 .PHONY: mcp-tools
 mcp-tools:
 	cd Mage.Client.Headless && mvn -q exec:exec -Dexec.executable=java '-Dexec.args=-cp %classpath mage.client.headless.McpServer' > ../website/src/data/mcp-tools.json
-
-# 1v1 Legacy: CPU players, no API keys needed
-.PHONY: run-legacy-dumb
-run-legacy-dumb: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-dumb-config.json $(ARGS)
-
-# 1v1 Legacy: Gemini vs Claude (consumes API tokens)
-.PHONY: run-legacy-llm
-run-legacy-llm: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-legacy-llm-config.json $(ARGS)
 
 # Launch the desktop client (for image downloads, deck building, etc.)
 .PHONY: run-client
@@ -144,8 +141,3 @@ screenshot:
 	  ffmpeg -y -ss "$$TIME" -i "$$VIDEO" -frames:v 1 -update 1 "$$OUT" 2>/dev/null; \
 	fi && \
 	echo "Screenshot saved to $$OUT (T=$$TIME from $$VIDEO)"
-
-# Long-running game: 3 burn CPUs + 1 staller, 200 life, no time limit
-.PHONY: run-staller
-run-staller: website-build
-	uv run --project puppeteer python -m puppeteer --streaming --record$(if $(OUTPUT),=$(OUTPUT)) --config puppeteer/ai-harness-staller-config.json $(ARGS)

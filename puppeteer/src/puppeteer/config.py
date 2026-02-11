@@ -101,6 +101,126 @@ def load_personalities(config_file: Path | None) -> dict[str, dict]:
     return {}
 
 
+def load_models(config_file: Path | None) -> dict:
+    """Load model definitions from models.json.
+
+    Search order: same directory as config_file, then puppeteer/ directory.
+    Returns empty dict if no file found.
+    """
+    candidates: list[Path] = []
+    if config_file is not None:
+        candidates.append(config_file.parent / "models.json")
+    candidates.append(Path("puppeteer/models.json"))
+
+    for candidate in candidates:
+        if candidate.exists():
+            with open(candidate) as f:
+                return json.load(f)
+    return {}
+
+
+def _validate_name_parts(personalities: dict[str, dict], models_data: dict) -> None:
+    """Validate all random_pool x personality name_part combos fit XMage name limits.
+
+    Called at startup when random resolution is needed. Fails fast with a clear
+    error listing any offending combinations.
+    """
+    pool = models_data.get("random_pool", [])
+    if not pool:
+        return
+    models_by_id = {m["id"]: m for m in models_data.get("models", [])}
+    errors: list[str] = []
+    for model_id in pool:
+        model = models_by_id.get(model_id)
+        if model is None:
+            errors.append(f"random_pool model {model_id!r} not found in models list")
+            continue
+        if "name_part" not in model:
+            errors.append(f"Model {model_id!r} missing name_part")
+            continue
+        m_part = model["name_part"]
+        for p_key, p_data in personalities.items():
+            p_part = p_data.get("name_part", p_key)
+            name = f"{m_part} {p_part}"
+            if len(name) < MIN_USERNAME_LENGTH or len(name) > MAX_USERNAME_LENGTH:
+                errors.append(
+                    f"{name!r} ({model_id} + {p_key}) is {len(name)} chars, "
+                    f"must be {MIN_USERNAME_LENGTH}-{MAX_USERNAME_LENGTH}"
+                )
+    if errors:
+        raise ValueError("Invalid name_part combinations:\n  " + "\n  ".join(errors))
+
+
+def _generate_player_name(
+    model_id: str,
+    personality_key: str,
+    models_data: dict,
+    personalities: dict[str, dict],
+) -> str:
+    """Generate a player name from model name_part + personality name_part."""
+    models_by_id = {m["id"]: m for m in models_data.get("models", [])}
+    model = models_by_id.get(model_id, {})
+    m_part = model.get("name_part", model_id.split("/")[-1][:6])
+    p_data = personalities.get(personality_key, {})
+    p_part = p_data.get("name_part", personality_key[:7])
+    return f"{m_part} {p_part}"
+
+
+def _resolve_randoms(
+    players: list[tuple[PilotPlayer | ChatterboxPlayer, bool]],
+    personalities: dict[str, dict],
+    models_data: dict,
+) -> None:
+    """Resolve 'random' personality/model values and apply personality defaults.
+
+    Each player tuple is (player, had_explicit_name). Modifies players in-place.
+    Avoids duplicate personalities and models across players.
+    """
+    has_randoms = any(p.personality == "random" or p.model == "random" for p, _ in players)
+    if has_randoms:
+        _validate_name_parts(personalities, models_data)
+
+    pool_ids = models_data.get("random_pool", [])
+    available_personalities = list(personalities.keys())
+    available_models = list(pool_ids)
+
+    used_personalities: set[str] = set()
+    used_models: set[str] = set()
+
+    for player, had_explicit_name in players:
+        was_random_personality = player.personality == "random"
+
+        # Resolve random personality
+        if player.personality == "random":
+            remaining = [k for k in available_personalities if k not in used_personalities]
+            if not remaining:
+                # All used — reset the pool (allows >15 players)
+                used_personalities.clear()
+                remaining = available_personalities
+            chosen_p = random.choice(remaining)
+            used_personalities.add(chosen_p)
+            player.personality = chosen_p
+
+        # Resolve random model
+        if player.model == "random":
+            remaining = [m for m in available_models if m not in used_models]
+            if not remaining:
+                used_models.clear()
+                remaining = available_models
+            chosen_m = random.choice(remaining)
+            used_models.add(chosen_m)
+            player.model = chosen_m
+
+        # Generate name if needed (personality was random and no explicit name)
+        if was_random_personality and not had_explicit_name:
+            assert player.model is not None, "Model must be set before name generation"
+            player.name = _generate_player_name(player.model, player.personality, models_data, personalities)
+            # Mark as having a name so _resolve_personality skips the name requirement
+            had_explicit_name = True
+
+        _resolve_personality(player, personalities, had_explicit_name)
+
+
 def _resolve_personality(
     player: PilotPlayer | ChatterboxPlayer,
     personalities: dict[str, dict],
@@ -167,15 +287,7 @@ class Config:
     def run_tag(self) -> str:
         """Derive run tag from config filename for per-target last symlinks."""
         assert self.config_file is not None, "run_tag requires config_file to be set"
-        name = self.config_file.name
-        if name == "ai-harness-config.json":
-            return "dumb"
-        stem = self.config_file.stem
-        prefix = "ai-harness-"
-        suffix = "-config"
-        if stem.startswith(prefix) and stem.endswith(suffix):
-            return stem[len(prefix) : -len(suffix)]
-        return stem
+        return self.config_file.stem
 
     # CLI options
     config_file: Path | None = None
@@ -216,7 +328,7 @@ class Config:
             # Try default locations in order
             candidates = [
                 Path(".context/ai-harness-config.json"),  # User override
-                Path("puppeteer/ai-harness-config.json"),  # Repo default
+                Path("configs/dumb.json"),  # Repo default
             ]
             for candidate in candidates:
                 if candidate.exists():
@@ -236,6 +348,11 @@ class Config:
             self.deck_type = data.get("deckType", "")
             self.custom_start_life = data.get("customStartLife", 0)
             personalities = load_personalities(self.config_file)
+            models_data = load_models(self.config_file)
+
+            # First pass: construct player objects, collecting LLM players for random resolution
+            llm_players: list[tuple[PilotPlayer | ChatterboxPlayer, bool]] = []
+
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
                 has_explicit_name = "name" in player
@@ -253,7 +370,7 @@ class Config:
                         system_prompt=player.get("system_prompt"),
                         personality=player.get("personality"),
                     )
-                    _resolve_personality(p, personalities, has_explicit_name)
+                    llm_players.append((p, has_explicit_name))
                     self.chatterbox_players.append(p)
                 elif player_type == "pilot":
                     p = PilotPlayer(
@@ -265,7 +382,7 @@ class Config:
                         reasoning_effort=player.get("reasoning_effort"),
                         personality=player.get("personality"),
                     )
-                    _resolve_personality(p, personalities, has_explicit_name)
+                    llm_players.append((p, has_explicit_name))
                     self.pilot_players.append(p)
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
@@ -276,6 +393,9 @@ class Config:
                 elif player_type == "skeleton":
                     # Legacy: treat as potato for backwards compatibility
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
+
+            # Second pass: resolve random personalities/models and generate names
+            _resolve_randoms(llm_players, personalities, models_data)
 
     def get_players_config_json(self) -> str:
         """Serialize resolved player config to JSON for passing to observer/GUI client."""

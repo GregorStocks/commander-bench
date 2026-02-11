@@ -193,6 +193,7 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
 
     meta = {
         "timestamp": config.timestamp,
+        "config": config.run_tag,
         "game_type": config.game_type,
         "deck_type": config.deck_type,
         "players": players,

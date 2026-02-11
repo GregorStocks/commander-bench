@@ -4,6 +4,7 @@
     {
       "id": "google/gemini-2.5-flash",
       "name": "Gemini 2.5 Flash",
+      "name_part": "Gem25F",
       "input_per_m": 0.30,
       "output_per_m": 2.50,
       "context_k": 1000,
@@ -14,6 +15,7 @@
     {
       "id": "google/gemini-3-flash-preview",
       "name": "Gemini 3 Flash",
+      "name_part": "Gem3F",
       "input_per_m": 0.50,
       "output_per_m": 3.00,
       "context_k": 1000,
@@ -24,6 +26,7 @@
     {
       "id": "google/gemini-2.5-pro",
       "name": "Gemini 2.5 Pro",
+      "name_part": "Gem25P",
       "input_per_m": 1.25,
       "output_per_m": 10.00,
       "context_k": 1000,
@@ -34,6 +37,7 @@
     {
       "id": "google/gemini-3-pro-preview",
       "name": "Gemini 3 Pro",
+      "name_part": "Gem3P",
       "input_per_m": 2.00,
       "output_per_m": 12.00,
       "context_k": 1000,
@@ -44,6 +48,7 @@
     {
       "id": "anthropic/claude-haiku-4.5",
       "name": "Claude Haiku 4.5",
+      "name_part": "Haiku",
       "input_per_m": 1.00,
       "output_per_m": 5.00,
       "context_k": 200,
@@ -54,6 +59,7 @@
     {
       "id": "anthropic/claude-sonnet-4.5",
       "name": "Claude Sonnet 4.5",
+      "name_part": "Sonnet",
       "input_per_m": 3.00,
       "output_per_m": 15.00,
       "context_k": 1000,
@@ -64,6 +70,7 @@
     {
       "id": "anthropic/claude-opus-4.6",
       "name": "Claude Opus 4.6",
+      "name_part": "Opus",
       "input_per_m": 5.00,
       "output_per_m": 25.00,
       "context_k": 1000,
@@ -74,6 +81,7 @@
     {
       "id": "openai/o4-mini",
       "name": "o4-mini",
+      "name_part": "o4m",
       "input_per_m": 1.10,
       "output_per_m": 4.40,
       "context_k": 200,
@@ -84,6 +92,7 @@
     {
       "id": "openai/o3",
       "name": "o3",
+      "name_part": "o3",
       "input_per_m": 2.00,
       "output_per_m": 8.00,
       "context_k": 200,
@@ -94,6 +103,7 @@
     {
       "id": "openai/o3-mini",
       "name": "o3-mini",
+      "name_part": "o3m",
       "input_per_m": 1.10,
       "output_per_m": 4.40,
       "context_k": 200,
@@ -104,6 +114,7 @@
     {
       "id": "openai/gpt-5.2",
       "name": "GPT-5.2",
+      "name_part": "GPT52",
       "input_per_m": 1.75,
       "output_per_m": 14.00,
       "context_k": 400,
@@ -114,6 +125,7 @@
     {
       "id": "openai/gpt-5.1",
       "name": "GPT-5.1",
+      "name_part": "GPT51",
       "input_per_m": 1.25,
       "output_per_m": 10.00,
       "context_k": 400,
@@ -124,6 +136,7 @@
     {
       "id": "deepseek/deepseek-r1",
       "name": "DeepSeek R1",
+      "name_part": "DSR1",
       "input_per_m": 0.56,
       "output_per_m": 1.68,
       "context_k": 164,
@@ -134,6 +147,7 @@
     {
       "id": "deepseek/deepseek-v3.2",
       "name": "DeepSeek V3.2",
+      "name_part": "DSV3",
       "input_per_m": 0.25,
       "output_per_m": 0.38,
       "context_k": 164,
@@ -144,13 +158,44 @@
     {
       "id": "mistralai/mistral-large-2512",
       "name": "Mistral Large",
+      "name_part": "Mistral",
       "input_per_m": 0.50,
       "output_per_m": 1.50,
       "context_k": 262,
       "thinking": false,
       "tier": "cheap",
       "notes": "No reasoning mode. Devstral (similar family) was tested and produced 0/255 reasoning text. Probably a weak Magic player without thinking. Skip unless specifically benchmarking non-thinking models."
+    },
+    {
+      "id": "x-ai/grok-4",
+      "name": "Grok 4",
+      "name_part": "Grok4",
+      "input_per_m": 3.00,
+      "output_per_m": 15.00,
+      "context_k": 256,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "xAI flagship reasoning model. Mandatory internal reasoning (not exposed). Supports parallel tool calling. Good for showcase/frontier matches."
+    },
+    {
+      "id": "x-ai/grok-4-fast",
+      "name": "Grok 4 Fast",
+      "name_part": "Grok4F",
+      "input_per_m": 0.20,
+      "output_per_m": 0.50,
+      "context_k": 2000,
+      "thinking": true,
+      "tier": "dirt-cheap",
+      "notes": "Absurdly cheap with optional reasoning. 2M context window. Untested for Magic tool calling — worth trying."
     }
+  ],
+  "random_pool": [
+    "anthropic/claude-sonnet-4.5",
+    "anthropic/claude-haiku-4.5",
+    "google/gemini-2.5-flash",
+    "google/gemini-3-flash-preview",
+    "openai/o3",
+    "deepseek/deepseek-r1"
   ],
   "recommendations": {
     "primary_test_set": [
@@ -163,12 +208,14 @@
     "showcase_matches": [
       "anthropic/claude-opus-4.6",
       "google/gemini-3-pro-preview",
-      "openai/o3"
+      "openai/o3",
+      "x-ai/grok-4"
     ],
     "budget_baseline": [
       "deepseek/deepseek-r1",
       "deepseek/deepseek-v3.2",
-      "google/gemini-2.5-flash"
+      "google/gemini-2.5-flash",
+      "x-ai/grok-4-fast"
     ],
     "skip": [
       "openai/o4-mini",
@@ -205,6 +252,12 @@
       "max": 32768,
       "recommended": 8192,
       "notes": "Thinking content returned in reasoning_content field."
+    },
+    "xai": {
+      "param": "reasoning.enabled",
+      "values": [true, false],
+      "recommended": true,
+      "notes": "Grok 4 has mandatory reasoning (always on). Grok 4 Fast supports optional reasoning via enabled param. Reasoning tokens not exposed."
     }
   }
 }

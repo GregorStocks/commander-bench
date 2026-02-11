@@ -77,38 +77,43 @@ uv run --project puppeteer python -m puppeteer
 
 ## Running the AI Harness
 
-Use Makefile targets instead of running uv commands directly:
+Use `make run` with the `CONFIG` parameter:
 
 ```bash
-# No-LLM game: 1 sleepwalker + 1 potato + 2 CPU players (no API keys needed)
-make run-dumb
+# Default: 4 CPU players, no API keys needed
+make run
 
-# 1 LLM pilot + CPU opponents (needs OPENROUTER_API_KEY)
-make run-llm
+# 4 random LLM pilots, random personalities and decks (needs OPENROUTER_API_KEY)
+make run CONFIG=arena
 
-# 4 LLM pilots battle each other (needs OPENROUTER_API_KEY)
-make run-llm4
+# Frontier models: one from each major lab (needs OPENROUTER_API_KEY)
+make run CONFIG=frontier
+
+# List all available configs
+make configs
+
+# Custom config file
+make run CONFIG=path/to/my-config.json
 
 # Record to specific file
-make run-dumb OUTPUT=/path/to/video.mov
+make run OUTPUT=/path/to/video.mov
 
 # Pass additional args
-make run-dumb ARGS="--config myconfig.json"
+make run ARGS="--no-overlay"
 ```
 
 Recordings are saved to `~/mage-bench-logs/` by default.
 
 ## Local Testing
 
-When running games for testing or verification, **only use free targets** that don't consume API tokens:
+When running games for testing or verification, **only use free configs** that don't consume API tokens:
 
 ```bash
-make run-dumb          # No API keys needed
-make run-legacy-dumb   # No API keys needed (Legacy format)
-make run-staller       # No API keys needed (standalone staller server)
+make run                   # No API keys needed (4 CPU players)
+make run CONFIG=staller    # No API keys needed (burn vs staller)
 ```
 
-**Never run** `run-llm`, `run-llm4`, or `run-legacy-llm` — these consume real API tokens and cost money.
+**Never run** `CONFIG=arena`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
 
 ## Coding Style: Fail Fast
 
@@ -128,7 +133,7 @@ assert self.config_file is not None, "run_tag requires config_file to be set"
 Game logs go to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. See `doc/logging.md` for file layout and error logging architecture.
 
 Symlinks for quick access (all relative, inside `~/mage-bench-logs/`):
-- `last-dumb`, `last-llm4`, etc. — most recent run per Makefile target
+- `last-dumb`, `last-arena`, `last-frontier`, etc. — most recent run per config name
 - `last-branch-{name}` — most recent run on a given git branch (slashes replaced with dashes)
 
 After running a game on your branch, check your branch symlink first:
@@ -148,7 +153,7 @@ When working on UI changes, take screenshots to verify your work. See `doc/scree
 **Java Swing UI** (from game recordings):
 
 ```bash
-make run-dumb                # run a quick game (~2s)
+make run                     # run a quick game (~2s)
 make screenshot              # final frame -> /tmp/mage-screenshot.png
 make screenshot T=5          # frame at 5s into the game
 # Then: Read /tmp/mage-screenshot.png
