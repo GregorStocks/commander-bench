@@ -4,7 +4,7 @@
   "matchTimeLimit": "MIN__20",
   "matchBufferTime": "NONE",
   "players": [
-    {"type": "pilot", "name": "Sonnet4.5", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck", "model": "anthropic/claude-sonnet-4.5", "reasoning_effort": "medium"},
-    {"type": "pilot", "name": "Gem2.5Flash", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck", "model": "google/gemini-2.5-flash", "reasoning_effort": "medium"}
+    {"type": "pilot", "personality": "commentator-gemini3", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck"},
+    {"type": "pilot", "personality": "villain-gemini", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck"}
   ]
 }

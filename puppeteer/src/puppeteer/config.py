@@ -48,6 +48,8 @@ class ChatterboxPlayer:
     model: str | None = None  # LLM model (e.g., "anthropic/claude-sonnet-4")
     base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
     system_prompt: str | None = None  # Custom system prompt
+    personality: str | None = None  # Named personality from personalities.json
+    prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
 
 
 @dataclass
@@ -61,6 +63,8 @@ class PilotPlayer:
     system_prompt: str | None = None  # Custom system prompt
     max_interactions_per_turn: int | None = None  # Loop detection threshold (default 25 in Java)
     reasoning_effort: str | None = None  # OpenRouter reasoning effort: "low", "medium", "high"
+    personality: str | None = None  # Named personality from personalities.json
+    prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
 
 
 @dataclass
@@ -73,6 +77,66 @@ class CpuPlayer:
 
 # Union type for all player types
 Player = PotatoPlayer | StallerPlayer | SleepwalkerPlayer | ChatterboxPlayer | PilotPlayer | CpuPlayer | SkeletonPlayer
+
+# XMage server username constraints (from Mage.Server/config/config.xml)
+MIN_USERNAME_LENGTH = 3
+MAX_USERNAME_LENGTH = 14
+
+
+def load_personalities(config_file: Path | None) -> dict[str, dict]:
+    """Load personality definitions from personalities.json.
+
+    Search order: same directory as config_file, then puppeteer/ directory.
+    Returns empty dict if no file found.
+    """
+    candidates: list[Path] = []
+    if config_file is not None:
+        candidates.append(config_file.parent / "personalities.json")
+    candidates.append(Path("puppeteer/personalities.json"))
+
+    for candidate in candidates:
+        if candidate.exists():
+            with open(candidate) as f:
+                return json.load(f)
+    return {}
+
+
+def _resolve_personality(
+    player: PilotPlayer | ChatterboxPlayer,
+    personalities: dict[str, dict],
+    had_explicit_name: bool,
+) -> None:
+    """Apply personality defaults to a player in-place. Player-level fields win."""
+    if not player.personality:
+        return
+
+    pdata = personalities.get(player.personality)
+    if pdata is None:
+        raise ValueError(f"Unknown personality: {player.personality!r}. Available: {sorted(personalities.keys())}")
+
+    # Name: player JSON name > personality name (required in personality)
+    if not had_explicit_name:
+        if "name" not in pdata:
+            raise ValueError(f"Personality {player.personality!r} must have a 'name' field")
+        player.name = pdata["name"]
+
+    # Validate name length
+    if len(player.name) < MIN_USERNAME_LENGTH or len(player.name) > MAX_USERNAME_LENGTH:
+        raise ValueError(
+            f"Player name {player.name!r} must be {MIN_USERNAME_LENGTH}-{MAX_USERNAME_LENGTH} "
+            f"characters (XMage server limit)"
+        )
+
+    # Fill in defaults (player-level fields win)
+    if player.model is None and "model" in pdata:
+        player.model = pdata["model"]
+    if player.base_url is None and "base_url" in pdata:
+        player.base_url = pdata["base_url"]
+    if hasattr(player, "reasoning_effort"):
+        if player.reasoning_effort is None and "reasoning_effort" in pdata:
+            player.reasoning_effort = pdata["reasoning_effort"]
+    if player.prompt_suffix is None and "prompt_suffix" in pdata:
+        player.prompt_suffix = pdata["prompt_suffix"]
 
 
 @dataclass
@@ -171,34 +235,38 @@ class Config:
             self.game_type = data.get("gameType", "")
             self.deck_type = data.get("deckType", "")
             self.custom_start_life = data.get("customStartLife", 0)
+            personalities = load_personalities(self.config_file)
             for i, player in enumerate(data.get("players", [])):
                 player_type = player.get("type", "")
+                has_explicit_name = "name" in player
                 name = player.get("name", f"player-{i}")
                 deck = player.get("deck")  # Optional deck path
 
                 if player_type == "sleepwalker":
                     self.sleepwalker_players.append(SleepwalkerPlayer(name=name, deck=deck))
                 elif player_type == "chatterbox":
-                    self.chatterbox_players.append(
-                        ChatterboxPlayer(
-                            name=name,
-                            deck=deck,
-                            model=player.get("model"),
-                            base_url=player.get("base_url"),
-                            system_prompt=player.get("system_prompt"),
-                        )
+                    p = ChatterboxPlayer(
+                        name=name,
+                        deck=deck,
+                        model=player.get("model"),
+                        base_url=player.get("base_url"),
+                        system_prompt=player.get("system_prompt"),
+                        personality=player.get("personality"),
                     )
+                    _resolve_personality(p, personalities, has_explicit_name)
+                    self.chatterbox_players.append(p)
                 elif player_type == "pilot":
-                    self.pilot_players.append(
-                        PilotPlayer(
-                            name=name,
-                            deck=deck,
-                            model=player.get("model"),
-                            base_url=player.get("base_url"),
-                            system_prompt=player.get("system_prompt"),
-                            reasoning_effort=player.get("reasoning_effort"),
-                        )
+                    p = PilotPlayer(
+                        name=name,
+                        deck=deck,
+                        model=player.get("model"),
+                        base_url=player.get("base_url"),
+                        system_prompt=player.get("system_prompt"),
+                        reasoning_effort=player.get("reasoning_effort"),
+                        personality=player.get("personality"),
                     )
+                    _resolve_personality(p, personalities, has_explicit_name)
+                    self.pilot_players.append(p)
                 elif player_type == "potato":
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
                 elif player_type == "staller":

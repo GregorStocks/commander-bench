@@ -6,7 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from puppeteer.config import ChatterboxPlayer, Config, CpuPlayer, PilotPlayer, PotatoPlayer
+from puppeteer.config import (
+    ChatterboxPlayer,
+    Config,
+    CpuPlayer,
+    PilotPlayer,
+    PotatoPlayer,
+    _resolve_personality,
+    load_personalities,
+)
 
 
 def test_config_defaults():
@@ -176,3 +184,182 @@ def test_run_tag_legacy_llm():
 def test_run_tag_unknown_format():
     config = Config(config_file=Path("custom-thing.json"))
     assert config.run_tag == "custom-thing"
+
+
+# --- Personality tests ---
+
+SAMPLE_PERSONALITIES = {
+    "test-pal": {
+        "model": "test/model-x",
+        "name": "TestPal",
+        "prompt_suffix": "You are very friendly.",
+        "reasoning_effort": "high",
+    },
+    "test-villain": {
+        "model": "test/model-y",
+        "name": "TestVillain",
+        "prompt_suffix": "You are evil.",
+    },
+}
+
+
+def test_personality_resolves_model():
+    """Personality should set model on player."""
+    player = PilotPlayer(name="placeholder")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player.model == "test/model-x"
+    assert player.name == "TestPal"
+
+
+def test_personality_player_override_wins():
+    """Explicit model on player should beat personality default."""
+    player = PilotPlayer(name="MyName", model="my/override")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
+    assert player.model == "my/override"
+    assert player.name == "MyName"
+
+
+def test_personality_unknown_raises():
+    """Unknown personality name should raise ValueError."""
+    player = PilotPlayer(name="test")
+    player.personality = "nonexistent"
+    with pytest.raises(ValueError, match="Unknown personality"):
+        _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
+
+
+def test_personality_name_from_personality():
+    """When no explicit name in JSON, personality name is used."""
+    player = PilotPlayer(name="player-0")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player.name == "TestPal"
+
+
+def test_personality_explicit_name_overrides():
+    """Explicit name in player JSON should beat personality name."""
+    player = PilotPlayer(name="CustomName")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
+    assert player.name == "CustomName"
+
+
+def test_personality_prompt_suffix():
+    """prompt_suffix from personality should be stored on player."""
+    player = PilotPlayer(name="placeholder")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player.prompt_suffix == "You are very friendly."
+
+
+def test_personality_reasoning_effort():
+    """reasoning_effort from personality should fill in when not set on player."""
+    player = PilotPlayer(name="placeholder")
+    player.personality = "test-pal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player.reasoning_effort == "high"
+
+    # Player-level override wins
+    player2 = PilotPlayer(name="placeholder", reasoning_effort="low")
+    player2.personality = "test-pal"
+    _resolve_personality(player2, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player2.reasoning_effort == "low"
+
+
+def test_personality_works_for_chatterbox():
+    """Personality resolution should work for ChatterboxPlayer too."""
+    player = ChatterboxPlayer(name="placeholder")
+    player.personality = "test-villain"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
+    assert player.model == "test/model-y"
+    assert player.name == "TestVillain"
+    assert player.prompt_suffix == "You are evil."
+
+
+def test_personality_missing_name_in_definition_raises():
+    """Personality without a name field should raise when player has no explicit name."""
+    bad_personalities = {"no-name": {"model": "test/model"}}
+    player = PilotPlayer(name="player-0")
+    player.personality = "no-name"
+    with pytest.raises(ValueError, match="must have a 'name' field"):
+        _resolve_personality(player, bad_personalities, had_explicit_name=False)
+
+
+def test_personality_name_too_long_raises():
+    """Name exceeding 14 chars should raise ValueError."""
+    long_personalities = {"long": {"model": "test/m", "name": "ThisNameIsTooLong"}}
+    player = PilotPlayer(name="placeholder")
+    player.personality = "long"
+    with pytest.raises(ValueError, match="3-14 characters"):
+        _resolve_personality(player, long_personalities, had_explicit_name=False)
+
+
+def test_load_personalities_from_file():
+    """load_personalities should read a JSON file."""
+    pdata = {"my-pal": {"model": "x/y", "name": "MyPal", "prompt_suffix": "hi"}}
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", prefix="personalities", delete=False, dir=tempfile.gettempdir()
+    ) as pf:
+        json.dump(pdata, pf)
+        pf_path = Path(pf.name)
+
+    # Create a fake config file in the same directory so load_personalities finds it
+    config_path = pf_path.parent / "test-config.json"
+    config_path.write_text("{}")
+
+    try:
+        # Rename personalities file to match expected name
+        personalities_path = pf_path.parent / "personalities.json"
+        pf_path.rename(personalities_path)
+        result = load_personalities(config_path)
+        assert "my-pal" in result
+        assert result["my-pal"]["model"] == "x/y"
+    finally:
+        personalities_path.unlink(missing_ok=True)
+        config_path.unlink(missing_ok=True)
+
+
+def test_personality_end_to_end_config_load():
+    """Full integration: config JSON with personality field loads correctly."""
+    # Create a temp dir with both config and personalities files
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        personalities = {
+            "test-hero": {
+                "model": "test/hero-model",
+                "name": "TheHero",
+                "prompt_suffix": "You are heroic.",
+                "reasoning_effort": "medium",
+            }
+        }
+        (tmpdir_path / "personalities.json").write_text(json.dumps(personalities))
+
+        config_data = {
+            "players": [
+                {"type": "pilot", "personality": "test-hero", "deck": "random"},
+                {"type": "pilot", "name": "Override", "personality": "test-hero", "deck": "random"},
+            ]
+        }
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        config = Config(config_file=config_path)
+        config.load_skeleton_config()
+
+        assert len(config.pilot_players) == 2
+
+        # First player: name and model from personality
+        p1 = config.pilot_players[0]
+        assert p1.name == "TheHero"
+        assert p1.model == "test/hero-model"
+        assert p1.prompt_suffix == "You are heroic."
+        assert p1.reasoning_effort == "medium"
+        assert p1.personality == "test-hero"
+
+        # Second player: explicit name overrides personality name
+        p2 = config.pilot_players[1]
+        assert p2.name == "Override"
+        assert p2.model == "test/hero-model"
+        assert p2.prompt_suffix == "You are heroic."
