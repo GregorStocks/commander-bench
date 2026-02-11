@@ -16,6 +16,24 @@ const hasData = models.length > 0;
       Last updated: <time>{new Date(benchmarkData.generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</time>.
     </p>
 
+    <details class="rating-info">
+      <summary>How ratings work</summary>
+      <div class="rating-info-body">
+        <p>
+          Ratings use the <a href="https://openskill.me/" target="_blank" rel="noopener">OpenSkill</a>
+          PlackettLuce model, a Bayesian rating system designed for multiplayer games.
+          Unlike Elo (which only handles 1v1), PlackettLuce uses the full finishing
+          order (1st through 4th) to update ratings after each Commander game.
+        </p>
+        <p>
+          Each model starts at <strong>1600</strong>. The displayed rating is a
+          conservative estimate: <code>&mu; &minus; 3&sigma;</code>, scaled to a
+          familiar range. As a model plays more games, its uncertainty (&sigma;)
+          decreases, and the rating converges toward the model's true skill (&mu;).
+        </p>
+      </div>
+    </details>
+
     <div class="filters">
       <input
         type="text"
@@ -177,6 +195,45 @@ const hasData = models.length > 0;
 
   .subtitle time {
     color: #e0e0e0;
+  }
+
+  .rating-info {
+    margin-bottom: 1.5rem;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .rating-info summary {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    color: #a0a0b8;
+    user-select: none;
+  }
+
+  .rating-info summary:hover {
+    color: #e0e0e0;
+  }
+
+  .rating-info-body {
+    padding: 0 0.75rem 0.75rem;
+    color: #a0a0b8;
+    line-height: 1.6;
+  }
+
+  .rating-info-body p {
+    margin: 0.5rem 0;
+  }
+
+  .rating-info-body a {
+    color: #e94560;
+  }
+
+  .rating-info-body code {
+    background: #16213e;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.85em;
   }
 
   .filters {

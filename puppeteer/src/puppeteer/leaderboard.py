@@ -12,6 +12,17 @@ from openskill.models import PlackettLuce
 
 _LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 
+# Scale raw OpenSkill ordinals (centered at 0) to a DCI-style rating.
+# DCI Magic used Elo starting at 1600.
+_RATING_BASE = 1600
+_RATING_SCALE = 100
+
+
+def _display_rating(ordinal: float) -> int:
+    """Convert raw OpenSkill ordinal to display rating."""
+    return round(ordinal * _RATING_SCALE + _RATING_BASE)
+
+
 _PROVIDER_DISPLAY: dict[str, str] = {
     "anthropic": "Anthropic",
     "google": "Google",
@@ -136,11 +147,11 @@ def compute_ratings(
                     ratings[mid] = model.rating(name=mid)
             if pilots:
                 mid = pilots[0]["model"]
-                ordinal = ratings[mid].ordinal()
+                display = _display_rating(ratings[mid].ordinal())
                 per_game.append(
                     {
                         "id": game.get("id", ""),
-                        "players": [{"model": mid, "ratingBefore": round(ordinal), "ratingAfter": round(ordinal)}],
+                        "players": [{"model": mid, "ratingBefore": display, "ratingAfter": display}],
                     }
                 )
             continue
@@ -151,8 +162,8 @@ def compute_ratings(
             if mid not in ratings:
                 ratings[mid] = model.rating(name=mid)
 
-        # Record before ratings (ordinal = mu - 3*sigma)
-        before = {p["model"]: ratings[p["model"]].ordinal() for p in pilots}
+        # Record before ratings
+        before = {p["model"]: _display_rating(ratings[p["model"]].ordinal()) for p in pilots}
 
         # Get placements
         placements = extract_placements(game, games_dir)
@@ -179,25 +190,25 @@ def compute_ratings(
             ratings[mid] = updated[i][0]
 
         # Record after ratings
-        after = {mid: ratings[mid].ordinal() for mid in pilot_models}
+        after = {mid: _display_rating(ratings[mid].ordinal()) for mid in pilot_models}
         per_game.append(
             {
                 "id": game.get("id", ""),
                 "players": [
                     {
                         "model": mid,
-                        "ratingBefore": round(before[mid]),
-                        "ratingAfter": round(after[mid]),
+                        "ratingBefore": before[mid],
+                        "ratingAfter": after[mid],
                     }
                     for mid in pilot_models
                 ],
             }
         )
 
-    # Build final ordinal ratings
+    # Build final display ratings
     final: dict[str, float] = {}
     for mid, r in ratings.items():
-        final[mid] = r.ordinal()
+        final[mid] = _display_rating(r.ordinal())
 
     return final, per_game
 
@@ -248,7 +259,7 @@ def generate_leaderboard(
         win_rate = wins / games_played
         avg_cost = s["total_cost"] / games_played
         provider_slug = model_id.split("/", 1)[0]
-        rating = round(final_ratings.get(model_id, 0.0))
+        rating = final_ratings.get(model_id, _RATING_BASE)
 
         models.append(
             {
