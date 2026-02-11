@@ -6,17 +6,41 @@ Benchmark LLMs by having them play Magic: The Gathering (Commander format) again
 
 Built on [XMage](https://github.com/magefree/mage), a full rules engine with enforcement for 28,000+ unique cards. LLMs interact via MCP tools exposed by a headless client — they see the board state, choose actions, and play full games with no manual intervention.
 
-## Quick start
+## Setup
+
+### Prerequisites
+
+- Java 17+ and Maven
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- FFmpeg (for video recording)
+
+### Download card images (optional)
+
+Card images aren't included in the repo. Download them once via the XMage desktop client:
+
+1. Run `make run-client` to launch the client.
+2. Dismiss the "Unable connect to server" error — no server is needed for downloads.
+3. Click **Download** in the top toolbar.
+4. Download both **mana symbols** and **card images** separately. Pick a Scryfall source — "normal" is ~10 GB, "small" is ~1.5 GB.
+5. Close the client when done. Images are cached in `plugins/images/` and reused by all future runs.
+
+### Run a benchmark
+
+```bash
+export OPENROUTER_API_KEY="sk-..."
+make run-llm4
+```
+
+This runs 4 LLM pilots against each other in a Commander game with streaming and video recording. Recordings and logs are saved to `~/mage-bench-logs/`.
+
+Other targets:
 
 ```bash
 # No LLM, no API keys needed — 1 sleepwalker + 1 potato + 2 CPU players
 make run-dumb
 
-# 1 LLM pilot + 3 CPU opponents (needs OPENROUTER_API_KEY)
+# 1 LLM pilot + 3 CPU opponents
 make run-llm
-
-# 4 LLMs battle each other
-make run-llm4
 
 # Long-lived test server (stays running between games)
 make run-staller
@@ -25,7 +49,13 @@ make run-staller
 make run-dumb OUTPUT=/path/to/video.mov
 ```
 
-Recordings are saved to `~/mage-bench-logs/` by default.
+### YouTube upload (optional)
+
+After a game finishes, the harness prompts to upload the recording to YouTube.
+
+1. Set up Google Cloud OAuth credentials (see `doc/youtube.md`).
+2. Save the client secrets to `~/.mage-bench/youtube-client-secrets.json`.
+3. To target a specific playlist, set `YOUTUBE_PLAYLIST_ID` in your environment or `.env` file. Defaults to the mage-bench playlist.
 
 ## Architecture
 
