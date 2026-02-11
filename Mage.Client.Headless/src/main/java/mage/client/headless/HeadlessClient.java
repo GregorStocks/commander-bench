@@ -56,7 +56,7 @@ public class HeadlessClient {
     private static final String PERSONALITY_STALLER = "staller";
     private static final String PERSONALITY_SLEEPWALKER = "sleepwalker";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         String server = getArg(args, "--server", System.getProperty("xmage.headless.server", "localhost"));
         int port = getIntArg(args, "--port", Integer.getInteger("xmage.headless.port", 17171));
         String username = getArg(args, "--username", System.getProperty("xmage.headless.username", "bridge-" + System.currentTimeMillis()));
@@ -93,15 +93,10 @@ public class HeadlessClient {
 
         // Initialize card database so get_oracle_text can look up cards by name
         logger.info("Loading card database...");
-        try {
-            java.io.File lockFile = new java.io.File("./db/cards.lock");
-            lockFile.getParentFile().mkdirs();
-            try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(lockFile, "rw");
-                 java.nio.channels.FileLock lock = raf.getChannel().lock()) {
-                CardScanner.scan();
-            }
-        } catch (java.io.IOException e) {
-            logger.warn("Failed to acquire card DB lock, scanning without lock: " + e.getMessage());
+        java.io.File lockFile = new java.io.File("./db/cards.lock");
+        lockFile.getParentFile().mkdirs();
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(lockFile, "rw");
+             java.nio.channels.FileLock lock = raf.getChannel().lock()) {
             CardScanner.scan();
         }
         logger.info("Card database loaded.");
