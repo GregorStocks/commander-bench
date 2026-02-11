@@ -738,14 +738,76 @@ def start_streaming_client(
     )
 
 
-def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
-    """Prompt user to export game data for the website visualizer."""
+def _save_youtube_url(game_dir: Path, url: str) -> None:
+    """Save YouTube URL to game_meta.json."""
+    meta_path = game_dir / "game_meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+        meta["youtube_url"] = url
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+
+
+def _update_website_youtube_url(game_dir: Path, url: str, project_root: Path) -> None:
+    """Patch the YouTube URL into the website game JSON and index if they exist."""
+    game_id = game_dir.name
+    website_games_dir = project_root / "website" / "public" / "games"
+
+    # Update per-game JSON
+    game_json = website_games_dir / f"{game_id}.json"
+    if game_json.exists():
+        data = json.loads(game_json.read_text())
+        data["youtubeUrl"] = url
+        game_json.write_text(json.dumps(data, indent=2))
+
+    # Update index.json
+    index_json = website_games_dir / "index.json"
+    if index_json.exists():
+        index = json.loads(index_json.read_text())
+        for entry in index:
+            if entry.get("id") == game_id:
+                entry["youtubeUrl"] = url
+                break
+        index_json.write_text(json.dumps(index, indent=2))
+
+
+def _maybe_upload_to_youtube(game_dir: Path, project_root: Path) -> None:
+    """Prompt user to upload recording to YouTube."""
+    recording = game_dir / "recording.mov"
+    if not recording.exists():
+        return  # No recording, nothing to upload
+
     try:
-        answer = input("Export game for website? [Y/n]: ").strip().lower()
+        answer = input("Upload recording to YouTube? [y/N]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print()
         return
-    if answer in ("n", "no"):
+    if answer not in ("y", "yes"):
+        return
+
+    try:
+        sys.path.insert(0, str(project_root / "scripts"))
+        from upload_youtube import upload_to_youtube
+
+        url = upload_to_youtube(game_dir)
+        if url:
+            print(f"  YouTube: {url}")
+            _save_youtube_url(game_dir, url)
+            _update_website_youtube_url(game_dir, url, project_root)
+    except ImportError:
+        print("  Warning: YouTube upload requires google-api-python-client and google-auth-oauthlib")
+        print("  Install with: uv add --project puppeteer google-api-python-client google-auth-oauthlib")
+    except Exception as e:
+        print(f"  Warning: YouTube upload failed: {e}")
+
+
+def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
+    """Prompt user to export game data for the website visualizer."""
+    try:
+        answer = input("Export game for website? [y/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if answer not in ("y", "yes"):
         return
     try:
         # Import inline to avoid circular deps and keep it optional
@@ -992,6 +1054,7 @@ def main() -> int:
         except Exception as e:
             print(f"  Warning: failed to merge game log: {e}")
         _print_game_summary(game_dir)
+        _maybe_upload_to_youtube(game_dir, project_root)
         _maybe_export_for_website(game_dir, project_root)
 
         return 0

@@ -228,6 +228,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         "llmEvents": llm_events,
         "gameOver": game_over,
     }
+    if meta.get("youtube_url"):
+        output["youtubeUrl"] = meta["youtube_url"]
 
     website_games_dir.mkdir(parents=True, exist_ok=True)
     output_path = website_games_dir / f"{game_id}.json"
@@ -250,15 +252,16 @@ def _update_index(games_dir: Path, game_id: str, game_data: dict) -> None:
     games = [g for g in games if g.get("id") != game_id]
 
     # Add new entry (summary only, no full data)
-    games.append(
-        {
-            "id": game_id,
-            "timestamp": game_data.get("timestamp", ""),
-            "totalTurns": game_data.get("totalTurns", 0),
-            "winner": game_data.get("winner"),
-            "players": game_data.get("players", []),
-        }
-    )
+    entry = {
+        "id": game_id,
+        "timestamp": game_data.get("timestamp", ""),
+        "totalTurns": game_data.get("totalTurns", 0),
+        "winner": game_data.get("winner"),
+        "players": game_data.get("players", []),
+    }
+    if game_data.get("youtubeUrl"):
+        entry["youtubeUrl"] = game_data["youtubeUrl"]
+    games.append(entry)
 
     # Sort by id descending (newest first)
     games.sort(key=lambda g: g.get("id", ""), reverse=True)

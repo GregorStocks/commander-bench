@@ -79,6 +79,17 @@ import Base from '../../layouts/Base.astro';
     color: #a8d9a5;
   }
 
+  .yt-link {
+    color: #e94560;
+    text-decoration: none;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+  }
+
+  .yt-link:hover {
+    text-decoration: underline;
+  }
+
   .game-players {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -314,6 +325,25 @@ import Base from '../../layouts/Base.astro';
           footer.className = "game-footer";
           footer.textContent = "Total cost: $" + totalCost.toFixed(2);
           a.appendChild(footer);
+        }
+        // YouTube link in footer
+        if (game.youtubeUrl) {
+          var ytLink = document.createElement("a");
+          ytLink.href = game.youtubeUrl;
+          ytLink.target = "_blank";
+          ytLink.rel = "noopener";
+          ytLink.className = "yt-link";
+          ytLink.textContent = "YouTube";
+          ytLink.onclick = function (e) { e.stopPropagation(); };
+          var footerEl = a.querySelector(".game-footer");
+          if (footerEl) {
+            footerEl.appendChild(ytLink);
+          } else {
+            var ytFooter = document.createElement("div");
+            ytFooter.className = "game-footer";
+            ytFooter.appendChild(ytLink);
+            a.appendChild(ytFooter);
+          }
         }
 
         list.appendChild(a);

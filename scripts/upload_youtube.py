@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Upload a game recording to YouTube."""
+
+import json
+import re
+import sys
+from pathlib import Path
+
+MAGE_BENCH_DIR = Path.home() / ".mage-bench"
+CLIENT_SECRETS_FILE = MAGE_BENCH_DIR / "youtube-client-secrets.json"
+TOKEN_FILE = MAGE_BENCH_DIR / "youtube-token.json"
+LOGS_DIR = Path.home() / "mage-bench-logs"
+
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+]
+
+PLAYLIST_ID = "PLZkLbT-AmvhB66wstXYqn4AmCYn4hmQ34"
+
+DECKLIST_RE = re.compile(r"(?:SB:\s*)?(\d+)\s+\[([^:]+):([^\]]+)\]\s+(.+)")
+
+
+def _extract_commander(player: dict) -> str | None:
+    """Find commander name from decklist (SB: entries)."""
+    for entry in player.get("decklist", []):
+        if entry.startswith("SB:"):
+            m = DECKLIST_RE.match(entry)
+            if m:
+                return m.group(4).strip()
+    return None
+
+
+def _build_title(meta: dict) -> str:
+    """Generate video title from game metadata.
+
+    Format: "Mage-Bench: Name (Commander) vs Name (Commander) vs ..."
+    Truncated to 100 chars (YouTube limit).
+    """
+    players = meta.get("players", [])
+    parts = []
+    for p in players:
+        name = p.get("name", "?")
+        commander = _extract_commander(p)
+        if commander:
+            parts.append(f"{name} ({commander})")
+        else:
+            parts.append(name)
+
+    matchup = " vs ".join(parts)
+    title = f"Mage-Bench: {matchup}"
+
+    # Truncate to fit YouTube's 100-char limit
+    if len(title) > 100:
+        title = title[:97] + "..."
+    return title
+
+
+def _build_description(meta: dict, game_dir: Path) -> str:
+    """Generate video description from game metadata."""
+    game_id = game_dir.name
+    game_url = f"https://mage-bench.com/games/{game_id}"
+
+    lines = ["AI models play Commander (Magic: The Gathering) via Mage-Bench.", ""]
+
+    players = meta.get("players", [])
+    for p in players:
+        commander = _extract_commander(p)
+        model = p.get("model", "")
+        name = p.get("name", "?")
+        parts = [name]
+        if commander:
+            parts.append(f"playing {commander}")
+        if model:
+            parts.append(f"({model})")
+        lines.append(" ".join(parts))
+
+    lines.append("")
+    lines.append("Replay this game:")
+    lines.append(game_url)
+    lines.append("")
+    lines.append("https://mage-bench.com")
+
+    return "\n".join(lines)
+
+
+def _get_authenticated_service():
+    """Build an authenticated YouTube API service."""
+    try:
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+    except ImportError:
+        raise ImportError(
+            "YouTube upload requires google-api-python-client and google-auth-oauthlib.\n"
+            "Install with: uv add --project puppeteer google-api-python-client google-auth-oauthlib google-auth-httplib2"
+        )
+
+    creds = None
+
+    if TOKEN_FILE.exists():
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not CLIENT_SECRETS_FILE.exists():
+                raise FileNotFoundError(
+                    f"YouTube client secrets not found at {CLIENT_SECRETS_FILE}.\n"
+                    "See doc/youtube.md for setup instructions."
+                )
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(CLIENT_SECRETS_FILE), SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+
+        MAGE_BENCH_DIR.mkdir(parents=True, exist_ok=True)
+        TOKEN_FILE.write_text(creds.to_json())
+
+    return build("youtube", "v3", credentials=creds)
+
+
+def upload_to_youtube(game_dir: Path) -> str | None:
+    """Upload recording.mov from game_dir to YouTube.
+
+    Returns the YouTube video URL on success, None if no recording exists.
+    """
+    from googleapiclient.http import MediaFileUpload
+
+    recording = game_dir / "recording.mov"
+    if not recording.exists():
+        print(f"  No recording.mov in {game_dir}, skipping YouTube upload")
+        return None
+
+    meta_path = game_dir / "game_meta.json"
+    meta = {}
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+
+    title = _build_title(meta)
+    description = _build_description(meta, game_dir)
+
+    print(f"  Uploading to YouTube: {title}")
+
+    youtube = _get_authenticated_service()
+
+    body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": [
+                "mage-bench",
+                "magic-the-gathering",
+                "xmage",
+                "ai",
+                "llm",
+                "commander",
+            ],
+            "categoryId": "20",  # Gaming
+        },
+        "status": {
+            "privacyStatus": "unlisted",
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+
+    media = MediaFileUpload(
+        str(recording),
+        mimetype="video/quicktime",
+        resumable=True,
+        chunksize=10 * 1024 * 1024,
+    )
+
+    request = youtube.videos().insert(
+        part="snippet,status", body=body, media_body=media
+    )
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            pct = int(status.progress() * 100)
+            print(f"  Upload progress: {pct}%")
+
+    video_id = response["id"]
+    url = f"https://youtu.be/{video_id}"
+    print(f"  Upload complete: {url}")
+
+    # Add to playlist
+    try:
+        youtube.playlistItems().insert(
+            part="snippet",
+            body={
+                "snippet": {
+                    "playlistId": PLAYLIST_ID,
+                    "resourceId": {
+                        "kind": "youtube#video",
+                        "videoId": video_id,
+                    },
+                },
+            },
+        ).execute()
+        print("  Added to playlist")
+    except Exception as e:
+        print(f"  Warning: failed to add to playlist: {e}")
+
+    return url
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <game_id>")
+        print(f"  game_id: directory name under {LOGS_DIR}")
+        sys.exit(1)
+
+    game_id = sys.argv[1]
+    game_dir = LOGS_DIR / game_id
+    if not game_dir.is_dir():
+        print(f"Error: {game_dir} is not a directory")
+        sys.exit(1)
+
+    url = upload_to_youtube(game_dir)
+    if url:
+        # Save to game_meta.json
+        meta_path = game_dir / "game_meta.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text())
+            meta["youtube_url"] = url
+            meta_path.write_text(json.dumps(meta, indent=2) + "\n")
+            print(f"  Saved YouTube URL to {meta_path}")
+
+
+if __name__ == "__main__":
+    main()
