@@ -327,40 +327,6 @@ public class McpServer {
                         "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}")));
         tools.add(passPriorityTool);
 
-        // wait_and_get_choices
-        Map<String, Object> waitAndGetChoicesTool = new HashMap<>();
-        waitAndGetChoicesTool.put("name", "wait_and_get_choices");
-        waitAndGetChoicesTool.put("description",
-                "Block like pass_priority until a decision is needed, then return full get_action_choices output in one call. " +
-                "If no action arrives before timeout, returns pass_priority-style timeout payload.");
-        Map<String, Object> waitAndGetChoicesSchema = new HashMap<>();
-        waitAndGetChoicesSchema.put("type", "object");
-        Map<String, Object> waitAndGetChoicesProps = new HashMap<>();
-        Map<String, Object> waitAndGetChoicesTimeoutProp = new HashMap<>();
-        waitAndGetChoicesTimeoutProp.put("type", "integer");
-        waitAndGetChoicesTimeoutProp.put("description", "Max milliseconds to wait (default 30000)");
-        waitAndGetChoicesProps.put("timeout_ms", waitAndGetChoicesTimeoutProp);
-        waitAndGetChoicesSchema.put("properties", waitAndGetChoicesProps);
-        waitAndGetChoicesSchema.put("additionalProperties", false);
-        waitAndGetChoicesTool.put("inputSchema", waitAndGetChoicesSchema);
-        waitAndGetChoicesTool.put("outputSchema", outputSchema(
-                field("action_pending", "boolean", "Whether an action requiring input is pending"),
-                field("action_type", "string", "XMage callback method name", "action_pending=true"),
-                field("response_type", "string", "How to respond: select, boolean, index, amount, pile, or multi_amount", "action_pending=true"),
-                field("choices", "array[object]", "Available choices when response_type uses indexed selection", "response_type=select/index"),
-                field("message", "string", "Prompt text from XMage", "action_pending=true"),
-                field("actions_passed", "integer", "Number of priority passes performed before the decision"),
-                field("recent_chat", "array[string]", "Chat messages received since last check", "Chat received"),
-                field("timeout", "boolean", "Whether the operation timed out", "Timeout")));
-        waitAndGetChoicesTool.put("examples", listOf(
-                example("Action with choices",
-                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"response_type\": \"select\",\n  \"actions_passed\": 4,\n" +
-                        "  \"choices\": [{\"index\": 0, \"description\": \"Lightning Bolt {R} [Cast]\"}]\n}"),
-                example("Timeout",
-                        "{\n  \"action_pending\": false,\n  \"actions_passed\": 9,\n  \"timeout\": true\n}")));
-        tools.add(waitAndGetChoicesTool);
-
         // get_game_state
         Map<String, Object> gameStateTool = new HashMap<>();
         gameStateTool.put("name", "get_game_state");
@@ -461,13 +427,20 @@ public class McpServer {
         getChoicesTool.put("name", "get_action_choices");
         getChoicesTool.put("description",
                 "Get available choices for the current pending action. Call before choose_action. " +
+                "With timeout_ms: blocks like pass_priority until a decision is needed, then returns choices in one call. " +
+                "Without timeout_ms: returns immediately (action_pending=false if nothing to do). " +
                 "Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). " +
                 "response_type: select (cards to play, attackers, blockers), boolean (yes/no), " +
                 "index (target/ability), amount, pile, or multi_amount. " +
                 "During combat: combat_phase indicates declare_attackers or declare_blockers.");
         Map<String, Object> getChoicesSchema = new HashMap<>();
         getChoicesSchema.put("type", "object");
-        getChoicesSchema.put("properties", new HashMap<>());
+        Map<String, Object> getChoicesProps = new HashMap<>();
+        Map<String, Object> getChoicesTimeoutProp = new HashMap<>();
+        getChoicesTimeoutProp.put("type", "integer");
+        getChoicesTimeoutProp.put("description", "Max milliseconds to wait for a decision. When set, auto-passes priority until a decision is needed (like pass_priority + get_action_choices in one call). When omitted, returns immediately.");
+        getChoicesProps.put("timeout_ms", getChoicesTimeoutProp);
+        getChoicesSchema.put("properties", getChoicesProps);
         getChoicesSchema.put("additionalProperties", false);
         getChoicesTool.put("inputSchema", getChoicesSchema);
         getChoicesTool.put("outputSchema", outputSchema(
@@ -483,7 +456,10 @@ public class McpServer {
                 field("mana_pool", "object", "Current mana pool {R, G, U, W, B, C}", "Mana payment"),
                 field("untapped_lands", "integer", "Number of untapped lands", "Mana payment"),
                 field("min_amount", "integer", "Minimum allowed value", "amount response_type"),
-                field("max_amount", "integer", "Maximum allowed value", "amount response_type")));
+                field("max_amount", "integer", "Maximum allowed value", "amount response_type"),
+                field("actions_passed", "integer", "Number of priority passes performed before the decision", "timeout_ms provided"),
+                field("recent_chat", "array[string]", "Chat messages received since last check", "timeout_ms provided"),
+                field("timeout", "boolean", "Whether the operation timed out", "timeout_ms provided")));
         getChoicesTool.put("examples", listOf(
                 example("Select (play cards)",
                         "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
@@ -628,11 +604,6 @@ public class McpServer {
                 toolResult = callbackHandler.passPriority(passPriorityTimeout);
                 break;
 
-            case "wait_and_get_choices":
-                int waitChoicesTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 30000;
-                toolResult = callbackHandler.waitAndGetChoices(waitChoicesTimeout);
-                break;
-
             case "get_game_state":
                 Long stateCursor = arguments.has("cursor") && !arguments.get("cursor").isJsonNull() ? arguments.get("cursor").getAsLong() : null;
                 toolResult = callbackHandler.getGameState(stateCursor);
@@ -654,7 +625,12 @@ public class McpServer {
                 break;
 
             case "get_action_choices":
-                toolResult = callbackHandler.getActionChoices();
+                if (arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull()) {
+                    int choicesTimeout = arguments.get("timeout_ms").getAsInt();
+                    toolResult = callbackHandler.waitAndGetChoices(choicesTimeout);
+                } else {
+                    toolResult = callbackHandler.getActionChoices();
+                }
                 break;
 
             case "choose_action":

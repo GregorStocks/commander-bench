@@ -1,7 +1,6 @@
 {
   "default": [
     "pass_priority",
-    "wait_and_get_choices",
     "get_action_choices",
     "choose_action",
     "take_action",
