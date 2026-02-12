@@ -22,20 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes thirteen tools:
- * - is_action_on_me: Check if action is pending
- * - take_action: Execute default action
- * - wait_for_action: Block until action is pending (or timeout)
- * - pass_priority: Auto-pass low-value priority stops
- * - wait_and_get_choices: pass_priority + get_action_choices in one call
- * - get_game_log: Get game log text
- * - get_game_state: Get structured game state
- * - send_chat_message: Send a chat message
- * - get_oracle_text: Look up card rules
- * - auto_pass_until_event: Auto-pass and wait for game state changes
- * - get_action_choices: Get detailed choices for pending action
- * - choose_action: Respond with a specific choice
- * - get_my_decklist: Get original decklist
  */
 public class McpServer {
 
