@@ -107,6 +107,7 @@ public class BridgeCallbackHandler {
     private volatile long gameStateCursor = 0; // Monotonic cursor for get_game_state
     private volatile String lastGameStateSignature = null; // Canonicalized state signature for cursoring
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
+    private volatile String lastManaPaymentPrompt = null; // Last GAME_PLAY_MANA prompt text for ability color matching
     private volatile UUID poolManaPayingForId = null; // Tracks which spell pool-mana is being paid for (loop detection)
     private volatile int poolManaAttempts = 0; // Consecutive pool-mana sends for the same spell
     private static final int MAX_POOL_MANA_ATTEMPTS = 10; // Cancel payment after this many pool retries
@@ -2604,7 +2605,24 @@ public class BridgeCallbackHandler {
 
                 case GAME_CHOOSE_ABILITY:
                     if (mcpMode) {
-                        storePendingAction(objectId, method, callback);
+                        // Auto-select the best ability for mana payment instead of
+                        // deferring to LLM (which consistently sends answer=false).
+                        AbilityPickerView picker = (AbilityPickerView) callback.getData();
+                        Map<UUID, String> choices = picker.getChoices();
+                        if (choices != null && !choices.isEmpty()) {
+                            UUID selected = pickBestAbilityForMana(choices);
+                            String choiceText = choices.get(selected);
+                            logger.info("[" + client.getUsername() + "] Auto-selecting ability: \""
+                                    + picker.getMessage() + "\" -> " + choiceText);
+                            GameView gv = picker.getGameView();
+                            if (gv != null) lastGameView = gv;
+                            session.sendPlayerUUID(objectId, selected);
+                            trackSentResponse(objectId, ResponseType.UUID, selected, null);
+                        } else {
+                            logger.warn("[" + client.getUsername() + "] Auto-selecting ability: no choices, sending null");
+                            session.sendPlayerUUID(objectId, null);
+                            trackSentResponse(objectId, ResponseType.UUID, null, null);
+                        }
                     } else {
                         handleGameChooseAbility(objectId, callback);
                     }
@@ -3073,6 +3091,50 @@ public class BridgeCallbackHandler {
         }
     }
 
+    /**
+     * Pick the ability that best matches the remaining mana payment cost.
+     * Uses lastManaPaymentPrompt to determine which colors are needed,
+     * then scores each ability by how many needed colors it produces.
+     * Falls back to the first choice if no prompt or no color-specific cost.
+     */
+    private UUID pickBestAbilityForMana(Map<UUID, String> choices) {
+        UUID fallback = choices.keySet().iterator().next();
+        String prompt = lastManaPaymentPrompt;
+        if (prompt == null) {
+            return fallback;
+        }
+
+        // Which colors does the payment need?
+        Pattern[] colorPatterns = {REGEX_WHITE, REGEX_BLUE, REGEX_BLACK, REGEX_RED, REGEX_GREEN, REGEX_COLORLESS};
+        List<Pattern> needed = new ArrayList<>();
+        for (Pattern p : colorPatterns) {
+            if (p.matcher(prompt).find()) {
+                needed.add(p);
+            }
+        }
+        if (needed.isEmpty()) {
+            return fallback; // Generic cost ({1}, {X}) — any mana works
+        }
+
+        // Score each ability by how many needed colors it produces
+        UUID best = null;
+        int bestScore = -1;
+        for (Map.Entry<UUID, String> entry : choices.entrySet()) {
+            String desc = entry.getValue();
+            int score = 0;
+            for (Pattern p : needed) {
+                if (p.matcher(desc).find()) {
+                    score++;
+                }
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = entry.getKey();
+            }
+        }
+        return best != null ? best : fallback;
+    }
+
     private boolean hasExplicitManaSymbol(String promptText) {
         if (promptText == null) {
             return false;
@@ -3166,6 +3228,7 @@ public class BridgeCallbackHandler {
         }
 
         String msg = message.getMessage();
+        lastManaPaymentPrompt = msg;
         UUID payingForId = extractPayingForId(msg);
 
         // Find a mana source from canPlayObjects and tap it
