@@ -107,6 +107,7 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
             {(formats[fmt]?.models || []).map((m: any) => (
               <tr
                 data-model-name={m.modelName.toLowerCase()}
+                data-model-id={m.modelId}
                 data-provider={m.provider}
                 data-rating={m.rating}
                 data-games-played={m.gamesPlayed}
@@ -116,7 +117,7 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
                 <td class="model-name">{m.modelName}</td>
                 <td>{m.provider}</td>
                 <td class="num">{m.rating}</td>
-                <td class="num">{m.gamesPlayed}</td>
+                <td class="num"><a class="games-link" href={`/games?model=${encodeURIComponent(m.modelId)}`}>{m.gamesPlayed}</a></td>
                 <td class="num col-winrate">{(m.winRate * 100).toFixed(1)}%</td>
                 <td class="num">${m.avgApiCost.toFixed(2)}</td>
               </tr>
@@ -151,6 +152,18 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
     return table!.querySelector(`tbody[data-format="${activeFormat}"]`) as HTMLTableSectionElement;
   }
 
+  function updateGamesLinks() {
+    table!.querySelectorAll('tr[data-model-id]').forEach((row) => {
+      const el = row as HTMLElement;
+      const modelId = el.dataset.modelId!;
+      const link = el.querySelector('a.games-link') as HTMLAnchorElement | null;
+      if (!link) return;
+      const params = new URLSearchParams({ model: modelId });
+      if (activeFormat !== 'combined') params.set('format', activeFormat);
+      link.href = '/games?' + params.toString();
+    });
+  }
+
   // Format tab switching
   if (formatTabs) {
     formatTabs.addEventListener('click', (e) => {
@@ -172,6 +185,7 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
 
       activeFormat = fmt;
       table!.classList.toggle('format-combined', fmt === 'combined');
+      updateGamesLinks();
       applyFilters();
     });
   }
@@ -439,6 +453,15 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
   .num {
     font-variant-numeric: tabular-nums;
     text-align: right;
+  }
+
+  .games-link {
+    color: #e94560;
+    text-decoration: none;
+  }
+
+  .games-link:hover {
+    text-decoration: underline;
   }
 
   th[data-sort="rating"],
