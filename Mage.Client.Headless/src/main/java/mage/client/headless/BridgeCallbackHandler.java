@@ -1315,7 +1315,20 @@ public class BridgeCallbackHandler {
                         }
                     }
                     if (!usedManaIndex) {
+                        boolean cancel = false;
                         if (answer != null && !answer) {
+                            cancel = true;
+                        } else if (answer != null && answer) {
+                            // answer=true with no mana sources: treat as cancel.
+                            // When the choice list is empty, storePendingAction sends response_type "boolean".
+                            // Models interpret this as a confirmation and send true, but cancel is the only option.
+                            List<Object> choices = lastChoices;
+                            if (choices == null || choices.isEmpty()) {
+                                logger.warn("[" + client.getUsername() + "] choose_action: answer=true for GAME_PLAY_MANA with no mana sources, auto-cancelling");
+                                cancel = true;
+                            }
+                        }
+                        if (cancel) {
                             // Mark spell as failed to prevent infinite retry loop
                             UUID payingForId = extractPayingForId(action.getMessage());
                             if (payingForId != null) {
