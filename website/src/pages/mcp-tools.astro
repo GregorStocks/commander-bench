@@ -60,6 +60,14 @@ function getOutputFields(tool: any) {
     generated from the same schema the LLM clients use.
   </p>
 
+  <p class="toolset-note">
+    Not all players receive all tools. Each player preset references a named
+    <strong>toolset</strong> that controls which tools are available to that model.
+    Weaker models may get a smaller set of tools to avoid confusion, while stronger
+    models can handle the full suite. See <code>toolsets.json</code> and
+    <code>presets.json</code> for the current configuration.
+  </p>
+
   {categories.map(category => (
     <section>
       <h2>{category.title}</h2>
@@ -186,6 +194,20 @@ function getOutputFields(tool: any) {
 
   a {
     color: #e94560;
+  }
+
+  .toolset-note {
+    background: rgba(15, 52, 96, 0.4);
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: #a0a0b8;
+  }
+
+  .toolset-note code {
+    color: #e94560;
+    font-size: 0.85rem;
   }
 
   .category-desc {
