@@ -4,7 +4,7 @@ Two paths for visually inspecting the UI: extracting frames from game recordings
 
 ## Java Swing UI
 
-Every game run with `--streaming --record` (the default for `make run-dumb`, `make run-llm`, etc.) saves a video recording to `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/recording.mov`. Extract a frame with:
+Every game run with `--streaming --record` (the default for `make run-dumb`, `make run-llm`, etc.) saves a video recording to `~/.mage-bench/logs/game_YYYYMMDD_HHMMSS/recording.mov`. Extract a frame with:
 
 ```bash
 make screenshot
@@ -13,7 +13,7 @@ make screenshot
 This saves `screenshot.png` inside the game's log directory from the most recent game recording (~0.5s before the end). Then view it:
 
 ```
-Read ~/mage-bench-logs/game_.../screenshot.png
+Read ~/.mage-bench/logs/game_.../screenshot.png
 ```
 
 ### Parameters
@@ -37,13 +37,13 @@ make screenshot T=5
 make screenshot T=-2
 
 # From a specific game
-make screenshot GAME=~/mage-bench-logs/game_20260208_220934
+make screenshot GAME=~/.mage-bench/logs/game_20260208_220934
 
 # Custom output path
 make screenshot FILE=./my-screenshot.png
 
 # Manual ffmpeg (equivalent to default)
-ffmpeg -y -sseof -0.5 -i ~/mage-bench-logs/game_.../recording.mov -frames:v 1 screenshot.png
+ffmpeg -y -sseof -0.5 -i ~/.mage-bench/logs/game_.../recording.mov -frames:v 1 screenshot.png
 ```
 
 ## Website Visualizer

@@ -1,6 +1,6 @@
 # Logging
 
-All game logs live in `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`.
+All game logs live in `~/.mage-bench/logs/game_YYYYMMDD_HHMMSS/`.
 
 ## Per-player log files
 

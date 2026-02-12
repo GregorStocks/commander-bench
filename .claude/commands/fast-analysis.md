@@ -32,7 +32,7 @@ GZ_PATH=website/public/games/${GAME_ID}.json.gz
 ```
 
 a. Check if `$GZ_PATH` exists on the current branch.
-b. If not, check if `~/mage-bench-logs/${GAME_ID}/game_events.jsonl` exists. If so, generate the gz:
+b. If not, check if `~/.mage-bench/logs/${GAME_ID}/game_events.jsonl` exists. If so, generate the gz:
    ```bash
    uv run python scripts/export_game.py ${GAME_ID}
    ```

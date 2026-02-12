@@ -8,16 +8,16 @@ See `logging.md` for the file format reference.
 
 ```bash
 # Most recent LLM game
-GAME_DIR=~/mage-bench-logs/$(readlink ~/mage-bench-logs/last-llm4)
+GAME_DIR=~/.mage-bench/logs/$(readlink ~/.mage-bench/logs/last-llm4)
 
 # Most recent game by config name
-GAME_DIR=~/mage-bench-logs/$(readlink ~/mage-bench-logs/last-gauntlet)
+GAME_DIR=~/.mage-bench/logs/$(readlink ~/.mage-bench/logs/last-gauntlet)
 
 # Most recent game on a branch
-GAME_DIR=~/mage-bench-logs/$(readlink ~/mage-bench-logs/last-branch-GregorStocks-my-branch)
+GAME_DIR=~/.mage-bench/logs/$(readlink ~/.mage-bench/logs/last-branch-GregorStocks-my-branch)
 
 # All recent games, newest first
-ls -dt ~/mage-bench-logs/game_* | head -5
+ls -dt ~/.mage-bench/logs/game_* | head -5
 ```
 
 ## Chat messages

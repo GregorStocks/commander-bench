@@ -24,7 +24,7 @@ Determine which game to analyze:
   ```
   Ask the user to pick one before proceeding. **Do not guess.**
 
-Set `GAME_DIR=~/mage-bench-logs/{game_id}`.
+Set `GAME_DIR=~/.mage-bench/logs/{game_id}`.
 
 If the full log directory doesn't exist but `website/public/games/{game_id}.json.gz` does, tell the user the full logs aren't available and offer to run a fast analysis from the gz file instead. Stop here unless the user wants the fast analysis.
 
@@ -82,7 +82,7 @@ A single bug often shows up across multiple log files. For example, an NPE in er
 ### Step 8: Trace bugs to source code
 
 For each code bug, read the relevant Java/Python files to identify the exact line and root cause. Include in the issue:
-- The game log path: `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`
+- The game log path: `~/.mage-bench/logs/game_YYYYMMDD_HHMMSS/`
 - Specific log files and approximate line numbers where the bug manifests
 - The source code file and line where the fix should go (e.g., `BridgeCallbackHandler.java:1407`)
 - A brief description of the root cause and suggested fix direction
@@ -93,7 +93,7 @@ Create issue files in `issues/`:
 ```json
 {
   "title": "Short summary",
-  "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/mage-bench-logs/game_.../Player_errors.log: NPE at line 42\n- ~/mage-bench-logs/game_.../Player_bridge.jsonl: repeated cast-cancel pattern\n\nSource: BridgeCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
+  "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/.mage-bench/logs/game_.../Player_errors.log: NPE at line 42\n- ~/.mage-bench/logs/game_.../Player_bridge.jsonl: repeated cast-cancel pattern\n\nSource: BridgeCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
   "status": "open",
   "priority": N,
   "type": "task",
