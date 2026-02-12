@@ -122,7 +122,14 @@ make run CONFIG=staller    # No API keys needed (burn vs staller)
 
 ## Coding Style: Fail Fast
 
-Don't invent default behavior for unexpected states. If a value shouldn't be None, assert or raise — don't silently return a made-up fallback. Failing loudly surfaces bugs immediately; silent defaults hide them.
+**Never add graceful fallbacks, silent defaults, or backwards-compatibility shims.** If something fails or is missing, crash immediately with a clear error. Do not invent fallback behavior, even if it seems "safe" or "helpful." This includes:
+
+- Falling back to a default value when a config/file/path is missing
+- Catching exceptions and continuing with degraded behavior
+- Keeping old code paths around for backwards compatibility
+- Adding `or default` / `if None: return something_reasonable` patterns
+
+If you think a fallback or graceful degradation is genuinely the right call, **stop and explicitly ask Gregor to confirm** — don't just include it in a plan or PR. Models are far too eager to add these and they hide bugs.
 
 ```python
 # Bad: hides the bug
