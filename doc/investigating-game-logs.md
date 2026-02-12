@@ -118,4 +118,24 @@ grep "GAME_CHOOSE_ABILITY" "$GAME_DIR"/*_errors.log
 
 # Find GAME_PLAY_MANA answer=true rejections
 grep "choose mana source/pool" "$GAME_DIR"/*_errors.log
+
+# Detect silent spell cancellation from partial auto-mana payment
+# When auto-mana pays part of the cost but can't complete, the spell is silently cancelled.
+# The LLM may hallucinate that the spell resolved. Cross-reference:
+# 1. Find the partial payment failure
+grep "no auto source available" "$GAME_DIR"/*_pilot.log
+# 2. Check if the spell is still in hand after the "cast" (compare hand before/after in bridge log)
+jq -r 'select(.method=="GAME_UPDATE" or .method=="GAME_UPDATE_AND_INFORM") | "\(.ts) \(.data)"' "$GAME_DIR"/*_bridge.jsonl | grep -A1 "GAME_PLAY_MANA"
+```
+
+## Tracing auto-mana payment sequences
+
+```bash
+# Show GAME_PLAY_MANA callbacks with timestamps (auto-handled ones are ~100ms apart)
+jq -r 'select(.method=="GAME_PLAY_MANA") | .ts' "$GAME_DIR"/*_bridge.jsonl
+
+# Cross-reference with pilot log to see if LLM saw the mana prompt
+# If the pilot log shows no GAME_PLAY_MANA interaction between the cast and pass_priority,
+# auto-mana handled it silently (or the pending action was consumed by pass_priority)
+grep -n "GAME_PLAY_MANA\|pass_priority\|no auto source" "$GAME_DIR"/*_pilot.log
 ```
