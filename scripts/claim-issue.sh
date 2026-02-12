@@ -44,14 +44,23 @@ fi
 # Push current branch
 git push -u origin "$BRANCH"
 
-# Create draft PR with claim marker as the first line of the body
-PR_URL=$(gh pr create --draft \
-    --base master \
-    --title "Solve: $TITLE" \
-    --body "claim: $ISSUE")
+# Reuse existing PR for this branch if one exists, otherwise create a new one
+EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty' 2>/dev/null)
 
-OUR_PR=$(echo "$PR_URL" | grep -oE '[0-9]+$')
-echo "Created draft PR #$OUR_PR: $PR_URL"
+if [ -n "$EXISTING_PR" ]; then
+    OUR_PR="$EXISTING_PR"
+    gh pr edit "$OUR_PR" \
+        --title "Solve: $TITLE" \
+        --body "claim: $ISSUE"
+    echo "Updated existing PR #$OUR_PR for $ISSUE"
+else
+    PR_URL=$(gh pr create --draft \
+        --base master \
+        --title "Solve: $TITLE" \
+        --body "claim: $ISSUE")
+    OUR_PR=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+    echo "Created draft PR #$OUR_PR: $PR_URL"
+fi
 
 # Race resolution: lowest PR number claiming this issue wins.
 WINNER=$(gh pr list --state open --json number,body \
@@ -59,7 +68,6 @@ WINNER=$(gh pr list --state open --json number,body \
 
 if [ "$WINNER" != "null" ] && [ -n "$WINNER" ] && [ "$WINNER" != "$OUR_PR" ]; then
     echo "Lost race: PR #$WINNER already claims $ISSUE" >&2
-    gh pr close "$OUR_PR"
     exit 1
 fi
 
