@@ -187,36 +187,179 @@
       "thinking": true,
       "tier": "dirt-cheap",
       "notes": "Absurdly cheap with optional reasoning. 2M context window. Untested for Magic tool calling — worth trying."
+    },
+    {
+      "id": "moonshotai/kimi-k2.5",
+      "name": "Kimi K2.5",
+      "name_part": "Kimi25",
+      "input_per_m": 0.45,
+      "output_per_m": 2.25,
+      "context_k": 262,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "#1 most popular model on OpenRouter by weekly tokens (1.59T). Trillion-param MoE with 32B active. Untested for Magic tool calling."
+    },
+    {
+      "id": "minimax/minimax-m2.1",
+      "name": "MiniMax M2.1",
+      "name_part": "MiniMx",
+      "input_per_m": 0.27,
+      "output_per_m": 0.95,
+      "context_k": 196,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Very popular (491B weekly tokens). Cheap reasoning model. Untested for Magic tool calling."
+    },
+    {
+      "id": "z-ai/glm-4.7",
+      "name": "GLM 4.7",
+      "name_part": "GLM47",
+      "input_per_m": 0.40,
+      "output_per_m": 1.50,
+      "context_k": 202,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Zhipu AI reasoning model. Popular (181B weekly tokens). Untested for Magic tool calling."
+    },
+    {
+      "id": "xiaomi/mimo-v2-flash",
+      "name": "MiMo V2 Flash",
+      "name_part": "MiMo",
+      "input_per_m": 0.09,
+      "output_per_m": 0.29,
+      "context_k": 262,
+      "thinking": true,
+      "tier": "dirt-cheap",
+      "notes": "Xiaomi reasoning model. Extremely cheap. Untested for Magic tool calling."
+    },
+    {
+      "id": "moonshotai/kimi-k2-0905",
+      "name": "Kimi K2 0905",
+      "name_part": "KimiK2",
+      "input_per_m": 0.39,
+      "output_per_m": 1.90,
+      "context_k": 262,
+      "thinking": true,
+      "tier": "cheap",
+      "notes": "Newer Kimi K2 variant. Trillion-param MoE with 32B active. Untested for Magic tool calling."
+    },
+    {
+      "id": "qwen/qwen3-max-thinking",
+      "name": "Qwen3 Max Thinking",
+      "name_part": "Qwen3",
+      "input_per_m": 1.20,
+      "output_per_m": 6.00,
+      "context_k": 262,
+      "thinking": true,
+      "tier": "mid",
+      "notes": "Qwen flagship reasoning model. Untested for Magic tool calling."
+    },
+    {
+      "id": "openai/gpt-5-mini",
+      "name": "GPT-5 Mini",
+      "name_part": "GPT5m",
+      "input_per_m": 0.25,
+      "output_per_m": 2.00,
+      "context_k": 400,
+      "thinking": false,
+      "tier": "cheap",
+      "notes": "Cheap OpenAI model without reasoning. Non-thinking baseline."
+    },
+    {
+      "id": "openai/gpt-5-nano",
+      "name": "GPT-5 Nano",
+      "name_part": "GPT5n",
+      "input_per_m": 0.05,
+      "output_per_m": 0.40,
+      "context_k": 400,
+      "thinking": false,
+      "tier": "dirt-cheap",
+      "notes": "Cheapest OpenAI model. Very popular (300B weekly tokens). Non-thinking baseline."
+    },
+    {
+      "id": "openai/gpt-4.1-mini",
+      "name": "GPT-4.1 Mini",
+      "name_part": "GPT41m",
+      "input_per_m": 0.40,
+      "output_per_m": 1.60,
+      "context_k": 1000,
+      "thinking": false,
+      "tier": "cheap",
+      "notes": "Previous-gen OpenAI small model. No reasoning. 1M context. Non-thinking baseline."
+    },
+    {
+      "id": "openai/gpt-4o-mini",
+      "name": "GPT-4o-mini",
+      "name_part": "GPT4om",
+      "input_per_m": 0.15,
+      "output_per_m": 0.60,
+      "context_k": 128,
+      "thinking": false,
+      "tier": "dirt-cheap",
+      "notes": "Cheap older OpenAI model. No reasoning. Non-thinking baseline."
+    },
+    {
+      "id": "qwen/qwen3-235b-a22b-2507",
+      "name": "Qwen3 235B",
+      "name_part": "Qwen3L",
+      "input_per_m": 0.071,
+      "output_per_m": 0.10,
+      "context_k": 262,
+      "thinking": false,
+      "tier": "dirt-cheap",
+      "notes": "Large Qwen3 MoE (235B total, 22B active). Absurdly cheap. No reasoning mode. Non-thinking baseline."
+    },
+    {
+      "id": "meta-llama/llama-4-maverick",
+      "name": "Llama 4 Maverick",
+      "name_part": "Llama4",
+      "input_per_m": 0.15,
+      "output_per_m": 0.60,
+      "context_k": 1000,
+      "thinking": false,
+      "tier": "dirt-cheap",
+      "notes": "Meta's latest Llama 4. 1M context. No reasoning mode. Non-thinking baseline."
     }
   ],
   "recommendations": {
-    "primary_test_set": [
+    "gauntlet_pool": [
+      "anthropic/claude-sonnet-4.5",
       "anthropic/claude-haiku-4.5",
       "google/gemini-2.5-flash",
-      "google/gemini-3-flash-preview"
+      "google/gemini-2.5-pro",
+      "google/gemini-3-flash-preview",
+      "google/gemini-3-pro-preview",
+      "moonshotai/kimi-k2.5",
+      "moonshotai/kimi-k2-0905",
+      "minimax/minimax-m2.1",
+      "z-ai/glm-4.7",
+      "xiaomi/mimo-v2-flash",
+      "qwen/qwen3-max-thinking",
+      "x-ai/grok-4-fast",
+      "deepseek/deepseek-r1",
+      "openai/gpt-5-mini",
+      "openai/gpt-5-nano",
+      "openai/gpt-4.1-mini",
+      "openai/gpt-4o-mini",
+      "deepseek/deepseek-v3.2",
+      "qwen/qwen3-235b-a22b-2507",
+      "meta-llama/llama-4-maverick"
     ],
-    "reasoning": "Haiku (good tool use + visible thinking, affordable), Gemini (cheapest with visible thinking). All support extended thinking. Sonnet removed from rotation due to cost. OpenAI models (o3, o4-mini) removed due to persistent empty responses and poor tool-use reliability.",
+    "reasoning": "Broad gauntlet: 13 thinking models (Sonnet through Grok 4 Fast) + 8 non-thinking baselines (GPT-5 Mini through Llama 4 Maverick). Non-thinking models included to calibrate leaderboard — they should lose to reasoning models on complex board states. OpenAI o-series (o3, o4-mini) still excluded due to persistent empty responses and stall loops.",
     "showcase_matches": [
       "anthropic/claude-opus-4.6",
       "google/gemini-3-pro-preview",
       "openai/o3",
       "x-ai/grok-4"
     ],
-    "budget_baseline": [
-      "deepseek/deepseek-r1",
-      "deepseek/deepseek-v3.2",
-      "google/gemini-2.5-flash",
-      "x-ai/grok-4-fast"
-    ],
     "skip": [
       "openai/o3",
       "openai/o4-mini",
       "openai/gpt-5.2",
       "openai/gpt-5.1",
-      "mistralai/mistral-large-2512",
-      "mistralai/devstral-small"
+      "mistralai/mistral-large-2512"
     ],
-    "skip_reasoning": "OpenAI reasoning models (o3, o4-mini) produce persistent empty responses and stall loops — o3 had 24 counted empties across 3 stall cycles in one game, o4-mini similarly produces very few meaningful game actions. Non-thinking models consistently produce empty reasoning text with tool calls, making them hard to debug and likely worse at strategic play."
+    "skip_reasoning": "OpenAI reasoning models (o3, o4-mini) produce persistent empty responses and stall loops. GPT-5.2/5.1 are expensive non-thinking models — GPT-5 Mini is better value for the non-thinking baseline slot."
   },
   "thinking_config": {
     "_comment": "How to enable thinking for each provider via OpenRouter's unified reasoning param",
@@ -250,6 +393,36 @@
       "values": [true, false],
       "recommended": true,
       "notes": "Grok 4 has mandatory reasoning (always on). Grok 4 Fast supports optional reasoning via enabled param. Reasoning tokens not exposed."
+    },
+    "moonshotai": {
+      "param": "reasoning.effort",
+      "values": ["low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "Kimi K2/K2.5 reasoning models. Thinking content exposure unknown — needs testing."
+    },
+    "minimax": {
+      "param": "reasoning.effort",
+      "values": ["low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "MiniMax M2.1 reasoning. Thinking content exposure unknown — needs testing."
+    },
+    "z-ai": {
+      "param": "reasoning.effort",
+      "values": ["low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "GLM reasoning models. Thinking content exposure unknown — needs testing."
+    },
+    "xiaomi": {
+      "param": "reasoning.effort",
+      "values": ["low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "MiMo reasoning models. Thinking content exposure unknown — needs testing."
+    },
+    "qwen": {
+      "param": "reasoning.effort",
+      "values": ["low", "medium", "high"],
+      "recommended": "medium",
+      "notes": "Qwen3 Max Thinking. Thinking content exposure unknown — needs testing."
     }
   }
 }

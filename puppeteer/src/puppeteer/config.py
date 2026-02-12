@@ -145,12 +145,12 @@ def _resolve_preset(
 
 
 def _validate_name_parts(personalities: dict[str, dict], presets_data: dict, models_data: dict) -> None:
-    """Validate all random_pool x personality name_part combos fit XMage name limits.
+    """Validate all gauntlet x personality name_part combos fit XMage name limits.
 
     Called at startup when random resolution is needed. Fails fast with a clear
     error listing any offending combinations.
     """
-    pool = presets_data.get("random_pool", [])
+    pool = presets_data.get("gauntlet", [])
     if not pool:
         return
     presets = presets_data.get("presets", {})
@@ -159,7 +159,7 @@ def _validate_name_parts(personalities: dict[str, dict], presets_data: dict, mod
     for preset_key in pool:
         preset = presets.get(preset_key)
         if preset is None:
-            errors.append(f"random_pool preset {preset_key!r} not found in presets")
+            errors.append(f"gauntlet preset {preset_key!r} not found in presets")
             continue
         model_id = preset.get("model", "")
         model = models_by_id.get(model_id)
@@ -214,7 +214,7 @@ def _resolve_randoms(
     if has_randoms:
         _validate_name_parts(personalities, presets_data, models_data)
 
-    preset_pool = presets_data.get("random_pool", [])
+    preset_pool = presets_data.get("gauntlet", [])
     available_personalities = list(personalities.keys())
     available_presets = list(preset_pool)
 
