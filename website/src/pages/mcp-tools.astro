@@ -4,24 +4,14 @@ import toolsData from '../data/mcp-tools.json';
 
 const categories = [
   {
-    title: 'Game Flow',
-    description: 'Tools for managing the action/priority loop.',
-    tools: ['pass_priority'],
+    title: 'Observation',
+    description: 'Read-only tools for inspecting game state. These never change the game.',
+    tools: ['get_game_state', 'get_game_log', 'get_action_choices', 'get_oracle_text', 'get_my_decklist'],
   },
   {
     title: 'Actions',
-    description: 'Tools for making game decisions.',
-    tools: ['default_action', 'get_action_choices', 'choose_action'],
-  },
-  {
-    title: 'Game State',
-    description: 'Tools for observing the game.',
-    tools: ['get_game_state', 'get_game_log', 'get_oracle_text', 'get_my_decklist'],
-  },
-  {
-    title: 'Communication',
-    description: 'Tools for interacting with other players.',
-    tools: ['send_chat_message'],
+    description: 'Tools that advance the game by making decisions or sending messages.',
+    tools: ['pass_priority', 'default_action', 'choose_action', 'send_chat_message'],
   },
 ];
 
@@ -64,8 +54,8 @@ function getOutputFields(tool: any) {
     Not all players receive all tools. Each player preset references a named
     <strong>toolset</strong> that controls which tools are available to that model.
     Weaker models may get a smaller set of tools to avoid confusion, while stronger
-    models can handle the full suite. See <code>toolsets.json</code> and
-    <code>presets.json</code> for the current configuration.
+    models can handle the full suite. See <a href="https://github.com/GregorStocks/mage-bench/blob/master/puppeteer/toolsets.json"><code>toolsets.json</code></a> and
+    <a href="https://github.com/GregorStocks/mage-bench/blob/master/puppeteer/presets.json"><code>presets.json</code></a> for the current configuration.
   </p>
 
   {categories.map(category => (
