@@ -21,6 +21,7 @@ from puppeteer.config import (
     load_personalities,
     load_presets,
     load_prompts,
+    load_toolsets,
 )
 
 
@@ -721,3 +722,186 @@ def test_resolve_random_decks_no_duplicate_decks():
         config.resolve_random_decks(root)
 
         assert config.cpu_players[0].deck != config.cpu_players[1].deck
+
+
+# --- Toolset tests ---
+
+SAMPLE_TOOLSETS = {
+    "default": ["pass_priority", "get_action_choices", "choose_action", "get_game_state"],
+    "minimal": ["pass_priority", "choose_action"],
+}
+
+
+def test_load_toolsets_from_file():
+    """load_toolsets should read a JSON file."""
+    tdata = {"basic": ["pass_priority", "choose_action"]}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        (tmpdir_path / "toolsets.json").write_text(json.dumps(tdata))
+        config_path = tmpdir_path / "test-config.json"
+        config_path.write_text("{}")
+
+        result = load_toolsets(config_path)
+        assert "basic" in result
+        assert result["basic"] == ["pass_priority", "choose_action"]
+
+
+def test_preset_resolves_toolset():
+    """Preset with toolset should set tools on player."""
+    presets = {
+        "presets": {
+            "with-tools": {
+                "model": "test/model",
+                "system_prompt": "default",
+                "toolset": "minimal",
+            }
+        },
+        "random_pool": [],
+    }
+    player = PilotPlayer(name="test", preset="with-tools")
+    _resolve_preset(player, presets, SAMPLE_PROMPTS, SAMPLE_TOOLSETS)
+    assert player.tools == ["pass_priority", "choose_action"]
+
+
+def test_preset_without_toolset_leaves_none():
+    """Preset without toolset key should leave tools as None."""
+    player = PilotPlayer(name="test", preset="fast-medium")
+    _resolve_preset(player, SAMPLE_PRESETS, SAMPLE_PROMPTS, SAMPLE_TOOLSETS)
+    assert player.tools is None
+
+
+def test_player_tools_override_preset_toolset():
+    """Player-level tools should win over preset toolset."""
+    presets = {
+        "presets": {
+            "with-tools": {
+                "model": "test/model",
+                "system_prompt": "default",
+                "toolset": "default",
+            }
+        },
+        "random_pool": [],
+    }
+    player = PilotPlayer(
+        name="test",
+        preset="with-tools",
+        tools=["pass_priority", "get_game_state"],
+    )
+    _resolve_preset(player, presets, SAMPLE_PROMPTS, SAMPLE_TOOLSETS)
+    # Player-level tools should win
+    assert player.tools == ["pass_priority", "get_game_state"]
+
+
+def test_preset_unknown_toolset_raises():
+    """Preset referencing unknown toolset should raise ValueError."""
+    presets = {
+        "presets": {"bad": {"model": "test/m", "system_prompt": "default", "toolset": "nonexistent"}},
+        "random_pool": [],
+    }
+    player = PilotPlayer(name="test", preset="bad")
+    with pytest.raises(ValueError, match="unknown toolset"):
+        _resolve_preset(player, presets, SAMPLE_PROMPTS, SAMPLE_TOOLSETS)
+
+
+def test_tools_loaded_from_config_json():
+    """tools field in player JSON should populate PilotPlayer.tools."""
+    config_data = {
+        "players": [
+            {
+                "type": "pilot",
+                "name": "custom",
+                "preset": "test-preset",
+                "tools": ["pass_priority", "get_game_state"],
+            },
+        ],
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        presets = {
+            "presets": {"test-preset": {"model": "test/m", "system_prompt": "default"}},
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test."}))
+        (tmpdir_path / "personalities.json").write_text("{}")
+        (tmpdir_path / "models.json").write_text('{"models": []}')
+        (tmpdir_path / "toolsets.json").write_text("{}")
+
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        config = Config(config_file=config_path)
+        config.load_config()
+
+        assert config.pilot_players[0].tools == ["pass_priority", "get_game_state"]
+
+
+def test_tools_none_when_not_specified():
+    """Player without tools should have tools=None when preset has no toolset."""
+    config_data = {
+        "players": [
+            {"type": "pilot", "name": "plain", "preset": "test-preset"},
+        ],
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        presets = {
+            "presets": {"test-preset": {"model": "test/m", "system_prompt": "default"}},
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test."}))
+        (tmpdir_path / "personalities.json").write_text("{}")
+        (tmpdir_path / "models.json").write_text('{"models": []}')
+        (tmpdir_path / "toolsets.json").write_text("{}")
+
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        config = Config(config_file=config_path)
+        config.load_config()
+
+        assert config.pilot_players[0].tools is None
+
+
+def test_toolset_end_to_end_config_load():
+    """Full integration: config with preset referencing toolset resolves correctly."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        personalities = {"test-hero": {"name_part": "Hero", "prompt_suffix": "You are heroic."}}
+        (tmpdir_path / "personalities.json").write_text(json.dumps(personalities))
+
+        presets = {
+            "presets": {
+                "test-preset": {
+                    "model": "test/hero-model",
+                    "reasoning_effort": "medium",
+                    "system_prompt": "default",
+                    "toolset": "minimal",
+                },
+            },
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Be great."}))
+        (tmpdir_path / "models.json").write_text(
+            json.dumps({"models": [{"id": "test/hero-model", "name": "Hero", "name_part": "HeroM"}]})
+        )
+        (tmpdir_path / "toolsets.json").write_text(json.dumps({"minimal": ["pass_priority", "choose_action"]}))
+
+        config_data = {
+            "players": [
+                {"type": "pilot", "preset": "test-preset", "personality": "test-hero"},
+            ]
+        }
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        config = Config(config_file=config_path)
+        config.load_config()
+
+        p = config.pilot_players[0]
+        assert p.model == "test/hero-model"
+        assert p.tools == ["pass_priority", "choose_action"]
+        assert p.system_prompt == "Be great."

@@ -240,7 +240,7 @@ async def _fetch_state_summary(session: ClientSession) -> str:
 # creating rapid polling loops that waste context and tokens.
 # Excludes auto_pass_until_event: prevents accidentally skipping all decisions.
 # Excludes is_action_on_me: pass_priority handles this.
-PILOT_TOOLS = {
+DEFAULT_PILOT_TOOLS = {
     "pass_priority",
     "get_action_choices",
     "choose_action",
@@ -286,8 +286,14 @@ def _load_default_system_prompt() -> str:
     return prompts["default"]
 
 
-def mcp_tools_to_openai(mcp_tools) -> list[dict]:
-    """Convert MCP tool definitions to OpenAI function calling format."""
+def mcp_tools_to_openai(mcp_tools, allowed_tools: set[str] | None = None) -> list[dict]:
+    """Convert MCP tool definitions to OpenAI function calling format.
+
+    Args:
+        mcp_tools: Tool definitions from the MCP session.
+        allowed_tools: Set of tool names to include. Defaults to DEFAULT_PILOT_TOOLS.
+    """
+    tool_filter = allowed_tools if allowed_tools is not None else DEFAULT_PILOT_TOOLS
     return [
         {
             "type": "function",
@@ -298,7 +304,7 @@ def mcp_tools_to_openai(mcp_tools) -> list[dict]:
             },
         }
         for tool in mcp_tools
-        if tool.name in PILOT_TOOLS
+        if tool.name in tool_filter
     ]
 
 
@@ -731,6 +737,7 @@ async def run_pilot(
     prices: dict[str, tuple[float, float]] | None = None,
     max_interactions_per_turn: int | None = None,
     reasoning_effort: str = "",
+    tools: set[str] | None = None,
 ) -> None:
     """Run the pilot client."""
     _log(f"[pilot] Starting for {username}@{server}:{port}")
@@ -738,6 +745,8 @@ async def run_pilot(
     _log(f"[pilot] Base URL: {base_url}")
     if reasoning_effort:
         _log(f"[pilot] Reasoning effort: {reasoning_effort}")
+    if tools is not None:
+        _log(f"[pilot] Custom toolset: {sorted(tools)}")
 
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
@@ -795,7 +804,13 @@ async def run_pilot(
             _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
             tools_result = await session.list_tools()
-            openai_tools = mcp_tools_to_openai(tools_result.tools)
+            allowed_tools = tools if tools is not None else DEFAULT_PILOT_TOOLS
+            # Warn about tool names not available from the MCP bridge
+            available_mcp_names = {t.name for t in tools_result.tools}
+            unknown = allowed_tools - available_mcp_names
+            if unknown:
+                _log(f"[pilot] WARNING: Unknown tools not in MCP bridge: {sorted(unknown)}")
+            openai_tools = mcp_tools_to_openai(tools_result.tools, allowed_tools)
             openai_tools.append(SAVE_STRATEGY_TOOL)
             tool_names = [t["function"]["name"] for t in openai_tools]
             _log(f"[pilot] Available tools: {tool_names}")
@@ -846,6 +861,7 @@ def main() -> int:
     parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
     parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
     parser.add_argument("--reasoning-effort", default="", help="OpenRouter reasoning effort: low, medium, high")
+    parser.add_argument("--tools", default="", help="Comma-separated MCP tool names (default: DEFAULT_PILOT_TOOLS)")
     args = parser.parse_args()
 
     # Determine project root
@@ -872,6 +888,9 @@ def main() -> int:
     # Load system prompt: CLI arg > prompts.json default
     system_prompt = args.system_prompt or _load_default_system_prompt()
 
+    # Parse tool names: CLI arg > default
+    pilot_tools = set(args.tools.split(",")) if args.tools else None
+
     try:
         asyncio.run(
             run_pilot(
@@ -888,6 +907,7 @@ def main() -> int:
                 prices=prices,
                 max_interactions_per_turn=args.max_interactions_per_turn,
                 reasoning_effort=args.reasoning_effort,
+                tools=pilot_tools,
             )
         )
     except KeyboardInterrupt:

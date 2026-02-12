@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from puppeteer.pilot import run_pilot_loop
+from puppeteer.pilot import mcp_tools_to_openai, run_pilot_loop
 
 
 def _make_session() -> MagicMock:
@@ -115,3 +115,35 @@ async def test_game_over_from_pass_priority_triggers_auto_pass():
             username="test-player",
         )
         mock_auto_pass.assert_called_once()
+
+
+# --- mcp_tools_to_openai tests ---
+
+
+def _make_mcp_tool(name: str) -> MagicMock:
+    """Create a mock MCP tool definition."""
+    tool = MagicMock()
+    tool.name = name
+    tool.description = f"Description for {name}"
+    tool.inputSchema = {"type": "object", "properties": {}}
+    return tool
+
+
+def test_mcp_tools_to_openai_default_filter():
+    """With no allowed_tools, should filter to DEFAULT_PILOT_TOOLS."""
+    mcp_tools = [_make_mcp_tool(name) for name in ["pass_priority", "choose_action", "wait_for_action"]]
+    result = mcp_tools_to_openai(mcp_tools)
+    names = {t["function"]["name"] for t in result}
+    assert "pass_priority" in names
+    assert "choose_action" in names
+    assert "wait_for_action" not in names  # Excluded from DEFAULT_PILOT_TOOLS
+
+
+def test_mcp_tools_to_openai_custom_filter():
+    """With custom allowed_tools, should filter to that set."""
+    mcp_tools = [_make_mcp_tool(name) for name in ["pass_priority", "choose_action", "get_game_state"]]
+    custom = {"pass_priority", "get_game_state"}
+    result = mcp_tools_to_openai(mcp_tools, allowed_tools=custom)
+    names = {t["function"]["name"] for t in result}
+    assert names == {"pass_priority", "get_game_state"}
+    assert "choose_action" not in names

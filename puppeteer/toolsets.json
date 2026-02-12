@@ -1,0 +1,11 @@
+{
+  "default": [
+    "pass_priority",
+    "get_action_choices",
+    "choose_action",
+    "get_game_state",
+    "get_oracle_text",
+    "send_chat_message",
+    "take_action"
+  ]
+}

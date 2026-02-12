@@ -45,6 +45,7 @@ class PilotPlayer:
     reasoning_effort: str | None = None  # Reasoning effort (resolved from preset)
     personality: str | None = None  # Named personality from personalities.json
     prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
+    tools: list[str] | None = None  # MCP tool names (resolved from preset -> toolsets.json)
 
 
 @dataclass
@@ -100,10 +101,16 @@ def load_prompts(config_file: Path | None) -> dict[str, str]:
     return _load_json_file("prompts.json", config_file)
 
 
+def load_toolsets(config_file: Path | None) -> dict[str, list[str]]:
+    """Load toolset definitions from toolsets.json."""
+    return _load_json_file("toolsets.json", config_file)
+
+
 def _resolve_preset(
     player: PilotPlayer,
     presets_data: dict,
     prompts: dict[str, str],
+    toolsets: dict[str, list[str]] | None = None,
 ) -> None:
     """Apply preset defaults to a player in-place. Player-level fields win."""
     if not player.preset:
@@ -127,6 +134,14 @@ def _resolve_preset(
                 f"Available: {sorted(prompts.keys())}"
             )
         player.system_prompt = prompts[prompt_key]
+    if player.tools is None and "toolset" in pdata:
+        toolset_key = pdata["toolset"]
+        if toolsets is None or toolset_key not in toolsets:
+            available = sorted(toolsets.keys()) if toolsets else []
+            raise ValueError(
+                f"Preset {player.preset!r} references unknown toolset {toolset_key!r}. Available: {available}"
+            )
+        player.tools = list(toolsets[toolset_key])
 
 
 def _validate_name_parts(personalities: dict[str, dict], presets_data: dict, models_data: dict) -> None:
@@ -188,6 +203,7 @@ def _resolve_randoms(
     presets_data: dict,
     prompts: dict[str, str],
     models_data: dict,
+    toolsets: dict[str, list[str]] | None = None,
 ) -> None:
     """Resolve 'random' preset/personality values and apply preset/personality defaults.
 
@@ -229,8 +245,8 @@ def _resolve_randoms(
             used_presets.add(chosen_preset)
             player.preset = chosen_preset
 
-        # Apply preset (sets model, reasoning_effort, system_prompt)
-        _resolve_preset(player, presets_data, prompts)
+        # Apply preset (sets model, reasoning_effort, system_prompt, tools)
+        _resolve_preset(player, presets_data, prompts, toolsets)
 
         # Generate name if needed (personality was random and no explicit name)
         if was_random_personality and not had_explicit_name:
@@ -381,6 +397,7 @@ class Config:
             models_data = load_models(self.config_file)
             presets_data = load_presets(self.config_file)
             prompts = load_prompts(self.config_file)
+            toolsets = load_toolsets(self.config_file)
 
             # First pass: construct player objects, collecting LLM players for random resolution
             llm_players: list[tuple[PilotPlayer, bool]] = []
@@ -400,6 +417,7 @@ class Config:
                         preset=player.get("preset"),
                         base_url=player.get("base_url"),
                         personality=player.get("personality"),
+                        tools=player.get("tools"),
                     )
                     llm_players.append((p, has_explicit_name))
                     self.pilot_players.append(p)
@@ -414,7 +432,7 @@ class Config:
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
 
             # Second pass: resolve random presets/personalities and generate names
-            _resolve_randoms(llm_players, personalities, presets_data, prompts, models_data)
+            _resolve_randoms(llm_players, personalities, presets_data, prompts, models_data, toolsets)
 
     def get_players_config_json(self) -> str:
         """Serialize resolved player config to JSON for passing to spectator/GUI client."""
