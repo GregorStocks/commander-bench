@@ -53,6 +53,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 <Base title="Games">
   <h1>Games</h1>
   <p class="subtitle">Replay past mage-bench games.</p>
+  <div id="filter-bar" style="display:none"></div>
   <div id="games-list">
     <p class="loading">Loading games...</p>
   </div>
@@ -71,6 +72,69 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 
   .loading {
     color: #a0a0b8;
+  }
+</style>
+
+<style is:global>
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.6rem;
+    background: rgba(233, 69, 96, 0.15);
+    border: 1px solid #e94560;
+    border-radius: 20px;
+    color: #e94560;
+  }
+
+  .filter-chip-remove {
+    background: none;
+    border: none;
+    color: #e94560;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0;
+    opacity: 0.7;
+  }
+
+  .filter-chip-remove:hover {
+    opacity: 1;
+  }
+
+  .filter-clear {
+    background: none;
+    border: none;
+    color: #a0a0b8;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.5rem;
+  }
+
+  .filter-clear:hover {
+    color: #e0e0e0;
+  }
+
+  .filter-count {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    margin-left: auto;
   }
 </style>
 
@@ -298,198 +362,338 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 
 <script is:inline define:vars={{ games }}>
   var __games = games;
+
+  var DECK_TYPE_FORMATS = {
+    "Constructed - Standard": "standard",
+    "Constructed - Modern": "modern",
+    "Constructed - Legacy": "legacy",
+    "Variant Magic - Freeform Commander": "commander",
+    "Variant Magic - Commander": "commander",
+  };
+
+  var FORMAT_DISPLAY = {
+    "standard": "Standard",
+    "modern": "Modern",
+    "legacy": "Legacy",
+    "commander": "Commander",
+  };
+
+  function getGameFormat(deckType) {
+    return DECK_TYPE_FORMATS[deckType] || "commander";
+  }
+
+  function getFilters() {
+    var params = new URLSearchParams(window.location.search);
+    return {
+      model: params.get("model") || "",
+      format: params.get("format") || "",
+    };
+  }
+
+  function setFilters(filters) {
+    var params = new URLSearchParams();
+    if (filters.model) params.set("model", filters.model);
+    if (filters.format) params.set("format", filters.format);
+    var qs = params.toString();
+    var url = window.location.pathname + (qs ? "?" + qs : "");
+    history.replaceState(null, "", url);
+  }
+
+  function filterGames(games, filters) {
+    return games.filter(function (game) {
+      if (filters.format) {
+        var fmt = getGameFormat(game.deckType);
+        if (fmt !== filters.format) return false;
+      }
+      if (filters.model) {
+        var hasModel = (game.players || []).some(function (p) {
+          return p.model === filters.model;
+        });
+        if (!hasModel) return false;
+      }
+      return true;
+    });
+  }
+
+  function renderFilterBar(filters, totalCount, filteredCount) {
+    var bar = document.getElementById("filter-bar");
+    var hasFilters = filters.model || filters.format;
+    if (!hasFilters) {
+      bar.style.display = "none";
+      bar.innerHTML = "";
+      return;
+    }
+    bar.style.display = "";
+    bar.className = "filter-bar";
+    bar.innerHTML = "";
+
+    var label = document.createElement("span");
+    label.className = "filter-label";
+    label.textContent = "Filtered:";
+    bar.appendChild(label);
+
+    if (filters.format) {
+      var chip = document.createElement("span");
+      chip.className = "filter-chip";
+      chip.textContent = FORMAT_DISPLAY[filters.format] || filters.format;
+      var btn = document.createElement("button");
+      btn.className = "filter-chip-remove";
+      btn.innerHTML = "&times;";
+      btn.onclick = function () {
+        var f = getFilters();
+        f.format = "";
+        setFilters(f);
+        renderAll();
+      };
+      chip.appendChild(btn);
+      bar.appendChild(chip);
+    }
+
+    if (filters.model) {
+      var chip = document.createElement("span");
+      chip.className = "filter-chip";
+      var modelDisplay = filters.model;
+      var slash = modelDisplay.indexOf("/");
+      if (slash !== -1) modelDisplay = modelDisplay.substring(slash + 1);
+      chip.textContent = modelDisplay;
+      var btn = document.createElement("button");
+      btn.className = "filter-chip-remove";
+      btn.innerHTML = "&times;";
+      btn.onclick = function () {
+        var f = getFilters();
+        f.model = "";
+        setFilters(f);
+        renderAll();
+      };
+      chip.appendChild(btn);
+      bar.appendChild(chip);
+    }
+
+    if (filters.model && filters.format) {
+      var clear = document.createElement("button");
+      clear.className = "filter-clear";
+      clear.textContent = "Clear all";
+      clear.onclick = function () {
+        setFilters({ model: "", format: "" });
+        renderAll();
+      };
+      bar.appendChild(clear);
+    }
+
+    var count = document.createElement("span");
+    count.className = "filter-count";
+    count.textContent = filteredCount + " of " + totalCount + " games";
+    bar.appendChild(count);
+  }
+
+  function renderGameCard(game, eloData) {
+    var a = document.createElement("a");
+    a.href = "/games/" + game.id;
+    a.className = "game-card";
+
+    // Parse timestamp: "20260210_090609" -> human-readable date
+    var ts = game.timestamp || "";
+    var dateStr = "";
+    if (ts.length >= 15) {
+      var year = ts.substring(0, 4);
+      var month = ts.substring(4, 6);
+      var day = ts.substring(6, 8);
+      var hour = ts.substring(9, 11);
+      var min = ts.substring(11, 13);
+      var d = new Date(year + "-" + month + "-" + day + "T" + hour + ":" + min);
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toLocaleDateString("en-US", {
+          year: "numeric", month: "short", day: "numeric"
+        }) + " " + d.toLocaleTimeString("en-US", {
+          hour: "numeric", minute: "2-digit"
+        });
+      }
+    }
+
+    // Header
+    var header = document.createElement("div");
+    header.className = "game-header";
+
+    var dateEl = document.createElement("span");
+    dateEl.className = "game-date";
+    dateEl.textContent = dateStr || game.id;
+    header.appendChild(dateEl);
+
+    // Format badge
+    var formatKey = getGameFormat(game.deckType);
+    var formatLabel = FORMAT_DISPLAY[formatKey] || "Commander";
+    var fmtBadge = document.createElement("span");
+    fmtBadge.className = "format-badge format-" + formatLabel.toLowerCase();
+    fmtBadge.textContent = formatLabel;
+    header.appendChild(fmtBadge);
+
+    var turnsEl = document.createElement("span");
+    turnsEl.className = "game-turns";
+    turnsEl.textContent = game.totalTurns + " turns";
+    header.appendChild(turnsEl);
+
+    var winnerEl = document.createElement("span");
+    if (game.winner) {
+      winnerEl.className = "game-winner winner-found";
+      winnerEl.textContent = "\u2605 " + game.winner;
+    } else {
+      winnerEl.className = "game-winner winner-none";
+      winnerEl.textContent = "No winner";
+    }
+    header.appendChild(winnerEl);
+
+    a.appendChild(header);
+
+    // Player grid
+    var grid = document.createElement("div");
+    grid.className = "game-players";
+
+    var totalCost = 0;
+    var hasCost = false;
+
+    (game.players || []).forEach(function (p) {
+      var cell = document.createElement("div");
+      cell.className = "player-cell";
+      if (game.winner && p.name === game.winner) {
+        cell.classList.add("is-winner");
+      }
+
+      // Name + badge
+      var nameRow = document.createElement("div");
+      nameRow.className = "player-name";
+
+      var badge = document.createElement("span");
+      badge.className = "player-badge " + (p.type === "pilot" ? "badge-pilot" : "badge-cpu");
+      badge.textContent = p.type === "pilot" ? "AI" : "CPU";
+      nameRow.appendChild(badge);
+
+      var nameText = document.createTextNode(p.name);
+      nameRow.appendChild(nameText);
+      cell.appendChild(nameRow);
+
+      // Commander
+      var cmdEl = document.createElement("div");
+      cmdEl.className = "player-commander";
+      cmdEl.textContent = p.deckName || p.commander || "";
+      cell.appendChild(cmdEl);
+
+      // Model (only for pilots)
+      if (p.model) {
+        var modelEl = document.createElement("div");
+        modelEl.className = "player-model";
+        var modelName = p.model;
+        var slash = modelName.indexOf("/");
+        if (slash !== -1) modelName = modelName.substring(slash + 1);
+        modelEl.textContent = modelName;
+        cell.appendChild(modelEl);
+      }
+
+      // Cost (only if present)
+      if (p.totalCostUsd != null) {
+        var costEl = document.createElement("div");
+        costEl.className = "player-cost";
+        costEl.textContent = "$" + p.totalCostUsd.toFixed(2);
+        cell.appendChild(costEl);
+        totalCost += p.totalCostUsd;
+        hasCost = true;
+      }
+
+      // Tool calls (only if present)
+      if (p.toolCallsOk != null) {
+        var toolsEl = document.createElement("div");
+        toolsEl.className = "player-tools";
+        var total = p.toolCallsOk + (p.toolCallsFailed || 0);
+        var text = total + " tools";
+        if (p.toolCallsFailed > 0) {
+          toolsEl.innerHTML = text + " / <span class=\"tool-fail\">" + p.toolCallsFailed + " failed</span>";
+        } else {
+          toolsEl.textContent = text;
+        }
+        cell.appendChild(toolsEl);
+      }
+
+      // Elo (if available)
+      var gameElo = eloData[game.id];
+      var playerElo = gameElo && p.model ? gameElo[p.model] : null;
+      if (playerElo) {
+        var eloEl = document.createElement("div");
+        eloEl.className = "player-elo";
+        var delta = playerElo.after - playerElo.before;
+        if (delta > 0) eloEl.classList.add("elo-up");
+        else if (delta < 0) eloEl.classList.add("elo-down");
+        eloEl.textContent = playerElo.before + " \u2192 " + playerElo.after;
+        cell.appendChild(eloEl);
+      }
+
+      grid.appendChild(cell);
+    });
+
+    a.appendChild(grid);
+
+    // Footer with total cost (only if there's cost data)
+    if (hasCost) {
+      var footer = document.createElement("div");
+      footer.className = "game-footer";
+      footer.textContent = "Total cost: $" + totalCost.toFixed(2);
+      a.appendChild(footer);
+    }
+    // YouTube link in footer
+    if (game.youtubeUrl) {
+      var ytLink = document.createElement("a");
+      ytLink.href = game.youtubeUrl;
+      ytLink.target = "_blank";
+      ytLink.rel = "noopener";
+      ytLink.className = "yt-link";
+      ytLink.textContent = "YouTube";
+      ytLink.onclick = function (e) { e.stopPropagation(); };
+      var footerEl = a.querySelector(".game-footer");
+      if (footerEl) {
+        footerEl.appendChild(ytLink);
+      } else {
+        var ytFooter = document.createElement("div");
+        ytFooter.className = "game-footer";
+        ytFooter.appendChild(ytLink);
+        a.appendChild(ytFooter);
+      }
+    }
+
+    return a;
+  }
+
+  var __eloData = {};
+
+  function renderAll() {
+    var games = __games;
+    var eloData = __eloData;
+    var list = document.getElementById("games-list");
+    list.innerHTML = "";
+
+    if (!games || games.length === 0) {
+      renderFilterBar({ model: "", format: "" }, 0, 0);
+      list.innerHTML = '<p class="no-games">No games exported yet.</p>';
+      return;
+    }
+
+    var filters = getFilters();
+    var filtered = filterGames(games, filters);
+    renderFilterBar(filters, games.length, filtered.length);
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<p class="no-games">No games match the current filters.</p>';
+      return;
+    }
+
+    filtered.forEach(function (game) {
+      list.appendChild(renderGameCard(game, eloData));
+    });
+  }
+
   fetch("/data/elo.json").then(function (r) {
     return r.ok ? r.json() : {};
   }).catch(function () { return {}; })
     .then(function (eloData) {
-      var games = __games;
-      var list = document.getElementById("games-list");
-      list.innerHTML = "";
-
-      if (!games || games.length === 0) {
-        list.innerHTML = '<p class="no-games">No games exported yet.</p>';
-        return;
-      }
-
-      games.forEach(function (game) {
-        var a = document.createElement("a");
-        a.href = "/games/" + game.id;
-        a.className = "game-card";
-
-        // Parse timestamp: "20260210_090609" -> human-readable date
-        var ts = game.timestamp || "";
-        var dateStr = "";
-        if (ts.length >= 15) {
-          var year = ts.substring(0, 4);
-          var month = ts.substring(4, 6);
-          var day = ts.substring(6, 8);
-          var hour = ts.substring(9, 11);
-          var min = ts.substring(11, 13);
-          var d = new Date(year + "-" + month + "-" + day + "T" + hour + ":" + min);
-          if (!isNaN(d.getTime())) {
-            dateStr = d.toLocaleDateString("en-US", {
-              year: "numeric", month: "short", day: "numeric"
-            }) + " " + d.toLocaleTimeString("en-US", {
-              hour: "numeric", minute: "2-digit"
-            });
-          }
-        }
-
-        // Header
-        var header = document.createElement("div");
-        header.className = "game-header";
-
-        var dateEl = document.createElement("span");
-        dateEl.className = "game-date";
-        dateEl.textContent = dateStr || game.id;
-        header.appendChild(dateEl);
-
-        // Format badge
-        var DECK_TYPE_FORMATS = {
-          "Constructed - Standard": "Standard",
-          "Constructed - Modern": "Modern",
-          "Constructed - Legacy": "Legacy",
-          "Variant Magic - Freeform Commander": "Commander",
-          "Variant Magic - Commander": "Commander",
-        };
-        var formatLabel = DECK_TYPE_FORMATS[game.deckType] || "Commander";
-        var fmtBadge = document.createElement("span");
-        fmtBadge.className = "format-badge format-" + formatLabel.toLowerCase();
-        fmtBadge.textContent = formatLabel;
-        header.appendChild(fmtBadge);
-
-        var turnsEl = document.createElement("span");
-        turnsEl.className = "game-turns";
-        turnsEl.textContent = game.totalTurns + " turns";
-        header.appendChild(turnsEl);
-
-        var winnerEl = document.createElement("span");
-        if (game.winner) {
-          winnerEl.className = "game-winner winner-found";
-          winnerEl.textContent = "\u2605 " + game.winner;
-        } else {
-          winnerEl.className = "game-winner winner-none";
-          winnerEl.textContent = "No winner";
-        }
-        header.appendChild(winnerEl);
-
-        a.appendChild(header);
-
-        // Player grid
-        var grid = document.createElement("div");
-        grid.className = "game-players";
-
-        var totalCost = 0;
-        var hasCost = false;
-
-        (game.players || []).forEach(function (p) {
-          var cell = document.createElement("div");
-          cell.className = "player-cell";
-          if (game.winner && p.name === game.winner) {
-            cell.classList.add("is-winner");
-          }
-
-          // Name + badge
-          var nameRow = document.createElement("div");
-          nameRow.className = "player-name";
-
-          var badge = document.createElement("span");
-          badge.className = "player-badge " + (p.type === "pilot" ? "badge-pilot" : "badge-cpu");
-          badge.textContent = p.type === "pilot" ? "AI" : "CPU";
-          nameRow.appendChild(badge);
-
-          var nameText = document.createTextNode(p.name);
-          nameRow.appendChild(nameText);
-          cell.appendChild(nameRow);
-
-          // Commander
-          var cmdEl = document.createElement("div");
-          cmdEl.className = "player-commander";
-          cmdEl.textContent = p.deckName || p.commander || "";
-          cell.appendChild(cmdEl);
-
-          // Model (only for pilots)
-          if (p.model) {
-            var modelEl = document.createElement("div");
-            modelEl.className = "player-model";
-            var modelName = p.model;
-            var slash = modelName.indexOf("/");
-            if (slash !== -1) modelName = modelName.substring(slash + 1);
-            modelEl.textContent = modelName;
-            cell.appendChild(modelEl);
-          }
-
-          // Cost (only if present)
-          if (p.totalCostUsd != null) {
-            var costEl = document.createElement("div");
-            costEl.className = "player-cost";
-            costEl.textContent = "$" + p.totalCostUsd.toFixed(2);
-            cell.appendChild(costEl);
-            totalCost += p.totalCostUsd;
-            hasCost = true;
-          }
-
-          // Tool calls (only if present)
-          if (p.toolCallsOk != null) {
-            var toolsEl = document.createElement("div");
-            toolsEl.className = "player-tools";
-            var total = p.toolCallsOk + (p.toolCallsFailed || 0);
-            var text = total + " tools";
-            if (p.toolCallsFailed > 0) {
-              toolsEl.innerHTML = text + " / <span class=\"tool-fail\">" + p.toolCallsFailed + " failed</span>";
-            } else {
-              toolsEl.textContent = text;
-            }
-            cell.appendChild(toolsEl);
-          }
-
-          // Elo (if available)
-          var gameElo = eloData[game.id];
-          var playerElo = gameElo && p.model ? gameElo[p.model] : null;
-          if (playerElo) {
-            var eloEl = document.createElement("div");
-            eloEl.className = "player-elo";
-            var delta = playerElo.after - playerElo.before;
-            if (delta > 0) eloEl.classList.add("elo-up");
-            else if (delta < 0) eloEl.classList.add("elo-down");
-            eloEl.textContent = playerElo.before + " \u2192 " + playerElo.after;
-            cell.appendChild(eloEl);
-          }
-
-          grid.appendChild(cell);
-        });
-
-        a.appendChild(grid);
-
-        // Footer with total cost (only if there's cost data)
-        if (hasCost) {
-          var footer = document.createElement("div");
-          footer.className = "game-footer";
-          footer.textContent = "Total cost: $" + totalCost.toFixed(2);
-          a.appendChild(footer);
-        }
-        // YouTube link in footer
-        if (game.youtubeUrl) {
-          var ytLink = document.createElement("a");
-          ytLink.href = game.youtubeUrl;
-          ytLink.target = "_blank";
-          ytLink.rel = "noopener";
-          ytLink.className = "yt-link";
-          ytLink.textContent = "YouTube";
-          ytLink.onclick = function (e) { e.stopPropagation(); };
-          var footerEl = a.querySelector(".game-footer");
-          if (footerEl) {
-            footerEl.appendChild(ytLink);
-          } else {
-            var ytFooter = document.createElement("div");
-            ytFooter.className = "game-footer";
-            ytFooter.appendChild(ytLink);
-            a.appendChild(ytFooter);
-          }
-        }
-
-        list.appendChild(a);
-      });
+      __eloData = eloData;
+      renderAll();
     })
     .catch(function () {
       var list = document.getElementById("games-list");

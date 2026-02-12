@@ -307,6 +307,7 @@ def generate_leaderboard(
         avg_tool_calls_failed = s["total_tool_calls_failed"] / games_played
         models.append(
             {
+                "modelId": model_id,
                 "modelName": model_registry.get(model_id) or derive_display_name(model_id),
                 "provider": capitalize_provider(provider_slug),
                 "rating": rating,
