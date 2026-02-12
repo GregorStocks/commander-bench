@@ -189,11 +189,6 @@
       "notes": "Absurdly cheap with optional reasoning. 2M context window. Untested for Magic tool calling — worth trying."
     }
   ],
-  "random_pool": [
-    "anthropic/claude-haiku-4.5",
-    "google/gemini-2.5-flash",
-    "google/gemini-3-flash-preview"
-  ],
   "recommendations": {
     "primary_test_set": [
       "anthropic/claude-haiku-4.5",

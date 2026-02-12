@@ -1,6 +1,6 @@
 {
   "players": [
-    {"type": "pilot", "personality": "old-timey-gemini2", "deck": "random"},
+    {"type": "pilot", "preset": "gem2f", "personality": "old-timey", "deck": "random"},
     {"type": "cpu", "name": "Mad AI 1", "deck": "random"},
     {"type": "cpu", "name": "Mad AI 2", "deck": "random"},
     {"type": "cpu", "name": "Mad AI 3", "deck": "random"}

@@ -2,9 +2,9 @@
   "matchTimeLimit": "MIN__60",
   "matchBufferTime": "NONE",
   "players": [
-    {"type": "pilot", "personality": "commentator-gemini3", "deck": "random"},
-    {"type": "pilot", "personality": "drill-sergeant-haiku", "deck": "random"},
-    {"type": "pilot", "personality": "villain-gemini", "deck": "random"},
-    {"type": "pilot", "personality": "conspiracy-haiku", "deck": "random"}
+    {"type": "pilot", "preset": "gem3f-medium", "personality": "commentator", "deck": "random"},
+    {"type": "pilot", "preset": "haiku-low", "personality": "drill-sergeant", "deck": "random"},
+    {"type": "pilot", "preset": "gem25f-medium", "personality": "villain", "deck": "random"},
+    {"type": "pilot", "preset": "haiku-low", "personality": "conspiracy", "deck": "random"}
   ]
 }

@@ -4,7 +4,7 @@
   "matchTimeLimit": "MIN__60",
   "matchBufferTime": "NONE",
   "players": [
-    {"type": "pilot", "personality": "commentator-gemini3", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck"},
-    {"type": "pilot", "personality": "villain-gemini", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck"}
+    {"type": "pilot", "preset": "gem3f-medium", "personality": "commentator", "deck": "Mage.Client/release/sample-decks/Legacy/Sneak-and-Show.dck"},
+    {"type": "pilot", "preset": "gem25f-medium", "personality": "villain", "deck": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck"}
   ]
 }
