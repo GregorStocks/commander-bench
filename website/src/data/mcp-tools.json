@@ -36,7 +36,7 @@
       "type": "object",
       "properties": {}
     },
-    "name": "take_action",
+    "name": "default_action",
     "description": "Execute default action (pass priority or first available choice)"
   },
   {

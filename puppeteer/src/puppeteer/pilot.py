@@ -112,7 +112,7 @@ def _summarize_tool_result(tool_name: str, content: str) -> str:
     if tool_name == "save_strategy":
         return f"saved {data.get('chars', '?')} chars"
 
-    # get_oracle_text, send_chat_message, take_action, unknown
+    # get_oracle_text, send_chat_message, default_action, unknown
     return content[:TOOL_RESULT_MAX_CHARS]
 
 
@@ -603,7 +603,7 @@ async def run_pilot_loop(
                 except Exception:
                     pass
                 try:
-                    await execute_tool(session, "take_action", {})
+                    await execute_tool(session, "default_action", {})
                     _log("[pilot] Auto-passed stalled action")
                 except Exception as e:
                     _log(f"[pilot] Auto-pass failed: {e}")
@@ -637,7 +637,7 @@ async def run_pilot_loop(
                     error_message=f"Timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]",
                 )
             try:
-                await execute_tool(session, "take_action", {})
+                await execute_tool(session, "default_action", {})
             except Exception:
                 await asyncio.sleep(5)
 
@@ -685,7 +685,7 @@ async def run_pilot_loop(
 
             # Transient error - keep actions flowing while waiting to retry
             try:
-                await execute_tool(session, "take_action", {})
+                await execute_tool(session, "default_action", {})
             except Exception:
                 await asyncio.sleep(5)
 

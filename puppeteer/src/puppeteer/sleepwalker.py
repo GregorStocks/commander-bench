@@ -111,7 +111,7 @@ async def run_sleepwalker(
                     await asyncio.sleep(ACTION_DELAY_SECS)
 
                     # Execute default action
-                    result = await session.call_tool("take_action", {})
+                    result = await session.call_tool("default_action", {})
                     action_result = json.loads(result.content[0].text)
                     _log(f"[sleepwalker]   Result: {action_result.get('action_taken', 'unknown')}")
 

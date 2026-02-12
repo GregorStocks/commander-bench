@@ -208,9 +208,9 @@ public class McpServer {
     public static List<Map<String, Object>> getToolDefinitions() {
         List<Map<String, Object>> tools = new ArrayList<>();
 
-        // take_action
+        // default_action
         Map<String, Object> takeActionTool = new HashMap<>();
-        takeActionTool.put("name", "take_action");
+        takeActionTool.put("name", "default_action");
         takeActionTool.put("description", "Execute default action (pass priority or first available choice)");
         Map<String, Object> takeActionSchema = new HashMap<>();
         takeActionSchema.put("type", "object");
@@ -579,7 +579,7 @@ public class McpServer {
         Map<String, Object> toolResult;
 
         switch (toolName) {
-            case "take_action":
+            case "default_action":
                 toolResult = callbackHandler.executeDefaultAction();
                 break;
 

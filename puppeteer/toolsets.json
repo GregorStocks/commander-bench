@@ -3,7 +3,7 @@
     "pass_priority",
     "get_action_choices",
     "choose_action",
-    "take_action",
+    "default_action",
     "get_game_state",
     "get_game_log",
     "get_oracle_text",
