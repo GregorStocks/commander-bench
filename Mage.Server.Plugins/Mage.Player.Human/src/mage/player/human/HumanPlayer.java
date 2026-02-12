@@ -2093,6 +2093,26 @@ public class HumanPlayer extends PlayerImpl {
                     possibleAttackersToBlock.add(attackerId);
                 }
             }
+            if (possibleAttackersToBlock.isEmpty() && !allAttackers.isEmpty() && blocker != null) {
+                // Debug: log why no attackers are blockable (investigate empty blocker-target choices)
+                logger.warn("selectCombatGroup: 0/" + allAttackers.size() + " attackers blockable by "
+                    + blocker.getIdName() + " (controller=" + blocker.getControllerId() + ")");
+                for (UUID attackerId : allAttackers) {
+                    Permanent attacker = game.getPermanent(attackerId);
+                    CombatGroup group = game.getCombat().findGroup(attackerId);
+                    String attackerName = attacker != null ? attacker.getIdName() : attackerId.toString();
+                    if (group == null) {
+                        logger.warn("  " + attackerName + ": findGroup returned null");
+                    } else {
+                        boolean defenderMatch = group.getDefendingPlayerId().equals(blocker.getControllerId());
+                        boolean canBlock = blocker.canBlock(attackerId, game);
+                        logger.warn("  " + attackerName + ": defender=" + group.getDefendingPlayerId()
+                            + " defenderMatch=" + defenderMatch
+                            + " canBlock=" + canBlock
+                            + " groupCanBlock=" + group.canBlock(blocker, game));
+                    }
+                }
+            }
             if (possibleAttackersToBlock.size() == 1) {
                 // auto-choice
                 responseId = possibleAttackersToBlock.stream().iterator().next();
