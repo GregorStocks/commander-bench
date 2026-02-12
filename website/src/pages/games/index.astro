@@ -371,7 +371,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
           // Commander
           var cmdEl = document.createElement("div");
           cmdEl.className = "player-commander";
-          cmdEl.textContent = p.commander || "";
+          cmdEl.textContent = p.deckName || p.commander || "";
           cell.appendChild(cmdEl);
 
           // Model (only for pilots)

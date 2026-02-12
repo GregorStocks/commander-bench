@@ -766,7 +766,7 @@ const { slug } = Astro.params;
 
         // Title
         var playerNames = (game.players || []).map(function (p) {
-          return p.commander || p.name;
+          return p.deckName || p.commander || p.name;
         }).join(" vs ");
         gameTitleEl.textContent = playerNames;
 
