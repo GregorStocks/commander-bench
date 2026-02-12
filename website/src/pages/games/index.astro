@@ -11,12 +11,36 @@ if (fs.existsSync(gamesDir)) {
     if (!file.startsWith('game_') || !file.endsWith('.json.gz')) continue;
     const compressed = fs.readFileSync(path.join(gamesDir, file));
     const data = JSON.parse(zlib.gunzipSync(compressed).toString());
+    const players = data.players || [];
+    // Compute tool call counts from llmEvents if not already on players
+    if (players.length > 0 && !players.some((p: any) => p.toolCallsOk != null)) {
+      const toolOk: Record<string, number> = {};
+      const toolFailed: Record<string, number> = {};
+      for (const ev of (data.llmEvents || [])) {
+        if (ev.type !== 'tool_call' || !ev.player) continue;
+        let isFail = false;
+        if (ev.result) {
+          try {
+            const r = JSON.parse(ev.result);
+            if (r && typeof r === 'object' && r.success === false) isFail = true;
+          } catch {}
+        }
+        if (isFail) toolFailed[ev.player] = (toolFailed[ev.player] || 0) + 1;
+        else toolOk[ev.player] = (toolOk[ev.player] || 0) + 1;
+      }
+      for (const p of players) {
+        if (toolOk[p.name] != null || toolFailed[p.name] != null) {
+          p.toolCallsOk = toolOk[p.name] || 0;
+          p.toolCallsFailed = toolFailed[p.name] || 0;
+        }
+      }
+    }
     const entry: Record<string, unknown> = {
       id: data.id,
       timestamp: data.timestamp,
       totalTurns: data.totalTurns,
       winner: data.winner,
-      players: data.players,
+      players: players,
       deckType: data.deckType || '',
     };
     if (data.youtubeUrl) entry.youtubeUrl = data.youtubeUrl;
@@ -215,6 +239,16 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     font-variant-numeric: tabular-nums;
   }
 
+  .player-tools {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tool-fail {
+    color: #e94560;
+  }
+
   .player-elo {
     font-size: 0.75rem;
     color: #a0a0b8;
@@ -393,6 +427,20 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
             cell.appendChild(costEl);
             totalCost += p.totalCostUsd;
             hasCost = true;
+          }
+
+          // Tool calls (only if present)
+          if (p.toolCallsOk != null) {
+            var toolsEl = document.createElement("div");
+            toolsEl.className = "player-tools";
+            var total = p.toolCallsOk + (p.toolCallsFailed || 0);
+            var text = total + " tools";
+            if (p.toolCallsFailed > 0) {
+              toolsEl.innerHTML = text + " / <span class=\"tool-fail\">" + p.toolCallsFailed + " failed</span>";
+            } else {
+              toolsEl.textContent = text;
+            }
+            cell.appendChild(toolsEl);
           }
 
           // Elo (if available)

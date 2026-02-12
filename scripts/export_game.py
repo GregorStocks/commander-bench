@@ -91,15 +91,18 @@ def _deck_display_name(player_meta: dict, deck_type: str) -> str | None:
 
 def _read_llm_events(
     game_dir: Path,
-) -> tuple[list[dict], dict[str, float], dict[str, list[str]]]:
+) -> tuple[
+    list[dict], dict[str, float], dict[str, list[str]], dict[str, tuple[int, int]]
+]:
     """Read LLM events from all *_llm.jsonl files.
 
     Returns (llm_events sorted by timestamp, {player_name: total_cost_usd},
-    {player_name: available_tools}).
+    {player_name: available_tools}, {player_name: (ok_count, failed_count)}).
     """
     events = []
     player_costs: dict[str, float] = {}
     player_tools: dict[str, list[str]] = {}
+    player_tool_calls: dict[str, tuple[int, int]] = {}
 
     for path in sorted(game_dir.glob("*_llm.jsonl")):
         for line in path.read_text().splitlines():
@@ -123,6 +126,26 @@ def _read_llm_events(
             # Track per-player tools from game_start
             if event_type == "game_start" and "available_tools" in raw:
                 player_tools[player] = raw["available_tools"]
+
+            # Track per-player tool call success/failure
+            if event_type == "tool_call" and player:
+                ok, failed = player_tool_calls.get(player, (0, 0))
+                is_failure = False
+                result_str = raw.get("result", "")
+                if result_str:
+                    try:
+                        result_obj = json.loads(result_str)
+                        if (
+                            isinstance(result_obj, dict)
+                            and result_obj.get("success") is False
+                        ):
+                            is_failure = True
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if is_failure:
+                    player_tool_calls[player] = (ok, failed + 1)
+                else:
+                    player_tool_calls[player] = (ok + 1, failed)
 
             if event_type not in _LLM_EVENT_TYPES:
                 continue
@@ -176,7 +199,7 @@ def _read_llm_events(
     # Sort by timestamp
     events.sort(key=lambda e: e.get("ts", ""))
 
-    return events, player_costs, player_tools
+    return events, player_costs, player_tools, player_tool_calls
 
 
 def _read_llm_trace(game_dir: Path) -> list[dict]:
@@ -260,7 +283,9 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             }
 
     # Read LLM logs
-    llm_events, player_costs, player_tools = _read_llm_events(game_dir)
+    llm_events, player_costs, player_tools, player_tool_calls = _read_llm_events(
+        game_dir
+    )
     llm_trace = _read_llm_trace(game_dir)
 
     # Build card images map from decklists
@@ -326,6 +351,10 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             entry["placement"] = placements[name]
         if name in player_tools:
             entry["tools"] = player_tools[name]
+        if name in player_tool_calls:
+            ok, failed = player_tool_calls[name]
+            entry["toolCallsOk"] = ok
+            entry["toolCallsFailed"] = failed
         players_summary.append(entry)
 
     # Build output

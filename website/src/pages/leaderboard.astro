@@ -100,6 +100,8 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
             <th data-sort="gamesPlayed" data-type="number">Games Played</th>
             <th data-sort="winRate" data-type="number">Win Rate</th>
             <th data-sort="avgApiCost" data-type="number">Avg API Cost</th>
+            <th data-sort="avgToolCallsOk" data-type="number">Avg Tool Calls</th>
+            <th data-sort="avgToolCallsFailed" data-type="number">Avg Failures</th>
           </tr>
         </thead>
         {activeFormats.map((fmt: string) => (
@@ -112,6 +114,8 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
                 data-games-played={m.gamesPlayed}
                 data-win-rate={m.winRate}
                 data-avg-api-cost={m.avgApiCost}
+                data-avg-tool-calls-ok={m.avgToolCallsOk ?? 0}
+                data-avg-tool-calls-failed={m.avgToolCallsFailed ?? 0}
               >
                 <td class="model-name">{m.modelName}</td>
                 <td>{m.provider}</td>
@@ -119,6 +123,8 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
                 <td class="num">{m.gamesPlayed}</td>
                 <td class="num">{(m.winRate * 100).toFixed(1)}%</td>
                 <td class="num">${m.avgApiCost.toFixed(2)}</td>
+                <td class="num">{m.avgToolCallsOk?.toFixed(1) ?? '—'}</td>
+                <td class="num">{m.avgToolCallsFailed?.toFixed(1) ?? '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -443,7 +449,9 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
   th[data-sort="rating"],
   th[data-sort="gamesPlayed"],
   th[data-sort="winRate"],
-  th[data-sort="avgApiCost"] {
+  th[data-sort="avgApiCost"],
+  th[data-sort="avgToolCallsOk"],
+  th[data-sort="avgToolCallsFailed"] {
     text-align: right;
   }
 
