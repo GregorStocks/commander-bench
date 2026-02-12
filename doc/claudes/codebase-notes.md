@@ -31,7 +31,7 @@ An AI benchmark for Magic: The Gathering, built on top of XMage (an open-source 
 
 ## Game Log Observations (Feb 2026)
 
-Logs are in `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`. Each game dir has a config.json, pilot logs, server log, and a recording.
+Logs are in `~/.mage-bench/logs/game_YYYYMMDD_HHMMSS/`. Each game dir has a config.json, pilot logs, server log, and a recording.
 
 **DeepSeek V3** played Transguild Promenade as its first land (requires paying {1} on ETB), had no other lands to pay, and had to sacrifice it. Then typed an apologetic emoji. Classic new player mistake.
 

@@ -31,7 +31,7 @@ export OPENROUTER_API_KEY="sk-..."
 make run CONFIG=commander-gauntlet
 ```
 
-This runs 4 random LLM pilots against each other in a Commander game with streaming and video recording. Recordings and logs are saved to `~/mage-bench-logs/`.
+This runs 4 LLM pilots against each other in a Commander game with streaming and video recording. Recordings and logs are saved to `~/.mage-bench/logs/`.
 
 Other configs:
 

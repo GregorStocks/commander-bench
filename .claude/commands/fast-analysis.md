@@ -13,11 +13,11 @@ Determine which game to analyze:
   ```bash
   uv run python scripts/list-recent-games.py
   ```
-- If the user mentioned a config name (e.g. "standard", "gauntlet", "frontier"), use the corresponding symlink:
+- If the user mentioned a config name (e.g. "commander-gauntlet", "standard-dumb", "modern-staller"), use the corresponding symlink:
   ```bash
   uv run python scripts/list-recent-games.py --config {config}
   ```
-  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist with `--symlinks`.
+  where `{config}` might be `commander-gauntlet`, `commander-frontier`, `standard-dumb`, `modern-staller`, etc. Check what symlinks exist with `--symlinks`.
 - **If ambiguous** (multiple recent games, or user just said "analyze a game"), show the 3-5 most recent games with their config and players, then ask which one:
   ```bash
   uv run python scripts/list-recent-games.py
@@ -32,7 +32,7 @@ GZ_PATH=website/public/games/${GAME_ID}.json.gz
 ```
 
 a. Check if `$GZ_PATH` exists on the current branch.
-b. If not, check if `~/mage-bench-logs/${GAME_ID}/game_events.jsonl` exists. If so, generate the gz:
+b. If not, check if `~/.mage-bench/logs/${GAME_ID}/game_events.jsonl` exists. If so, generate the gz:
    ```bash
    uv run python scripts/export_game.py ${GAME_ID}
    ```

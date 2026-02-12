@@ -134,8 +134,8 @@ upload-youtube:
 #   FILE    output path (default: screenshot.png inside game dir)
 .PHONY: screenshot
 screenshot:
-	@GAME_DIR=$${GAME:-$$(ls -1td ~/mage-bench-logs/game_* 2>/dev/null | head -1)}; \
-	if [ -z "$$GAME_DIR" ]; then echo "No game logs found in ~/mage-bench-logs/" >&2; exit 1; fi; \
+	@GAME_DIR=$${GAME:-$$(ls -1td ~/.mage-bench/logs/game_* 2>/dev/null | head -1)}; \
+	if [ -z "$$GAME_DIR" ]; then echo "No game logs found in ~/.mage-bench/logs/" >&2; exit 1; fi; \
 	VIDEO="$$GAME_DIR/recording.mov"; \
 	if [ ! -f "$$VIDEO" ]; then echo "No recording.mov in $$GAME_DIR" >&2; exit 1; fi; \
 	OUT=$${FILE:-$$GAME_DIR/screenshot.png}; \

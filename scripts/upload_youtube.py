@@ -10,7 +10,7 @@ from pathlib import Path
 MAGE_BENCH_DIR = Path.home() / ".mage-bench"
 CLIENT_SECRETS_FILE = MAGE_BENCH_DIR / "youtube-client-secrets.json"
 TOKEN_FILE = MAGE_BENCH_DIR / "youtube-token.json"
-LOGS_DIR = Path.home() / "mage-bench-logs"
+LOGS_DIR = Path.home() / ".mage-bench" / "logs"
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",

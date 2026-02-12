@@ -13,18 +13,18 @@ Determine which game to analyze:
   ```bash
   uv run python scripts/list-recent-games.py
   ```
-- If the user mentioned a config name (e.g. "standard", "gauntlet", "frontier"), use the corresponding symlink:
+- If the user mentioned a config name (e.g. "commander-gauntlet", "standard-dumb", "modern-staller"), use the corresponding symlink:
   ```bash
   uv run python scripts/list-recent-games.py --config {config}
   ```
-  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist with `--symlinks`.
+  where `{config}` might be `commander-gauntlet`, `commander-frontier`, `standard-dumb`, `modern-staller`, etc. Check what symlinks exist with `--symlinks`.
 - **If ambiguous** (multiple recent games, or user just said "analyze a game"), show the 3-5 most recent games with their config and players, then ask which one:
   ```bash
   uv run python scripts/list-recent-games.py
   ```
   Ask the user to pick one before proceeding. **Do not guess.**
 
-Set `GAME_DIR=~/mage-bench-logs/{game_id}`.
+Set `GAME_DIR=~/.mage-bench/logs/{game_id}`.
 
 If the full log directory doesn't exist but `website/public/games/{game_id}.json.gz` does, tell the user the full logs aren't available and offer to run a fast analysis from the gz file instead. Stop here unless the user wants the fast analysis.
 
@@ -82,7 +82,7 @@ A single bug often shows up across multiple log files. For example, an NPE in er
 ### Step 8: Trace bugs to source code
 
 For each code bug, read the relevant Java/Python files to identify the exact line and root cause. Include in the issue:
-- The game log path: `~/mage-bench-logs/game_YYYYMMDD_HHMMSS/`
+- The game log path: `~/.mage-bench/logs/game_YYYYMMDD_HHMMSS/`
 - Specific log files and approximate line numbers where the bug manifests
 - The source code file and line where the fix should go (e.g., `BridgeCallbackHandler.java:1407`)
 - A brief description of the root cause and suggested fix direction
@@ -93,7 +93,7 @@ Create issue files in `issues/`:
 ```json
 {
   "title": "Short summary",
-  "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/mage-bench-logs/game_.../Player_errors.log: NPE at line 42\n- ~/mage-bench-logs/game_.../Player_bridge.jsonl: repeated cast-cancel pattern\n\nSource: BridgeCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
+  "description": "Full description with root cause analysis.\n\nEvidence:\n- ~/.mage-bench/logs/game_.../Player_errors.log: NPE at line 42\n- ~/.mage-bench/logs/game_.../Player_bridge.jsonl: repeated cast-cancel pattern\n\nSource: BridgeCallbackHandler.java:1407 — cv.getDisplayName() returns null\n\nSuggested fix: null-guard displayName before passing to StringBuilder",
   "status": "open",
   "priority": N,
   "type": "task",
