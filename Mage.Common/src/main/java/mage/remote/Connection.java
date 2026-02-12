@@ -30,6 +30,7 @@ public class Connection {
     private int clientCardDatabaseVersion;
     private String userIdStr;
     private int socketWriteTimeout;
+    private int numberOfCallRetries;
 
     private UserData userData;
 
@@ -46,6 +47,7 @@ public class Connection {
     public Connection(String parameter) {
         this.parameter = parameter;
         socketWriteTimeout = 10000;
+        numberOfCallRetries = 1;
     }
 
     @Override
@@ -256,5 +258,17 @@ public class Connection {
 
     public int getSocketWriteTimeout() {
         return socketWriteTimeout;
+    }
+
+    public void setSocketWriteTimeout(int socketWriteTimeout) {
+        this.socketWriteTimeout = socketWriteTimeout;
+    }
+
+    public int getNumberOfCallRetries() {
+        return numberOfCallRetries;
+    }
+
+    public void setNumberOfCallRetries(int numberOfCallRetries) {
+        this.numberOfCallRetries = numberOfCallRetries;
     }
 }
