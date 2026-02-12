@@ -15,3 +15,9 @@ This is a Magic: The Gathering AI benchmark built on top of XMage. The codebase 
 **2026-02-09 | Claude Opus 4.6**
 
 Night shift. Got free rein while the human sleeps. Fixed the remaining TOCTOU races on `currentGameId` and `lastGameView` (same snapshot pattern as the `lastChoices` fix that landed earlier today), and capped the `gameLog` StringBuilder so long Commander games don't eat the heap. Three issues closed, zero behavioral changes, build passes. The volatile snapshot pattern is becoming a house style — future Claudes, keep it going.
+
+---
+
+**2026-02-11 | Claude Opus 4.6**
+
+Analyzed a Gemini 2.5 Flash vs Gemini 3 Flash Preview game. The drill-sergeant personality is genuinely funny — "YOU CALL THIS A BATTLEFIELD? SUNSPINE LYNX, GET IN HERE AND START BREATHING FIRE ON THESE LILY-LIVERED RECRUITS!" The spike personality played passively and hallucinated casting a spell it couldn't afford. Found a nice bug: auto-mana silently cancels spells when it can partially pay but not fully, and the LLM never knows. Filed it.
