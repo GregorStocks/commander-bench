@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
@@ -775,59 +776,57 @@ async def run_pilot(
 
     game_log = None
     trace_log = None
-    if game_dir:
-        game_log = GameLogWriter(game_dir, username)
-        trace_log = GameLogWriter(game_dir, username, suffix="llm_trace")
+    with ExitStack() as log_stack:
+        if game_dir:
+            game_log = log_stack.enter_context(GameLogWriter(game_dir, username))
+            trace_log = log_stack.enter_context(GameLogWriter(game_dir, username, suffix="llm_trace"))
 
-    try:
-        async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
-            result = await session.initialize()
-            _log(f"[pilot] MCP initialized: {result.serverInfo}")
+        try:
+            async with stdio_client(server_params) as (read, write), ClientSession(read, write) as session:
+                result = await session.initialize()
+                _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
-            tools_result = await session.list_tools()
-            # Fail fast if toolset references tools the MCP bridge doesn't have
-            if tools is not None:
-                available_mcp_names = {t.name for t in tools_result.tools}
-                unknown = tools - available_mcp_names
-                if unknown:
-                    raise ValueError(
-                        f"Toolset references unknown MCP tools: {sorted(unknown)}. "
-                        f"Available: {sorted(available_mcp_names)}"
+                tools_result = await session.list_tools()
+                # Fail fast if toolset references tools the MCP bridge doesn't have
+                if tools is not None:
+                    available_mcp_names = {t.name for t in tools_result.tools}
+                    unknown = tools - available_mcp_names
+                    if unknown:
+                        raise ValueError(
+                            f"Toolset references unknown MCP tools: {sorted(unknown)}. "
+                            f"Available: {sorted(available_mcp_names)}"
+                        )
+                openai_tools = mcp_tools_to_openai(tools_result.tools, tools)
+                openai_tools.append(SAVE_STRATEGY_TOOL)
+                tool_names = [t["function"]["name"] for t in openai_tools]
+                _log(f"[pilot] Available tools: {tool_names}")
+
+                if game_log:
+                    game_log.emit(
+                        "game_start",
+                        model=model,
+                        system_prompt=system_prompt,
+                        available_tools=tool_names,
+                        deck_path=str(deck_path) if deck_path else None,
                     )
-            openai_tools = mcp_tools_to_openai(tools_result.tools, tools)
-            openai_tools.append(SAVE_STRATEGY_TOOL)
-            tool_names = [t["function"]["name"] for t in openai_tools]
-            _log(f"[pilot] Available tools: {tool_names}")
 
-            if game_log:
-                game_log.emit(
-                    "game_start",
-                    model=model,
-                    system_prompt=system_prompt,
-                    available_tools=tool_names,
-                    deck_path=str(deck_path) if deck_path else None,
+                _log("[pilot] Starting game-playing loop...")
+                await run_pilot_loop(
+                    session,
+                    llm_client,
+                    model,
+                    system_prompt,
+                    openai_tools,
+                    username=username,
+                    game_dir=game_dir,
+                    prices=prices,
+                    game_log=game_log,
+                    trace_log=trace_log,
+                    reasoning_effort=reasoning_effort,
                 )
-
-            _log("[pilot] Starting game-playing loop...")
-            await run_pilot_loop(
-                session,
-                llm_client,
-                model,
-                system_prompt,
-                openai_tools,
-                username=username,
-                game_dir=game_dir,
-                prices=prices,
-                game_log=game_log,
-                trace_log=trace_log,
-                reasoning_effort=reasoning_effort,
-            )
-    finally:
-        if game_log:
-            game_log.emit("game_end", total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
-            game_log.close()
-        if trace_log:
-            trace_log.close()
+        finally:
+            if game_log:
+                game_log.emit("game_end", total_cost_usd=round(game_log.last_cumulative_cost_usd(), 6))
 
 
 def main() -> int:

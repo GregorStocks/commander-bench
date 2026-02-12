@@ -59,10 +59,9 @@ def test_parse_ts_empty():
 def test_game_log_writer_emit():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
-        writer = GameLogWriter(game_dir, "alice")
-        writer.emit("turn_start", turn=1)
-        writer.emit("action", action="play_land")
-        writer.close()
+        with GameLogWriter(game_dir, "alice") as writer:
+            writer.emit("turn_start", turn=1)
+            writer.emit("action", action="play_land")
 
         log_path = game_dir / "alice_llm.jsonl"
         assert log_path.exists()
@@ -84,31 +83,29 @@ def test_game_log_writer_emit():
 def test_game_log_writer_cost_tracking():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
-        writer = GameLogWriter(game_dir, "bob")
-        assert writer.last_cumulative_cost_usd() == 0.0
+        with GameLogWriter(game_dir, "bob") as writer:
+            assert writer.last_cumulative_cost_usd() == 0.0
 
-        writer.emit("llm_call", cumulative_cost_usd=0.05)
-        assert writer.last_cumulative_cost_usd() == 0.05
+            writer.emit("llm_call", cumulative_cost_usd=0.05)
+            assert writer.last_cumulative_cost_usd() == 0.05
 
-        writer.emit("llm_call", cumulative_cost_usd=0.12)
-        assert writer.last_cumulative_cost_usd() == 0.12
+            writer.emit("llm_call", cumulative_cost_usd=0.12)
+            assert writer.last_cumulative_cost_usd() == 0.12
 
-        # Non-numeric cost is ignored
-        writer.emit("llm_call", cumulative_cost_usd="bad")
-        assert writer.last_cumulative_cost_usd() == 0.12
-        writer.close()
+            # Non-numeric cost is ignored
+            writer.emit("llm_call", cumulative_cost_usd="bad")
+            assert writer.last_cumulative_cost_usd() == 0.12
 
 
 def test_game_log_writer_custom_suffix():
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
-        writer = GameLogWriter(game_dir, "alice", suffix="llm_trace")
-        writer.emit(
-            "llm_call",
-            request={"model": "test", "messages": [{"role": "user", "content": "hi"}]},
-            response={"choices": [{"message": {"content": "hello"}}]},
-        )
-        writer.close()
+        with GameLogWriter(game_dir, "alice", suffix="llm_trace") as writer:
+            writer.emit(
+                "llm_call",
+                request={"model": "test", "messages": [{"role": "user", "content": "hi"}]},
+                response={"choices": [{"message": {"content": "hello"}}]},
+            )
 
         log_path = game_dir / "alice_llm_trace.jsonl"
         assert log_path.exists()
@@ -121,6 +118,24 @@ def test_game_log_writer_custom_suffix():
         assert event["type"] == "llm_call"
         assert event["request"]["model"] == "test"
         assert event["response"]["choices"][0]["message"]["content"] == "hello"
+
+
+def test_game_log_writer_context_manager_closes_on_exception():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        try:
+            with GameLogWriter(game_dir, "alice") as writer:
+                writer.emit("turn_start", turn=1)
+                raise RuntimeError("simulated crash")
+        except RuntimeError:
+            pass
+
+        # File should be closed and flushed despite the exception
+        log_path = game_dir / "alice_llm.jsonl"
+        assert log_path.exists()
+        lines = log_path.read_text().strip().splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["type"] == "turn_start"
 
 
 def test_merge_game_log():
