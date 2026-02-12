@@ -1,5 +1,4 @@
 {
-  "_comment": "Named tool sets referenced by presets. Excludes: wait_for_action (pass_priority is strictly better, models that discover it create polling loops), auto_pass_until_event (risks skipping all decisions), is_action_on_me (pass_priority handles this), wait_and_get_choices (same polling risk as wait_for_action), get_game_log/get_my_decklist (low value, wastes context).",
   "default": [
     "pass_priority",
     "get_action_choices",
@@ -7,6 +6,12 @@
     "get_game_state",
     "get_oracle_text",
     "send_chat_message",
-    "take_action"
+    "take_action",
+    "wait_for_action",
+    "wait_and_get_choices",
+    "auto_pass_until_event",
+    "is_action_on_me",
+    "get_game_log",
+    "get_my_decklist"
   ]
 }
