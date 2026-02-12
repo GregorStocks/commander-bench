@@ -41,6 +41,7 @@ import java.time.format.DateTimeFormatter;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -140,6 +141,21 @@ public class BridgeCallbackHandler {
     private static final long LOST_RESPONSE_RETRY_MS = 25_000; // retry after 25s (server discards after 30s)
     private volatile long lastCallbackReceivedAt = 0;
     private volatile UUID lastCallbackGameId = null;
+    // Track actionable callbacks (GAME_SELECT, GAME_ASK, etc.) separately from passive
+    // ones (CHATMESSAGE, GAME_UPDATE). retryLastResponseIfLost() needs this distinction:
+    // CHATMESSAGE callbacks were poisoning the "server moved on" check, preventing retries.
+    private static final EnumSet<ClientCallbackMethod> ACTIONABLE_CALLBACKS = EnumSet.of(
+        ClientCallbackMethod.GAME_SELECT, ClientCallbackMethod.GAME_ASK,
+        ClientCallbackMethod.GAME_TARGET, ClientCallbackMethod.GAME_CHOOSE_ABILITY,
+        ClientCallbackMethod.GAME_CHOOSE_CHOICE, ClientCallbackMethod.GAME_CHOOSE_PILE,
+        ClientCallbackMethod.GAME_PLAY_MANA, ClientCallbackMethod.GAME_PLAY_XMANA,
+        ClientCallbackMethod.GAME_GET_AMOUNT, ClientCallbackMethod.GAME_GET_MULTI_AMOUNT,
+        ClientCallbackMethod.GAME_PLAY_LAND);
+    private volatile long lastActionableCallbackAt = 0;
+    // Lost callback recovery: if we're stuck with no pendingAction and no tracked response,
+    // the server may have sent a callback we never received. Send a speculative pass to nudge.
+    private volatile long lastStallNudgeAt = 0;
+    private static final long STALL_NUDGE_MS = 25_000;
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -297,6 +313,8 @@ public class BridgeCallbackHandler {
         lastGameView = null;
         lastChoices = null;
         actionsProcessed = 0;
+        lastActionableCallbackAt = 0;
+        lastStallNudgeAt = 0;
         synchronized (gameLog) {
             gameLog.setLength(0);
             gameLogTrimmedChars = 0;
@@ -339,15 +357,18 @@ public class BridgeCallbackHandler {
     private boolean retryLastResponseIfLost() {
         if (lastResponseSentAt == 0 || lastResponseRetried) return false;
         long sentAt = lastResponseSentAt;
+        // Only consider actionable callbacks (GAME_SELECT, etc.) as evidence the server
+        // moved on. CHATMESSAGE/GAME_UPDATE callbacks were falsely clearing the retry,
+        // causing permanent desync in multiplayer games.
         if (lastResponseGameId != null && lastResponseGameId.equals(lastCallbackGameId)
-                && lastCallbackReceivedAt > sentAt) {
+                && lastActionableCallbackAt > sentAt) {
             clearTrackedResponse();
             return false;
         }
         long age = System.currentTimeMillis() - sentAt;
         if (age < LOST_RESPONSE_RETRY_MS) return false;
         if (lastResponseGameId != null && lastResponseGameId.equals(lastCallbackGameId)
-                && lastCallbackReceivedAt > sentAt) {
+                && lastActionableCallbackAt > sentAt) {
             clearTrackedResponse();
             return false;
         }
@@ -1954,6 +1975,26 @@ public class BridgeCallbackHandler {
             if (retryLastResponseIfLost()) {
                 startTime = System.currentTimeMillis();
             }
+
+            // Lost callback recovery: no pending action, no tracked response,
+            // but transport is alive (CHATMESSAGE still flowing) — server may
+            // have sent a callback we never received. Send a speculative pass
+            // to nudge the server out of waitForResponse().
+            if (pendingAction == null && lastResponseSentAt == 0) {
+                long now = System.currentTimeMillis();
+                long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
+                boolean transportAlive = lastCallbackReceivedAt > startTime;
+                UUID gameId = currentGameId;
+                if (idleTime > STALL_NUDGE_MS && transportAlive && gameId != null
+                        && activeGames.containsKey(gameId)
+                        && now - lastStallNudgeAt > STALL_NUDGE_MS) {
+                    lastStallNudgeAt = now;
+                    logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
+                            + "no actionable callback for " + idleTime + "ms, sending speculative pass");
+                    session.sendPlayerBoolean(gameId, false);
+                    startTime = System.currentTimeMillis();
+                }
+            }
         }
 
         // Timeout
@@ -2537,6 +2578,9 @@ public class BridgeCallbackHandler {
             ClientCallbackMethod method = callback.getMethod();
             lastCallbackReceivedAt = System.currentTimeMillis();
             lastCallbackGameId = objectId;
+            if (ACTIONABLE_CALLBACKS.contains(method)) {
+                lastActionableCallbackAt = System.currentTimeMillis();
+            }
             logger.debug("[" + client.getUsername() + "] Callback received: " + method);
 
             // Bridge JSONL dump: log every callback
