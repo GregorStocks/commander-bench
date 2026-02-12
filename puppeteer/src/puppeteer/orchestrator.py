@@ -708,20 +708,25 @@ def _update_website_youtube_url(game_dir: Path, url: str, project_root: Path) ->
         index_json.write_text(json.dumps(index, indent=2))
 
 
-def _maybe_upload_to_youtube(game_dir: Path, project_root: Path) -> None:
-    """Prompt user to upload recording to YouTube."""
+def _maybe_upload_and_export(game_dir: Path, project_root: Path) -> None:
+    """Prompt user to upload recording to YouTube and export for website."""
     recording = game_dir / "recording.mov"
     if not recording.exists():
-        return  # No recording, nothing to upload
+        return  # No recording, nothing to upload/export
 
-    try:
-        answer = input("Upload recording to YouTube? [y/N]: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return
-    if answer not in ("y", "yes"):
-        return
+    while True:
+        try:
+            answer = input("Upload to YouTube and export? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if answer in ("y", "yes"):
+            break
+        if answer in ("n", "no", ""):
+            return
+        print(f"  Unrecognized answer: {answer!r} — please enter y or n")
 
+    # Upload to YouTube
     try:
         sys.path.insert(0, str(project_root / "scripts"))
         from upload_youtube import upload_to_youtube
@@ -737,19 +742,8 @@ def _maybe_upload_to_youtube(game_dir: Path, project_root: Path) -> None:
     except Exception as e:
         print(f"  Warning: YouTube upload failed: {e}")
 
-
-def _maybe_export_for_website(game_dir: Path, project_root: Path) -> None:
-    """Prompt user to export game data for the website visualizer."""
+    # Export for website
     try:
-        answer = input("Export game for website? [y/N]: ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        print()
-        return
-    if answer not in ("y", "yes"):
-        return
-    try:
-        # Import inline to avoid circular deps and keep it optional
-        sys.path.insert(0, str(project_root / "scripts"))
         from export_game import export_game
 
         website_games_dir = project_root / "website" / "public" / "games"
@@ -985,8 +979,7 @@ def main() -> int:
             print(f"  Warning: failed to merge game log: {e}")
         _print_game_summary(game_dir)
         if not config.skip_post_game_prompts:
-            _maybe_upload_to_youtube(game_dir, project_root)
-            _maybe_export_for_website(game_dir, project_root)
+            _maybe_upload_and_export(game_dir, project_root)
 
         return 0
     finally:
