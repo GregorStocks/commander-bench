@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -25,6 +26,7 @@ public class FFmpegEncoder implements FrameConsumer {
     private int width;
     private int height;
     private byte[] rgbBuffer;
+    private byte[] prevRgbBuffer;
     private volatile boolean pipeBroken;
 
     public FFmpegEncoder(Path outputPath) {
@@ -36,10 +38,12 @@ public class FFmpegEncoder implements FrameConsumer {
         this.width = width;
         this.height = height;
         this.rgbBuffer = new byte[width * height * 3];
+        this.prevRgbBuffer = new byte[width * height * 3];
 
         List<String> command = new ArrayList<>();
         command.add("ffmpeg");
         command.add("-y"); // Overwrite output
+        command.add("-use_wallclock_as_timestamps"); command.add("1");
         command.add("-f"); command.add("rawvideo");
         command.add("-pix_fmt"); command.add("rgb24");
         command.add("-s"); command.add(width + "x" + height);
@@ -51,6 +55,7 @@ public class FFmpegEncoder implements FrameConsumer {
         command.add("-preset"); command.add("ultrafast"); // Low CPU, fast encoding
         command.add("-crf"); command.add("23"); // Good quality/size balance
         command.add("-pix_fmt"); command.add("yuv420p"); // Compatibility
+        command.add("-fps_mode"); command.add("vfr");
         command.add(outputPath.toString());
 
         logger.info("Starting FFmpeg: " + String.join(" ", command));
@@ -76,9 +81,12 @@ public class FFmpegEncoder implements FrameConsumer {
         }
 
         try {
-            // Convert BufferedImage to RGB24 bytes
             convertToRgb24(frame, rgbBuffer);
+            if (Arrays.equals(rgbBuffer, prevRgbBuffer)) {
+                return; // Skip pixel-identical frame; VFR extends previous frame's duration
+            }
             stdin.write(rgbBuffer);
+            System.arraycopy(rgbBuffer, 0, prevRgbBuffer, 0, rgbBuffer.length);
         } catch (IOException e) {
             pipeBroken = true;
             logger.error("Failed to write frame " + frameNumber + ", stopping further writes", e);
