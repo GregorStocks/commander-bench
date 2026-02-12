@@ -19,6 +19,8 @@ public class BridgeMageClient implements MageClient {
     private Session session;
     private final BridgeCallbackHandler callbackHandler;
     private volatile boolean running = true;
+    private volatile boolean reconnectable = false;
+    private volatile boolean suppressDisconnect = false;
 
     public BridgeMageClient(String username) {
         this.username = username;
@@ -50,6 +52,18 @@ public class BridgeMageClient implements MageClient {
         running = false;
     }
 
+    public void setRunning(boolean running) {
+        this.running = running;
+    }
+
+    public boolean isReconnectable() {
+        return reconnectable;
+    }
+
+    public void suppressDisconnectCallbacks(boolean suppress) {
+        this.suppressDisconnect = suppress;
+    }
+
     @Override
     public MageVersion getVersion() {
         return version;
@@ -62,7 +76,12 @@ public class BridgeMageClient implements MageClient {
 
     @Override
     public void disconnected(boolean askToReconnect, boolean keepMySessionActive) {
+        if (suppressDisconnect) {
+            logger.info("[" + username + "] Disconnected callback suppressed during reconnection");
+            return;
+        }
         logger.info("[" + username + "] Disconnected (askToReconnect=" + askToReconnect + ", keepSession=" + keepMySessionActive + ")");
+        reconnectable = askToReconnect && keepMySessionActive;
         running = false;
     }
 
@@ -78,8 +97,13 @@ public class BridgeMageClient implements MageClient {
 
     @Override
     public void onNewConnection() {
-        logger.info("[" + username + "] New connection established");
-        callbackHandler.reset();
+        if (reconnectable) {
+            logger.info("[" + username + "] Reconnected — preserving game state (skipping reset)");
+            reconnectable = false;
+        } else {
+            logger.info("[" + username + "] New connection established");
+            callbackHandler.reset();
+        }
     }
 
     @Override
