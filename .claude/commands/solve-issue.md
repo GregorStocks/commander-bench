@@ -10,7 +10,7 @@ Pick and solve exactly **one** issue, then create a PR.
    ```
 2. List open issues sorted by priority:
    ```bash
-   for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r '[.priority, .title] | @tsv' "$f")"; done | sort -t: -k2 -n
+   scripts/list-issues.sh
    ```
 3. Check which issues are already claimed by other agents:
    ```bash
