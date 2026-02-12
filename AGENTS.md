@@ -115,7 +115,7 @@ When running games for testing or verification, **only use free configs** that d
 
 ```bash
 make run                              # No API keys needed (2 CPU Standard duel)
-make run CONFIG=standard-staller      # No API keys needed (burn vs staller)
+make run CONFIG=modern-staller      # No API keys needed (burn vs staller)
 ```
 
 **Never run** `CONFIG=commander-gauntlet`, `CONFIG=commander-frontier`, or other LLM configs — these consume real API tokens and cost money.

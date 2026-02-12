@@ -1,7 +1,7 @@
 {
   "skipPostGamePrompts": true,
   "gameType": "Two Player Duel",
-  "deckType": "Constructed - Standard",
+  "deckType": "Constructed - Modern",
   "customStartLife": 200,
   "players": [
     {"type": "cpu", "name": "Burner 1", "deck": "Mage.Client/release/sample-decks/2014/Modern/DailyMTG Top Decks/Bo Sun's Burn.dck"},

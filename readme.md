@@ -46,7 +46,7 @@ make run CONFIG=commander-frontier
 make run CONFIG=commander-1v3
 
 # Long-lived test server (stays running between games)
-make run CONFIG=standard-staller
+make run CONFIG=modern-staller
 
 # List all available configs
 make configs
