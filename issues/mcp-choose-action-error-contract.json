@@ -1,0 +1,10 @@
+{
+  "title": "Standardize choose_action errors with machine-readable codes",
+  "description": "choose_action currently returns human-readable error strings (e.g. \"Index 0 out of range\") that require brittle text matching in clients and analysis tooling.\n\nProposed direction:\n1. Add a stable error contract: error_code, retryable, expected_response_type, and action_context hints.\n2. Keep human-readable error for logs/UI, but make machine fields authoritative.\n3. Align all failure paths (missing param, index out of range, required target, invalid text choice, etc.).\n\nMotivation:\n- Easier auto-recovery and retries without regex matching.\n- Cleaner telemetry and dashboards for failure categorization.\n- Better prompting/agent behavior feedback loops.\n\nSuggested source area: Mage.Client.Headless/src/main/java/mage/client/headless/BridgeCallbackHandler.java:chooseAction and Mage.Client.Headless/src/main/java/mage/client/headless/McpServer.java tool schema.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T19:51:04.000000-08:00",
+  "updated_at": "2026-02-11T19:51:04.000000-08:00"
+}

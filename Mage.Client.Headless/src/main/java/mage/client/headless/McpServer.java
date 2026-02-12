@@ -22,10 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * MCP (Model Context Protocol) server using stdio transport.
  * Implements JSON-RPC 2.0 over newline-delimited stdin/stdout.
  *
- * Exposes eleven tools:
+ * Exposes thirteen tools:
  * - is_action_on_me: Check if action is pending
  * - take_action: Execute default action
  * - wait_for_action: Block until action is pending (or timeout)
+ * - pass_priority: Auto-pass low-value priority stops
+ * - wait_and_get_choices: pass_priority + get_action_choices in one call
  * - get_game_log: Get game log text
  * - get_game_state: Get structured game state
  * - send_chat_message: Send a chat message
@@ -277,17 +279,26 @@ public class McpServer {
         maxCharsSchema.put("type", "integer");
         maxCharsSchema.put("description", "Max characters to return (0 or omit for all)");
         getLogProps.put("max_chars", maxCharsSchema);
+        Map<String, Object> logCursorSchema = new HashMap<>();
+        logCursorSchema.put("type", "integer");
+        logCursorSchema.put("description", "Cursor offset from previous get_game_log call. Returns new log text since this offset.");
+        getLogProps.put("cursor", logCursorSchema);
         getLogSchema.put("properties", getLogProps);
         getLogSchema.put("additionalProperties", false);
         getLogTool.put("inputSchema", getLogSchema);
         getLogTool.put("outputSchema", outputSchema(
                 field("log", "string", "Game log text (may be truncated if max_chars was set)"),
                 field("total_length", "integer", "Total length of the full game log in characters"),
-                field("truncated", "boolean", "Whether the log was truncated")));
+                field("truncated", "boolean", "Whether older content was omitted"),
+                field("cursor", "integer", "Cursor to pass to the next get_game_log call"),
+                field("cursor_reset", "boolean", "Whether requested cursor was too old and had to be reset to oldest retained log offset", "cursor was stale")));
         getLogTool.put("examples", listOf(
                 example("Truncated log",
                         "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\"," +
-                        "\n  \"total_length\": 5234,\n  \"truncated\": true\n}")));
+                        "\n  \"total_length\": 5234,\n  \"truncated\": true,\n  \"cursor\": 5234\n}"),
+                example("Cursor delta",
+                        "{\n  \"log\": \"Player2 casts Swords to Plowshares targeting Goblin Guide.\"," +
+                        "\n  \"total_length\": 5301,\n  \"truncated\": false,\n  \"cursor\": 5301\n}")));
         tools.add(getLogTool);
 
         // send_chat_message
@@ -381,6 +392,40 @@ public class McpServer {
                         "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}")));
         tools.add(passPriorityTool);
 
+        // wait_and_get_choices
+        Map<String, Object> waitAndGetChoicesTool = new HashMap<>();
+        waitAndGetChoicesTool.put("name", "wait_and_get_choices");
+        waitAndGetChoicesTool.put("description",
+                "Block like pass_priority until a decision is needed, then return full get_action_choices output in one call. " +
+                "If no action arrives before timeout, returns pass_priority-style timeout payload.");
+        Map<String, Object> waitAndGetChoicesSchema = new HashMap<>();
+        waitAndGetChoicesSchema.put("type", "object");
+        Map<String, Object> waitAndGetChoicesProps = new HashMap<>();
+        Map<String, Object> waitAndGetChoicesTimeoutProp = new HashMap<>();
+        waitAndGetChoicesTimeoutProp.put("type", "integer");
+        waitAndGetChoicesTimeoutProp.put("description", "Max milliseconds to wait (default 30000)");
+        waitAndGetChoicesProps.put("timeout_ms", waitAndGetChoicesTimeoutProp);
+        waitAndGetChoicesSchema.put("properties", waitAndGetChoicesProps);
+        waitAndGetChoicesSchema.put("additionalProperties", false);
+        waitAndGetChoicesTool.put("inputSchema", waitAndGetChoicesSchema);
+        waitAndGetChoicesTool.put("outputSchema", outputSchema(
+                field("action_pending", "boolean", "Whether an action requiring input is pending"),
+                field("action_type", "string", "XMage callback method name", "action_pending=true"),
+                field("response_type", "string", "How to respond: select, boolean, index, amount, pile, or multi_amount", "action_pending=true"),
+                field("choices", "array[object]", "Available choices when response_type uses indexed selection", "response_type=select/index"),
+                field("message", "string", "Prompt text from XMage", "action_pending=true"),
+                field("actions_passed", "integer", "Number of priority passes performed before the decision"),
+                field("recent_chat", "array[string]", "Chat messages received since last check", "Chat received"),
+                field("timeout", "boolean", "Whether the operation timed out", "Timeout")));
+        waitAndGetChoicesTool.put("examples", listOf(
+                example("Action with choices",
+                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
+                        "  \"response_type\": \"select\",\n  \"actions_passed\": 4,\n" +
+                        "  \"choices\": [{\"index\": 0, \"description\": \"Lightning Bolt {R} [Cast]\"}]\n}"),
+                example("Timeout",
+                        "{\n  \"action_pending\": false,\n  \"actions_passed\": 9,\n  \"timeout\": true\n}")));
+        tools.add(waitAndGetChoicesTool);
+
         // auto_pass_until_event
         Map<String, Object> autoPassTool = new HashMap<>();
         autoPassTool.put("name", "auto_pass_until_event");
@@ -423,12 +468,19 @@ public class McpServer {
                 "graveyard, exile, commanders.");
         Map<String, Object> gameStateSchema = new HashMap<>();
         gameStateSchema.put("type", "object");
-        gameStateSchema.put("properties", new HashMap<>());
+        Map<String, Object> gameStateProps = new HashMap<>();
+        Map<String, Object> stateCursorProp = new HashMap<>();
+        stateCursorProp.put("type", "integer");
+        stateCursorProp.put("description", "State cursor from previous get_game_state call. If unchanged, returns a compact payload.");
+        gameStateProps.put("cursor", stateCursorProp);
+        gameStateSchema.put("properties", gameStateProps);
         gameStateSchema.put("additionalProperties", false);
         gameStateTool.put("inputSchema", gameStateSchema);
         gameStateTool.put("outputSchema", outputSchema(
                 field("available", "boolean", "Whether game state is available"),
                 field("error", "string", "Error message", "available=false"),
+                field("cursor", "integer", "Cursor for the latest known game state"),
+                field("unchanged", "boolean", "True when the provided cursor already matches the latest state"),
                 field("turn", "integer", "Current turn number"),
                 field("phase", "string", "Current phase (e.g. PRECOMBAT_MAIN, COMBAT)"),
                 field("step", "string", "Current step within the phase"),
@@ -659,12 +711,8 @@ public class McpServer {
 
             case "get_game_log":
                 int maxChars = arguments.has("max_chars") && !arguments.get("max_chars").isJsonNull() ? arguments.get("max_chars").getAsInt() : 0;
-                String log = callbackHandler.getGameLog(maxChars);
-                int totalLength = callbackHandler.getGameLogLength();
-                toolResult = new HashMap<>();
-                toolResult.put("log", log);
-                toolResult.put("total_length", totalLength);
-                toolResult.put("truncated", log.length() < totalLength);
+                Integer logCursor = arguments.has("cursor") && !arguments.get("cursor").isJsonNull() ? arguments.get("cursor").getAsInt() : null;
+                toolResult = callbackHandler.getGameLogChunk(maxChars, logCursor);
                 break;
 
             case "send_chat_message":
@@ -687,6 +735,11 @@ public class McpServer {
                 toolResult = callbackHandler.passPriority(passPriorityTimeout);
                 break;
 
+            case "wait_and_get_choices":
+                int waitChoicesTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 30000;
+                toolResult = callbackHandler.waitAndGetChoices(waitChoicesTimeout);
+                break;
+
             case "auto_pass_until_event":
                 int minNewChars = arguments.has("min_new_chars") && !arguments.get("min_new_chars").isJsonNull() ? arguments.get("min_new_chars").getAsInt() : 50;
                 int autoPassTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 10000;
@@ -694,7 +747,8 @@ public class McpServer {
                 break;
 
             case "get_game_state":
-                toolResult = callbackHandler.getGameState();
+                Long stateCursor = arguments.has("cursor") && !arguments.get("cursor").isJsonNull() ? arguments.get("cursor").getAsLong() : null;
+                toolResult = callbackHandler.getGameState(stateCursor);
                 break;
 
             case "get_oracle_text":

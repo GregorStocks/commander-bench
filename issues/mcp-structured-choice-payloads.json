@@ -1,0 +1,10 @@
+{
+  "title": "Add structured choice payload fields to get_action_choices",
+  "description": "Current get_action_choices heavily relies on free-form description strings for many decision types. This increases parsing ambiguity and makes robust downstream automation difficult.\n\nProposed direction:\n1. Add stable machine-readable fields per choice (e.g. choice_id, object_id, zone, card_name, mana_cost, choice_type, is_mandatory).\n2. Keep description as display-only text, not the primary machine contract.\n3. Ensure all response_type variants (select/index/pile/amount/multi_amount) have consistent typed fields.\n4. Document backward compatibility strategy so existing agents keep working while new fields roll out.\n\nDesign work needed:\n- Define minimal required field set for each choice type.\n- Decide which IDs are stable only for the pending action vs stable across game state snapshots.\n- Add examples to MCP tool definitions and website docs.\n\nSuggested source area: Mage.Client.Headless/src/main/java/mage/client/headless/BridgeCallbackHandler.java:getActionChoices and Mage.Client.Headless/src/main/java/mage/client/headless/McpServer.java tool schema.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T19:51:04.000000-08:00",
+  "updated_at": "2026-02-11T19:51:04.000000-08:00"
+}

@@ -46,6 +46,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -98,6 +99,13 @@ public class BridgeCallbackHandler {
     private volatile GameView lastGameView = null;
     private final RoundTracker roundTracker = new RoundTracker();
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
+    private volatile String lastChoicesActionType = null; // Debug context for stale-choice diagnostics
+    private volatile String lastChoicesResponseType = null; // Debug context for stale-choice diagnostics
+    private volatile int lastChoicesCount = -1; // Debug context for stale-choice diagnostics
+    private volatile long lastChoicesGeneratedAtMs = 0; // Debug context for stale-choice diagnostics
+    private final Object stateCursorLock = new Object();
+    private volatile long gameStateCursor = 0; // Monotonic cursor for get_game_state
+    private volatile String lastGameStateSignature = null; // Canonicalized state signature for cursoring
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
     private volatile UUID poolManaPayingForId = null; // Tracks which spell pool-mana is being paid for (loop detection)
     private volatile int poolManaAttempts = 0; // Consecutive pool-mana sends for the same spell
@@ -521,6 +529,7 @@ public class BridgeCallbackHandler {
 
         if (action == null) {
             result.put("action_pending", false);
+            clearChoiceSnapshot();
             return result;
         }
 
@@ -1133,7 +1142,47 @@ public class BridgeCallbackHandler {
                 lastChoices = null;
         }
 
+        String responseType = (String) result.get("response_type");
+        if (responseType != null) {
+            int choiceCount = -1;
+            if (result.get("choices") instanceof List<?>) {
+                choiceCount = ((List<?>) result.get("choices")).size();
+            }
+            recordChoiceSnapshot(method.name(), responseType, choiceCount);
+        } else {
+            clearChoiceSnapshot();
+        }
+
         return result;
+    }
+
+    private void recordChoiceSnapshot(String actionType, String responseType, int choiceCount) {
+        lastChoicesActionType = actionType;
+        lastChoicesResponseType = responseType;
+        lastChoicesCount = choiceCount;
+        lastChoicesGeneratedAtMs = System.currentTimeMillis();
+    }
+
+    private void clearChoiceSnapshot() {
+        lastChoicesActionType = null;
+        lastChoicesResponseType = null;
+        lastChoicesCount = -1;
+        lastChoicesGeneratedAtMs = 0;
+    }
+
+    private void logChoiceOutOfRangeDiagnostic(ClientCallbackMethod method, Integer index, List<Object> choices) {
+        long ageMs = lastChoicesGeneratedAtMs == 0 ? -1 : System.currentTimeMillis() - lastChoicesGeneratedAtMs;
+        PendingAction nowPending = pendingAction;
+        String nowPendingType = nowPending == null ? "none" : nowPending.getMethod().name();
+        logger.warn("[" + client.getUsername() + "] choose_action out-of-range diagnostic: "
+                + "method=" + method.name()
+                + ", index=" + index
+                + ", choices_size=" + (choices == null ? -1 : choices.size())
+                + ", pending_now=" + nowPendingType
+                + ", last_choices_action=" + (lastChoicesActionType == null ? "none" : lastChoicesActionType)
+                + ", last_choices_response=" + (lastChoicesResponseType == null ? "none" : lastChoicesResponseType)
+                + ", last_choices_count=" + lastChoicesCount
+                + ", last_choices_age_ms=" + ageMs);
     }
 
     /**
@@ -1222,6 +1271,7 @@ public class BridgeCallbackHandler {
                     if (index != null) {
                         List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
                         if (choices == null || index < 0 || index >= choices.size()) {
+                            logChoiceOutOfRangeDiagnostic(method, index, choices);
                             // Index is invalid — if answer is also available, fall through
                             if (answer != null) {
                                 logger.warn("[" + client.getUsername() + "] choose_action: index " + index
@@ -1276,6 +1326,7 @@ public class BridgeCallbackHandler {
                     if (index != null) {
                         List<Object> choices = lastChoices; // snapshot volatile to prevent TOCTOU race
                         if (choices == null || index < 0 || index >= choices.size()) {
+                            logChoiceOutOfRangeDiagnostic(method, index, choices);
                             if (answer != null && !answer) {
                                 logger.warn("[" + client.getUsername() + "] choose_action: index " + index
                                     + " out of range, falling through to cancel for GAME_PLAY_MANA");
@@ -1364,6 +1415,7 @@ public class BridgeCallbackHandler {
                             result.put("action_taken", "selected_target_" + index);
                             break;
                         }
+                        logChoiceOutOfRangeDiagnostic(method, index, choices);
                         // Index out of range. For required targets, auto-select to avoid
                         // infinite retry loops. For optional targets, return an error so
                         // the model can retry with a valid index or answer=false.
@@ -1424,6 +1476,7 @@ public class BridgeCallbackHandler {
                     }
                     List<Object> abilityChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
                     if (abilityChoices == null || index < 0 || index >= abilityChoices.size()) {
+                        logChoiceOutOfRangeDiagnostic(method, index, abilityChoices);
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
@@ -1502,6 +1555,7 @@ public class BridgeCallbackHandler {
                     }
                     List<Object> choiceChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
                     if (choiceChoices == null || index < 0 || index >= choiceChoices.size()) {
+                        logChoiceOutOfRangeDiagnostic(method, index, choiceChoices);
                         result.put("success", false);
                         result.put("error", "Index " + index + " out of range (call get_action_choices first)");
                         pendingAction = action;
@@ -1670,6 +1724,38 @@ public class BridgeCallbackHandler {
         synchronized (gameLog) {
             return gameLog.length() + gameLogTrimmedChars;
         }
+    }
+
+    private int getGameLogOldestOffset() {
+        synchronized (gameLog) {
+            return gameLogTrimmedChars;
+        }
+    }
+
+    public Map<String, Object> getGameLogChunk(int maxChars, Integer cursor) {
+        Map<String, Object> result = new HashMap<>();
+        int totalLength = getGameLogLength();
+        if (cursor != null) {
+            int oldestOffset = getGameLogOldestOffset();
+            int requestedOffset = cursor;
+            int effectiveOffset = Math.max(requestedOffset, oldestOffset);
+            effectiveOffset = Math.min(effectiveOffset, totalLength);
+            result.put("log", getGameLogSince(effectiveOffset));
+            result.put("total_length", totalLength);
+            result.put("truncated", requestedOffset < oldestOffset);
+            result.put("cursor", totalLength);
+            if (requestedOffset < oldestOffset) {
+                result.put("cursor_reset", true);
+            }
+            return result;
+        }
+
+        String log = getGameLog(maxChars);
+        result.put("log", log);
+        result.put("total_length", totalLength);
+        result.put("truncated", log.length() < totalLength);
+        result.put("cursor", totalLength);
+        return result;
     }
 
     public boolean sendChatMessage(String message) {
@@ -1899,6 +1985,45 @@ public class BridgeCallbackHandler {
         return result;
     }
 
+    /**
+     * Combined helper for models: wait using pass_priority, then return full choices.
+     * This reduces one round trip compared to pass_priority + get_action_choices.
+     */
+    public Map<String, Object> waitAndGetChoices(int timeoutMs) {
+        Map<String, Object> waitResult = passPriority(timeoutMs);
+        if (!Boolean.TRUE.equals(waitResult.get("action_pending"))) {
+            return waitResult;
+        }
+
+        Map<String, Object> choices = getActionChoices();
+        if (!Boolean.TRUE.equals(choices.get("action_pending"))) {
+            // Rare race: actionable result from pass_priority disappeared before choices fetch.
+            waitResult.put("warning", "Action changed before choices were fetched");
+            return waitResult;
+        }
+
+        if (waitResult.containsKey("actions_passed")) {
+            choices.put("actions_passed", waitResult.get("actions_passed"));
+        }
+        if (waitResult.containsKey("recent_chat")) {
+            choices.put("recent_chat", waitResult.get("recent_chat"));
+        }
+        if (waitResult.containsKey("player_dead")) {
+            choices.put("player_dead", true);
+        }
+        if (waitResult.containsKey("game_over")) {
+            choices.put("game_over", true);
+        }
+        if (waitResult.containsKey("has_playable_cards") && !choices.containsKey("has_playable_cards")) {
+            choices.put("has_playable_cards", waitResult.get("has_playable_cards"));
+        }
+        if (waitResult.containsKey("combat_phase") && !choices.containsKey("combat_phase")) {
+            choices.put("combat_phase", waitResult.get("combat_phase"));
+        }
+
+        return choices;
+    }
+
     public Map<String, Object> autoPassUntilEvent(int minNewChars, int timeoutMs) {
         long startTime = System.currentTimeMillis();
         int startLogLength = getGameLogLength();
@@ -2103,6 +2228,23 @@ public class BridgeCallbackHandler {
             if (adjustedOffset < 0) adjustedOffset = 0;
             return gameLog.substring(adjustedOffset);
         }
+    }
+
+    public Map<String, Object> getGameState(Long cursor) {
+        Map<String, Object> fullState = getGameState();
+        if (!Boolean.TRUE.equals(fullState.get("available"))) {
+            return fullState;
+        }
+        long currentCursor = updateGameStateCursor(fullState);
+        if (cursor != null && cursor.longValue() == currentCursor) {
+            Map<String, Object> unchanged = new HashMap<>();
+            unchanged.put("available", true);
+            unchanged.put("unchanged", true);
+            unchanged.put("cursor", currentCursor);
+            return unchanged;
+        }
+        fullState.put("cursor", currentCursor);
+        return fullState;
     }
 
     public Map<String, Object> getGameState() {
@@ -2351,6 +2493,50 @@ public class BridgeCallbackHandler {
         }
 
         return state;
+    }
+
+    private long updateGameStateCursor(Map<String, Object> state) {
+        String signature = buildStateSignature(state);
+        synchronized (stateCursorLock) {
+            if (lastGameStateSignature == null || !lastGameStateSignature.equals(signature)) {
+                gameStateCursor++;
+                lastGameStateSignature = signature;
+            }
+            return gameStateCursor;
+        }
+    }
+
+    private String buildStateSignature(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Map<?, ?>) {
+            TreeMap<String, Object> sorted = new TreeMap<>();
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
+                sorted.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<String, Object> entry : sorted.entrySet()) {
+                if (!first) sb.append(",");
+                sb.append(entry.getKey()).append(":").append(buildStateSignature(entry.getValue()));
+                first = false;
+            }
+            sb.append("}");
+            return sb.toString();
+        }
+        if (value instanceof List<?>) {
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : (List<?>) value) {
+                if (!first) sb.append(",");
+                sb.append(buildStateSignature(item));
+                first = false;
+            }
+            sb.append("]");
+            return sb.toString();
+        }
+        return String.valueOf(value);
     }
 
     public Map<String, Object> getMyDecklist() {

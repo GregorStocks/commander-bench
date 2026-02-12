@@ -1,0 +1,10 @@
+{
+  "title": "Add guardrail stop conditions to auto_pass_until_event",
+  "description": "auto_pass_until_event is useful for fallback autopilot, but its stop behavior is coarse. We need optional guardrails so callers can stop before strategically sensitive transitions.\n\nProposed direction:\n- Add optional flags such as stop_on_combat, stop_on_stack_nonempty, stop_on_life_change, stop_on_targeting, stop_on_chat.\n- Keep existing behavior as default for backward compatibility.\n- Return which stop condition fired (stop_reason) for deterministic client handling.\n\nDesign questions:\n1. Which stop conditions are reliably detectable from existing callback/game state surfaces?\n2. Should stop conditions be OR-only, or support priority/ordering?\n3. How should this interact with timeout semantics and existing event_occurred field?\n\nSuggested source area: Mage.Client.Headless/src/main/java/mage/client/headless/BridgeCallbackHandler.java:autoPassUntilEvent and McpServer tool schema.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T19:51:04.000000-08:00",
+  "updated_at": "2026-02-11T19:51:04.000000-08:00"
+}
