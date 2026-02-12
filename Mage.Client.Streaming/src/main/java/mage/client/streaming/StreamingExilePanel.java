@@ -52,12 +52,16 @@ public class StreamingExilePanel extends JPanel {
     }
 
     public StreamingExilePanel(int cardWidth) {
+        this(cardWidth, 2);
+    }
+
+    public StreamingExilePanel(int cardWidth, int contentHeightMultiplier) {
         this.cardWidth = cardWidth;
         this.cardHeight = (int) (cardWidth * GUISizeHelper.CARD_WIDTH_TO_HEIGHT_COEF);
         double scale = cardWidth / 80.0;
         this.maxStackOffset = Math.max(5, (int) (24 * scale));
         this.minStackOffset = Math.max(3, (int) (5 * scale));
-        this.contentHeight = cardHeight * 2;
+        this.contentHeight = cardHeight * contentHeightMultiplier;
         this.margin = Math.max(3, (int) (5 * scale));
         this.labelHeight = Math.max(14, (int) (14 * scale));
         this.panelWidth = cardWidth + 2 * margin;
