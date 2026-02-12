@@ -1209,20 +1209,37 @@ public class StreamingGamePanel extends GamePanel {
                 // Scale zone panel card sizes with monitor resolution
                 int zoneCardWidth = (int) (80 * computeScaleFactor(playArea));
 
+                // Detect commander format: check if any player has CommanderView objects
+                boolean hasCommanders = false;
+                for (PlayerView p : game.getPlayers()) {
+                    for (CommandObjectView obj : p.getCommandObjectList()) {
+                        if (obj instanceof CommanderView) {
+                            hasCommanders = true;
+                            break;
+                        }
+                    }
+                    if (hasCommanders) break;
+                }
+
                 // Create and inject our streaming zone panels
-                CommanderPanel commanderPanel = new CommanderPanel(zoneCardWidth);
-                commanderPanels.put(playerId, commanderPanel);
+                int nextIndex = 1;
+
+                if (hasCommanders) {
+                    CommanderPanel commanderPanel = new CommanderPanel(zoneCardWidth);
+                    commanderPanels.put(playerId, commanderPanel);
+                    westPanel.add(commanderPanel, nextIndex++);
+                }
 
                 StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel(zoneCardWidth);
                 streamingGraveyardPanels.put(playerId, graveyardPanel);
 
-                StreamingExilePanel exilePanel = new StreamingExilePanel(zoneCardWidth);
+                // Give exile more vertical space when commander panel is hidden
+                int exileHeightMultiplier = hasCommanders ? 2 : 3;
+                StreamingExilePanel exilePanel = new StreamingExilePanel(zoneCardWidth, exileHeightMultiplier);
                 streamingExilePanels.put(playerId, exilePanel);
 
-                // Layout: playerPanel (0), commanderPanel (1), graveyardPanel (2), exilePanel (3)
-                westPanel.add(commanderPanel, 1);
-                westPanel.add(graveyardPanel, 2);
-                westPanel.add(exilePanel, 3);
+                westPanel.add(graveyardPanel, nextIndex++);
+                westPanel.add(exilePanel, nextIndex);
 
                 westPanel.revalidate();
                 westPanel.repaint();
