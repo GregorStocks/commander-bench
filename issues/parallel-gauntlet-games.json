@@ -1,0 +1,10 @@
+{
+  "title": "Support running several parallel gauntlet games on the same server",
+  "description": "Currently each gauntlet run starts its own server and runs a single game at a time. We should be able to kick off several parallel gauntlet games sharing the same XMage server instance. This would increase throughput for batch evaluation runs and make better use of server resources.\n\nThis likely involves:\n- Allowing the puppeteer to create multiple game tables concurrently on one server\n- Coordinating multiple headless client pairs against the same server\n- Ensuring log directories and recordings don't collide across parallel games\n- Handling server capacity limits gracefully (max tables, memory, etc.)",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}

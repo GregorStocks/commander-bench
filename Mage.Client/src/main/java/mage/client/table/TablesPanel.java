@@ -1793,7 +1793,7 @@ public class TablesPanel extends javax.swing.JPanel {
                 // Start a thread to wait for bridge clients and then start the match
                 final UUID finalTableId = table.getTableId();
                 Thread starter = new Thread(() -> {
-                    long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+                    long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(180);
                     while (System.currentTimeMillis() < deadline) {
                         try {
                             Collection<TableView> tables = SessionHandler.getTables(roomId);
@@ -1812,7 +1812,8 @@ public class TablesPanel extends javax.swing.JPanel {
                             LOGGER.warn("AI Puppeteer: error polling for ready state", e);
                         }
                     }
-                    LOGGER.warn("AI Puppeteer: timed out waiting for table to be ready: " + finalTableId);
+                    LOGGER.error("AI Puppeteer: timed out waiting for bridge clients to join table " + finalTableId + " (180s). Exiting.");
+                    System.exit(1);
                 }, "AIPuppeteer-MatchStarter");
                 starter.setDaemon(true);
                 starter.start();
@@ -1846,7 +1847,7 @@ public class TablesPanel extends javax.swing.JPanel {
         }
         aiPuppeteerAutoWatchTriggered = true;
         Thread watcher = new Thread(() -> {
-            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(60);
+            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(180);
             while (System.currentTimeMillis() < deadline) {
                 Collection<TableView> tables = SessionHandler.getTables(roomId);
                 for (TableView tableView : tables) {
