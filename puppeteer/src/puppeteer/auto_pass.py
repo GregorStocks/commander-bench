@@ -1,9 +1,9 @@
 """Shared auto-pass loop for LLM fallback mode.
 
 When an LLM becomes non-functional (degraded, credits exhausted, model not
-found), the puppeteer falls back to repeatedly calling auto_pass_until_event
-until the game ends. This module provides that shared loop so pilot.py
-doesn't duplicate it.
+found), the puppeteer falls back to repeatedly calling take_action until
+the game ends. This module provides that shared loop so pilot.py doesn't
+duplicate it.
 """
 
 import asyncio
@@ -49,7 +49,7 @@ async def auto_pass_loop(
     max_iterations: int = MAX_AUTO_PASS_ITERATIONS,
     max_consecutive_errors: int = MAX_CONSECUTIVE_ERRORS,
 ) -> None:
-    """Run auto_pass_until_event in a loop until game over or error threshold.
+    """Run take_action in a loop until game over or error threshold.
 
     Used when the LLM is no longer functional and the game must finish on
     autopilot.
@@ -57,7 +57,7 @@ async def auto_pass_loop(
     consecutive_errors = 0
     for _ in range(max_iterations):
         try:
-            result_text = await _execute_tool(session, "auto_pass_until_event", {})
+            result_text = await _execute_tool(session, "take_action", {})
             try:
                 result_data = json.loads(result_text)
             except (json.JSONDecodeError, TypeError):

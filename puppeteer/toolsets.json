@@ -1,17 +1,14 @@
 {
   "default": [
     "pass_priority",
+    "wait_and_get_choices",
     "get_action_choices",
     "choose_action",
-    "get_game_state",
-    "get_oracle_text",
-    "send_chat_message",
     "take_action",
-    "wait_for_action",
-    "wait_and_get_choices",
-    "auto_pass_until_event",
-    "is_action_on_me",
+    "get_game_state",
     "get_game_log",
-    "get_my_decklist"
+    "get_oracle_text",
+    "get_my_decklist",
+    "send_chat_message"
   ]
 }

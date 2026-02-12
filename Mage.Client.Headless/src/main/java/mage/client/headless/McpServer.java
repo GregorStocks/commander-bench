@@ -208,29 +208,6 @@ public class McpServer {
     public static List<Map<String, Object>> getToolDefinitions() {
         List<Map<String, Object>> tools = new ArrayList<>();
 
-        // is_action_on_me
-        Map<String, Object> isActionTool = new HashMap<>();
-        isActionTool.put("name", "is_action_on_me");
-        isActionTool.put("description",
-                "Check if game action is currently required. Returns action_pending, and if true: action_type and message.");
-        Map<String, Object> isActionSchema = new HashMap<>();
-        isActionSchema.put("type", "object");
-        isActionSchema.put("properties", new HashMap<>());
-        isActionSchema.put("additionalProperties", false);
-        isActionTool.put("inputSchema", isActionSchema);
-        isActionTool.put("outputSchema", outputSchema(
-                field("action_pending", "boolean", "Whether a game action is waiting for your response"),
-                field("action_type", "string", "XMage callback method name (e.g. GAME_SELECT, GAME_TARGET)", "action_pending=true"),
-                field("message", "string", "Human-readable prompt for the action", "action_pending=true"),
-                field("game_over", "boolean", "Whether the game has ended")));
-        isActionTool.put("examples", listOf(
-                example("Action pending",
-                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"),
-                example("No action",
-                        "{\n  \"action_pending\": false,\n  \"game_over\": false\n}")));
-        tools.add(isActionTool);
-
         // take_action
         Map<String, Object> takeActionTool = new HashMap<>();
         takeActionTool.put("name", "take_action");
@@ -311,34 +288,6 @@ public class McpServer {
                         "{\n  \"success\": true\n}")));
         tools.add(sendChatTool);
 
-        // wait_for_action
-        Map<String, Object> waitActionTool = new HashMap<>();
-        waitActionTool.put("name", "wait_for_action");
-        waitActionTool.put("description",
-                "Block until a game action is required, or timeout. Returns action_pending, action_type, message.");
-        Map<String, Object> waitActionSchema = new HashMap<>();
-        waitActionSchema.put("type", "object");
-        Map<String, Object> waitActionProps = new HashMap<>();
-        Map<String, Object> timeoutProp = new HashMap<>();
-        timeoutProp.put("type", "integer");
-        timeoutProp.put("description", "Max milliseconds to wait (default 15000)");
-        waitActionProps.put("timeout_ms", timeoutProp);
-        waitActionSchema.put("properties", waitActionProps);
-        waitActionSchema.put("additionalProperties", false);
-        waitActionTool.put("inputSchema", waitActionSchema);
-        waitActionTool.put("outputSchema", outputSchema(
-                field("action_pending", "boolean", "Whether a game action is waiting for your response"),
-                field("action_type", "string", "XMage callback method name", "action_pending=true"),
-                field("message", "string", "Human-readable prompt for the action", "action_pending=true"),
-                field("game_over", "boolean", "Whether the game has ended")));
-        waitActionTool.put("examples", listOf(
-                example("Action arrived",
-                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"),
-                example("Timeout",
-                        "{\n  \"action_pending\": false,\n  \"game_over\": false\n}")));
-        tools.add(waitActionTool);
-
         // pass_priority
         Map<String, Object> passPriorityTool = new HashMap<>();
         passPriorityTool.put("name", "pass_priority");
@@ -411,39 +360,6 @@ public class McpServer {
                 example("Timeout",
                         "{\n  \"action_pending\": false,\n  \"actions_passed\": 9,\n  \"timeout\": true\n}")));
         tools.add(waitAndGetChoicesTool);
-
-        // auto_pass_until_event
-        Map<String, Object> autoPassTool = new HashMap<>();
-        autoPassTool.put("name", "auto_pass_until_event");
-        autoPassTool.put("description",
-                "Auto-handle all actions and block until meaningful game state change. " +
-                "Returns event_occurred, new_log, actions_taken.");
-        Map<String, Object> autoPassSchema = new HashMap<>();
-        autoPassSchema.put("type", "object");
-        Map<String, Object> autoPassProps = new HashMap<>();
-        Map<String, Object> minCharsProp = new HashMap<>();
-        minCharsProp.put("type", "integer");
-        minCharsProp.put("description", "Min new log characters to trigger return (default 50)");
-        autoPassProps.put("min_new_chars", minCharsProp);
-        Map<String, Object> autoPassTimeoutProp = new HashMap<>();
-        autoPassTimeoutProp.put("type", "integer");
-        autoPassTimeoutProp.put("description", "Max milliseconds to wait (default 10000)");
-        autoPassProps.put("timeout_ms", autoPassTimeoutProp);
-        autoPassSchema.put("properties", autoPassProps);
-        autoPassSchema.put("additionalProperties", false);
-        autoPassTool.put("inputSchema", autoPassSchema);
-        autoPassTool.put("outputSchema", outputSchema(
-                field("event_occurred", "boolean", "Whether a meaningful game state change was detected"),
-                field("new_log", "string", "New game log entries since the call started"),
-                field("actions_taken", "integer", "Number of actions auto-handled"),
-                field("game_over", "boolean", "Whether the game has ended"),
-                field("player_dead", "boolean", "Whether you died during auto-passing", "Player died")));
-        autoPassTool.put("examples", listOf(
-                example("Event occurred",
-                        "{\n  \"event_occurred\": true,\n" +
-                        "  \"new_log\": \"Player2 casts Lightning Bolt targeting Player1.\\n" +
-                        "Player1 loses 3 life.\",\n  \"actions_taken\": 4,\n  \"game_over\": false\n}")));
-        tools.add(autoPassTool);
 
         // get_game_state
         Map<String, Object> gameStateTool = new HashMap<>();
@@ -687,10 +603,6 @@ public class McpServer {
         Map<String, Object> toolResult;
 
         switch (toolName) {
-            case "is_action_on_me":
-                toolResult = callbackHandler.getPendingActionInfo();
-                break;
-
             case "take_action":
                 toolResult = callbackHandler.executeDefaultAction();
                 break;
@@ -711,11 +623,6 @@ public class McpServer {
                 toolResult.put("success", success);
                 break;
 
-            case "wait_for_action":
-                int timeoutMs = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 15000;
-                toolResult = callbackHandler.waitForAction(timeoutMs);
-                break;
-
             case "pass_priority":
                 int passPriorityTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 30000;
                 toolResult = callbackHandler.passPriority(passPriorityTimeout);
@@ -724,12 +631,6 @@ public class McpServer {
             case "wait_and_get_choices":
                 int waitChoicesTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 30000;
                 toolResult = callbackHandler.waitAndGetChoices(waitChoicesTimeout);
-                break;
-
-            case "auto_pass_until_event":
-                int minNewChars = arguments.has("min_new_chars") && !arguments.get("min_new_chars").isJsonNull() ? arguments.get("min_new_chars").getAsInt() : 50;
-                int autoPassTimeout = arguments.has("timeout_ms") && !arguments.get("timeout_ms").isJsonNull() ? arguments.get("timeout_ms").getAsInt() : 10000;
-                toolResult = callbackHandler.autoPassUntilEvent(minNewChars, autoPassTimeout);
                 break;
 
             case "get_game_state":

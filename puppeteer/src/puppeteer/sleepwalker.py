@@ -99,16 +99,13 @@ async def run_sleepwalker(
 
         while True:
             try:
-                # Check for pending action
-                result = await session.call_tool("is_action_on_me", {})
+                # Wait for pending action (blocks until decision needed)
+                result = await session.call_tool("pass_priority", {"timeout_ms": 15000})
                 status = json.loads(result.content[0].text)
 
                 if status.get("action_pending"):
                     action_type = status.get("action_type", "UNKNOWN")
-                    message = status.get("message", "")
                     _log(f"[sleepwalker] Action required: {action_type}")
-                    if message:
-                        _log(f"[sleepwalker]   Message: {message}")
 
                     # Delay before taking action
                     await asyncio.sleep(ACTION_DELAY_SECS)

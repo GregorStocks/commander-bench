@@ -4,46 +4,6 @@
       "type": "object",
       "properties": {
         "action_type": {
-          "description": "XMage callback method name (e.g. GAME_SELECT, GAME_TARGET)",
-          "type": "string"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "message": {
-          "description": "Human-readable prompt for the action",
-          "type": "string"
-        },
-        "action_pending": {
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Action pending",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
-      },
-      {
-        "label": "No action",
-        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {}
-    },
-    "name": "is_action_on_me",
-    "description": "Check if game action is currently required. Returns action_pending, and if true: action_type and message."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "action_type": {
           "description": "The callback method that was handled",
           "type": "string"
         },
@@ -163,51 +123,6 @@
     },
     "name": "send_chat_message",
     "description": "Send a chat message to the game"
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "action_type": {
-          "description": "XMage callback method name",
-          "type": "string"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "message": {
-          "description": "Human-readable prompt for the action",
-          "type": "string"
-        },
-        "action_pending": {
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Action arrived",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
-      },
-      {
-        "label": "Timeout",
-        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 15000)",
-          "type": "integer"
-        }
-      }
-    },
-    "name": "wait_for_action",
-    "description": "Block until a game action is required, or timeout. Returns action_pending, action_type, message."
   },
   {
     "outputSchema": {
@@ -343,55 +258,6 @@
     },
     "name": "wait_and_get_choices",
     "description": "Block like pass_priority until a decision is needed, then return full get_action_choices output in one call. If no action arrives before timeout, returns pass_priority-style timeout payload."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "event_occurred": {
-          "description": "Whether a meaningful game state change was detected",
-          "type": "boolean"
-        },
-        "new_log": {
-          "description": "New game log entries since the call started",
-          "type": "string"
-        },
-        "actions_taken": {
-          "description": "Number of actions auto-handled",
-          "type": "integer"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "player_dead": {
-          "description": "Whether you died during auto-passing",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Event occurred",
-        "value": "{\n  \"event_occurred\": true,\n  \"new_log\": \"Player2 casts Lightning Bolt targeting Player1.\\nPlayer1 loses 3 life.\",\n  \"actions_taken\": 4,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "min_new_chars": {
-          "description": "Min new log characters to trigger return (default 50)",
-          "type": "integer"
-        },
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 10000)",
-          "type": "integer"
-        }
-      }
-    },
-    "name": "auto_pass_until_event",
-    "description": "Auto-handle all actions and block until meaningful game state change. Returns event_occurred, new_log, actions_taken."
   },
   {
     "outputSchema": {

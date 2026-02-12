@@ -603,10 +603,8 @@ async def run_pilot_loop(
                 except Exception:
                     pass
                 try:
-                    result_text = await execute_tool(session, "auto_pass_until_event", {})
-                    result_data = json.loads(result_text)
-                    actions = result_data.get("actions_taken", 0)
-                    _log(f"[pilot] Auto-passed {actions} actions until next event")
+                    await execute_tool(session, "take_action", {})
+                    _log("[pilot] Auto-passed stalled action")
                 except Exception as e:
                     _log(f"[pilot] Auto-pass failed: {e}")
                 turns_without_progress = 0
@@ -639,7 +637,7 @@ async def run_pilot_loop(
                     error_message=f"Timed out after {LLM_REQUEST_TIMEOUT_SECS}s [{consecutive_timeouts}]",
                 )
             try:
-                await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
+                await execute_tool(session, "take_action", {})
             except Exception:
                 await asyncio.sleep(5)
 
@@ -687,7 +685,7 @@ async def run_pilot_loop(
 
             # Transient error - keep actions flowing while waiting to retry
             try:
-                await execute_tool(session, "auto_pass_until_event", {"timeout_ms": 5000})
+                await execute_tool(session, "take_action", {})
             except Exception:
                 await asyncio.sleep(5)
 
