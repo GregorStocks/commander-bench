@@ -529,8 +529,10 @@
 
 .llm-thought {
   border-left: 2px solid #888;
-  padding: 4px 0 4px 8px;
+  padding: 4px 8px 4px 8px;
   margin: 4px 0;
+  background: rgba(136, 136, 136, 0.06);
+  border-radius: 0 4px 4px 0;
 }
 
 .llm-thought .llm-player {
@@ -665,11 +667,11 @@
   border-radius: 4px;
 }
 
-/* Player-colored left borders for LLM thoughts */
-.llm-thought.llm-player-0 { border-left-color: #3b82f6; }
-.llm-thought.llm-player-1 { border-left-color: #ef4444; }
-.llm-thought.llm-player-2 { border-left-color: #22c55e; }
-.llm-thought.llm-player-3 { border-left-color: #f59e0b; }
+/* Player-colored left borders and background tints for LLM thoughts */
+.llm-thought.llm-player-0 { border-left-color: #3b82f6; background: rgba(59, 130, 246, 0.06); }
+.llm-thought.llm-player-1 { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.06); }
+.llm-thought.llm-player-2 { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.06); }
+.llm-thought.llm-player-3 { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.06); }
 
 /* Action log lines (shared by live + replay) */
 .action-line {
@@ -684,15 +686,43 @@
 
 /* Chat message styling in action log */
 .chat-line {
-  padding: 0.15rem 0;
+  padding: 0.15rem 0.4rem;
   color: #c0c0d0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   font-style: italic;
+  background: rgba(20, 184, 166, 0.08);
+  border-left: 2px solid rgba(20, 184, 166, 0.5);
 }
 
 .chat-line .chat-from {
   font-style: normal;
   font-weight: 600;
+}
+
+/* Badge labels for chat and thinking */
+.chat-badge,
+.thinking-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  margin-right: 0.3rem;
+  vertical-align: baseline;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.chat-badge {
+  background: rgba(20, 184, 166, 0.2);
+  color: #5eead4;
+}
+
+.thinking-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
 }
 
 /* Game log panel (shared by live + replay) */
