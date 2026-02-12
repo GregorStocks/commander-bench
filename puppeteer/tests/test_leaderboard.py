@@ -33,10 +33,21 @@ def _make_game(
     }
 
 
-def _pilot(name: str, model: str, cost: float = 1.0, placement: int | None = None) -> dict:
+def _pilot(
+    name: str,
+    model: str,
+    cost: float = 1.0,
+    placement: int | None = None,
+    tool_calls_ok: int | None = None,
+    tool_calls_failed: int | None = None,
+) -> dict:
     d: dict = {"name": name, "type": "pilot", "model": model, "totalCostUsd": cost}
     if placement is not None:
         d["placement"] = placement
+    if tool_calls_ok is not None:
+        d["toolCallsOk"] = tool_calls_ok
+    if tool_calls_failed is not None:
+        d["toolCallsFailed"] = tool_calls_failed
     return d
 
 
@@ -440,6 +451,59 @@ def test_generate_leaderboard_all_no_winner():
     assert result["totalGames"] == 0
     assert result["models"] == []
     assert ratings_by_game == {}
+
+
+def test_generate_leaderboard_tool_calls():
+    """Tool call counts should be averaged across games."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/model-a", placement=1, tool_calls_ok=40, tool_calls_failed=2),
+                _pilot("Bob", "b/model-b", placement=2, tool_calls_ok=30, tool_calls_failed=5),
+            ],
+        ),
+        _make_game(
+            "g2",
+            "20260102_000000",
+            "Bob",
+            [
+                _pilot("Alice", "a/model-a", placement=2, tool_calls_ok=50, tool_calls_failed=4),
+                _pilot("Bob", "b/model-b", placement=1, tool_calls_ok=20, tool_calls_failed=1),
+            ],
+        ),
+    ]
+    result, _ = generate_leaderboard(games, {})
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    bob = next(m for m in result["models"] if m["modelName"] == "Model B")
+
+    # Alice: (40+50)/2 = 45.0 ok, (2+4)/2 = 3.0 failed
+    assert alice["avgToolCallsOk"] == 45.0
+    assert alice["avgToolCallsFailed"] == 3.0
+
+    # Bob: (30+20)/2 = 25.0 ok, (5+1)/2 = 3.0 failed
+    assert bob["avgToolCallsOk"] == 25.0
+    assert bob["avgToolCallsFailed"] == 3.0
+
+
+def test_generate_leaderboard_missing_tool_calls():
+    """Old games without tool call fields should default to 0."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/model-a", placement=1), _pilot("Bob", "b/model-b", placement=2)],
+        ),
+    ]
+    result, _ = generate_leaderboard(games, {})
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    assert alice["avgToolCallsOk"] == 0.0
+    assert alice["avgToolCallsFailed"] == 0.0
 
 
 # --- generate_leaderboard_file ---

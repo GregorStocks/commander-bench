@@ -283,11 +283,15 @@ def generate_leaderboard(
                     "games_played": 0,
                     "wins": 0,
                     "total_cost": 0.0,
+                    "total_tool_calls_ok": 0,
+                    "total_tool_calls_failed": 0,
                 }
             stats[model_id]["games_played"] += 1
             if game.get("winner") == p["name"]:
                 stats[model_id]["wins"] += 1
             stats[model_id]["total_cost"] += p.get("totalCostUsd", 0.0)
+            stats[model_id]["total_tool_calls_ok"] += p.get("toolCallsOk", 0)
+            stats[model_id]["total_tool_calls_failed"] += p.get("toolCallsFailed", 0)
 
     # Build models list
     models: list[dict[str, str | int | float]] = []
@@ -299,6 +303,8 @@ def generate_leaderboard(
         provider_slug = model_id.split("/", 1)[0]
         rating = final_ratings.get(model_id, _RATING_BASE)
 
+        avg_tool_calls_ok = s["total_tool_calls_ok"] / games_played
+        avg_tool_calls_failed = s["total_tool_calls_failed"] / games_played
         models.append(
             {
                 "modelName": model_registry.get(model_id) or derive_display_name(model_id),
@@ -307,6 +313,8 @@ def generate_leaderboard(
                 "gamesPlayed": games_played,
                 "winRate": round(win_rate, 4),
                 "avgApiCost": round(avg_cost, 2),
+                "avgToolCallsOk": round(avg_tool_calls_ok, 1),
+                "avgToolCallsFailed": round(avg_tool_calls_failed, 1),
             }
         )
 
@@ -364,6 +372,37 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
     games_index = []
     for gz_path in sorted(games_dir.glob("game_*.json.gz")):
         game = json.loads(gzip.decompress(gz_path.read_bytes()))
+        players = game.get("players", [])
+
+        # Compute tool call counts from llmEvents if not already on players
+        if players and not any("toolCallsOk" in p for p in players):
+            tool_ok: dict[str, int] = {}
+            tool_failed: dict[str, int] = {}
+            for ev in game.get("llmEvents", []):
+                if ev.get("type") != "tool_call":
+                    continue
+                player = ev.get("player", "")
+                if not player:
+                    continue
+                result_str = ev.get("result", "")
+                is_failure = False
+                if result_str:
+                    try:
+                        result_obj = json.loads(result_str)
+                        if isinstance(result_obj, dict) and result_obj.get("success") is False:
+                            is_failure = True
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                if is_failure:
+                    tool_failed[player] = tool_failed.get(player, 0) + 1
+                else:
+                    tool_ok[player] = tool_ok.get(player, 0) + 1
+            for p in players:
+                name = p.get("name", "")
+                if name in tool_ok or name in tool_failed:
+                    p["toolCallsOk"] = tool_ok.get(name, 0)
+                    p["toolCallsFailed"] = tool_failed.get(name, 0)
+
         games_index.append(
             {
                 "id": game["id"],
@@ -372,7 +411,7 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
                 "deckType": game.get("deckType", ""),
                 "totalTurns": game.get("totalTurns", 0),
                 "winner": game.get("winner"),
-                "players": game.get("players", []),
+                "players": players,
             }
         )
 
