@@ -3254,17 +3254,15 @@ public class BridgeCallbackHandler {
             logger.warn("[" + client.getUsername() + "] Mana: couldn't resolve player ID for mana pool payment");
         }
 
-        // No suitable source/pool choice found:
-        // - MCP mode: return false so caller stores pending action for manual choice.
-        // - potato mode: cancel spell and mark cast as failed to avoid loops.
-        if (mcpMode) {
-            logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> no auto source available, waiting for manual choice");
-            return false;
-        }
-
+        // No suitable source/pool choice found — cancel spell and mark as failed.
         logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> no mana source available, cancelling spell");
         if (payingForId != null) {
             failedManaCasts.add(payingForId);
+        }
+        if (mcpMode) {
+            synchronized (unseenChat) {
+                unseenChat.add("[System] Spell cancelled — not enough mana to complete payment.");
+            }
         }
         session.sendPlayerBoolean(gameId, false);
         return true;
