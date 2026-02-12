@@ -51,6 +51,8 @@ public class HeadlessClient {
     private static final int PING_INTERVAL_MS = 20000; // 20 seconds, same as normal client
     private static final int DEFAULT_ACTION_DELAY_MS = 500;
     private static final int DEFAULT_STALLER_DELAY_MS = 15000;
+    private static final int MAX_RECONNECT_ATTEMPTS = 5;
+    private static final int[] RECONNECT_BACKOFF_MS = {2000, 4000, 8000, 16000, 30000};
 
     private static final String PERSONALITY_POTATO = "potato";
     private static final String PERSONALITY_STALLER = "staller";
@@ -196,42 +198,122 @@ public class HeadlessClient {
             mcpThread.setDaemon(true);
             mcpThread.start();
 
-            // Keep alive while client is running
-            long lastPingTime = System.currentTimeMillis();
-            while (client.isRunning()) {
-                try {
-                    Thread.sleep(1000);
-
-                    // Ping server periodically to maintain session
-                    long now = System.currentTimeMillis();
-                    if (now - lastPingTime >= PING_INTERVAL_MS) {
-                        session.ping();
-                        lastPingTime = now;
+            // Keep alive while client is running, with reconnection support
+            int reconnectAttempts = 0;
+            outer:
+            while (true) {
+                long lastPingTime = System.currentTimeMillis();
+                while (client.isRunning()) {
+                    try {
+                        Thread.sleep(1000);
+                        long now = System.currentTimeMillis();
+                        if (now - lastPingTime >= PING_INTERVAL_MS) {
+                            session.ping();
+                            lastPingTime = now;
+                        }
+                    } catch (InterruptedException e) {
+                        logger.info("Interrupted, stopping...");
+                        client.stop();
+                        mcpServer.stop();
+                        break outer;
                     }
-                } catch (InterruptedException e) {
-                    logger.info("Interrupted, stopping...");
-                    client.stop();
-                    mcpServer.stop();
+                }
+
+                // Client stopped — check if we should reconnect
+                if (client.isReconnectable() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    String oldSessionId = session.getSessionId();
+                    logger.info("Connection lost — attempting reconnection (session=" + oldSessionId + ")");
+                    session.setRestoreSessionId(oldSessionId);
+                    client.suppressDisconnectCallbacks(true);
+
+                    boolean reconnected = false;
+                    for (int i = reconnectAttempts; i < MAX_RECONNECT_ATTEMPTS; i++) {
+                        int backoffMs = RECONNECT_BACKOFF_MS[i];
+                        logger.info("Reconnect attempt " + (i + 1) + "/" + MAX_RECONNECT_ATTEMPTS + " in " + backoffMs + "ms...");
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException e) {
+                            logger.info("Interrupted during reconnect backoff");
+                            break;
+                        }
+                        if (session.connectStart(connection)) {
+                            logger.info("Reconnected successfully on attempt " + (i + 1));
+                            client.suppressDisconnectCallbacks(false);
+                            client.setRunning(true);
+                            reconnectAttempts = 0;
+                            reconnected = true;
+                            continue outer;
+                        }
+                        logger.warn("Reconnect attempt " + (i + 1) + " failed: " + session.getLastError());
+                        reconnectAttempts = i + 1;
+                    }
+
+                    client.suppressDisconnectCallbacks(false);
+                    if (!reconnected) {
+                        logger.error("All " + MAX_RECONNECT_ATTEMPTS + " reconnect attempts failed — giving up");
+                        break;
+                    }
+                } else {
                     break;
                 }
             }
             mcpServer.stop();
         } else {
-            // Potato/staller mode: keep alive while client is running
-            long lastPingTime = System.currentTimeMillis();
-            while (client.isRunning()) {
-                try {
-                    Thread.sleep(1000);
-
-                    // Ping server periodically to maintain session
-                    long now = System.currentTimeMillis();
-                    if (now - lastPingTime >= PING_INTERVAL_MS) {
-                        session.ping();
-                        lastPingTime = now;
+            // Potato/staller mode: keep alive while client is running, with reconnection support
+            int reconnectAttempts = 0;
+            outer:
+            while (true) {
+                long lastPingTime = System.currentTimeMillis();
+                while (client.isRunning()) {
+                    try {
+                        Thread.sleep(1000);
+                        long now = System.currentTimeMillis();
+                        if (now - lastPingTime >= PING_INTERVAL_MS) {
+                            session.ping();
+                            lastPingTime = now;
+                        }
+                    } catch (InterruptedException e) {
+                        logger.info("Interrupted, stopping...");
+                        client.stop();
+                        break outer;
                     }
-                } catch (InterruptedException e) {
-                    logger.info("Interrupted, stopping...");
-                    client.stop();
+                }
+
+                // Client stopped — check if we should reconnect
+                if (client.isReconnectable() && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    String oldSessionId = session.getSessionId();
+                    logger.info("Connection lost — attempting reconnection (session=" + oldSessionId + ")");
+                    session.setRestoreSessionId(oldSessionId);
+                    client.suppressDisconnectCallbacks(true);
+
+                    boolean reconnected = false;
+                    for (int i = reconnectAttempts; i < MAX_RECONNECT_ATTEMPTS; i++) {
+                        int backoffMs = RECONNECT_BACKOFF_MS[i];
+                        logger.info("Reconnect attempt " + (i + 1) + "/" + MAX_RECONNECT_ATTEMPTS + " in " + backoffMs + "ms...");
+                        try {
+                            Thread.sleep(backoffMs);
+                        } catch (InterruptedException e) {
+                            logger.info("Interrupted during reconnect backoff");
+                            break;
+                        }
+                        if (session.connectStart(connection)) {
+                            logger.info("Reconnected successfully on attempt " + (i + 1));
+                            client.suppressDisconnectCallbacks(false);
+                            client.setRunning(true);
+                            reconnectAttempts = 0;
+                            reconnected = true;
+                            continue outer;
+                        }
+                        logger.warn("Reconnect attempt " + (i + 1) + " failed: " + session.getLastError());
+                        reconnectAttempts = i + 1;
+                    }
+
+                    client.suppressDisconnectCallbacks(false);
+                    if (!reconnected) {
+                        logger.error("All " + MAX_RECONNECT_ATTEMPTS + " reconnect attempts failed — giving up");
+                        break;
+                    }
+                } else {
                     break;
                 }
             }
