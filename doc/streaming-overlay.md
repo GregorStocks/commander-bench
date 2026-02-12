@@ -22,7 +22,7 @@ make run ARGS="--no-overlay"
 Run a long game (3 burn CPUs + 1 staller, 200 starting life, no time limit):
 
 ```bash
-make run CONFIG=staller
+make run CONFIG=standard-staller
 ```
 
 ## URLs

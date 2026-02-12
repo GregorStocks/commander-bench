@@ -85,14 +85,14 @@ uv add some-package
 Use `make run` with the `CONFIG` parameter:
 
 ```bash
-# Default: 4 CPU players, no API keys needed
+# Default: 2 CPU Standard duel, no API keys needed
 make run
 
 # 4 random LLM pilots, random personalities and decks (needs OPENROUTER_API_KEY)
-make run CONFIG=gauntlet
+make run CONFIG=commander-gauntlet
 
 # Frontier models: one from each major lab (needs OPENROUTER_API_KEY)
-make run CONFIG=frontier
+make run CONFIG=commander-frontier
 
 # List all available configs
 make configs
@@ -114,11 +114,11 @@ Recordings are saved to `~/mage-bench-logs/` by default.
 When running games for testing or verification, **only use free configs** that don't consume API tokens:
 
 ```bash
-make run                   # No API keys needed (4 CPU players)
-make run CONFIG=staller    # No API keys needed (burn vs staller)
+make run                              # No API keys needed (2 CPU Standard duel)
+make run CONFIG=standard-staller      # No API keys needed (burn vs staller)
 ```
 
-**Never run** `CONFIG=gauntlet`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
+**Never run** `CONFIG=commander-gauntlet`, `CONFIG=commander-frontier`, or other LLM configs — these consume real API tokens and cost money.
 
 ## YouTube Uploads
 
