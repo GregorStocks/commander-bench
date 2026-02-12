@@ -91,17 +91,15 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
     </div>
 
     <div class="table-wrap">
-      <table id="leaderboard-table">
+      <table id="leaderboard-table" class="format-combined">
         <thead>
           <tr>
             <th data-sort="modelName" data-type="string">Model Name</th>
             <th data-sort="provider" data-type="string">Provider</th>
             <th data-sort="rating" data-type="number" class="sorted desc">Rating <span class="sort-arrow">&#9660;</span></th>
             <th data-sort="gamesPlayed" data-type="number">Games Played</th>
-            <th data-sort="winRate" data-type="number">Win Rate</th>
+            <th data-sort="winRate" data-type="number" class="col-winrate">Win Rate</th>
             <th data-sort="avgApiCost" data-type="number">Avg API Cost</th>
-            <th data-sort="avgToolCallsOk" data-type="number">Avg Tool Calls</th>
-            <th data-sort="avgToolCallsFailed" data-type="number">Avg Failures</th>
           </tr>
         </thead>
         {activeFormats.map((fmt: string) => (
@@ -114,17 +112,13 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
                 data-games-played={m.gamesPlayed}
                 data-win-rate={m.winRate}
                 data-avg-api-cost={m.avgApiCost}
-                data-avg-tool-calls-ok={m.avgToolCallsOk ?? 0}
-                data-avg-tool-calls-failed={m.avgToolCallsFailed ?? 0}
               >
                 <td class="model-name">{m.modelName}</td>
                 <td>{m.provider}</td>
                 <td class="num">{m.rating}</td>
                 <td class="num">{m.gamesPlayed}</td>
-                <td class="num">{(m.winRate * 100).toFixed(1)}%</td>
+                <td class="num col-winrate">{(m.winRate * 100).toFixed(1)}%</td>
                 <td class="num">${m.avgApiCost.toFixed(2)}</td>
-                <td class="num">{m.avgToolCallsOk?.toFixed(1) ?? '—'}</td>
-                <td class="num">{m.avgToolCallsFailed?.toFixed(1) ?? '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -177,6 +171,7 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
       btn.classList.add('active');
 
       activeFormat = fmt;
+      table!.classList.toggle('format-combined', fmt === 'combined');
       applyFilters();
     });
   }
@@ -449,10 +444,12 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
   th[data-sort="rating"],
   th[data-sort="gamesPlayed"],
   th[data-sort="winRate"],
-  th[data-sort="avgApiCost"],
-  th[data-sort="avgToolCallsOk"],
-  th[data-sort="avgToolCallsFailed"] {
+  th[data-sort="avgApiCost"] {
     text-align: right;
+  }
+
+  table.format-combined .col-winrate {
+    display: none;
   }
 
   tbody tr {
