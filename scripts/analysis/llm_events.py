@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Analyze LLM events and errors from a .json.gz export.
+
+Reports event type counts, failed tool calls, stalls/resets, and token usage.
+"""
+
+import gzip
+import json
+import sys
+from collections import Counter
+
+
+def main(gz_path: str) -> None:
+    with gzip.open(gz_path, "rt") as f:
+        d = json.load(f)
+
+    events = d.get("llmEvents", [])
+    if not events:
+        print("No LLM events found.")
+        return
+
+    # Event type counts
+    types = Counter(e.get("type", "?") for e in events)
+    print("=== LLM Event Types ===")
+    for t, c in types.most_common():
+        print(f"  {t}: {c}")
+
+    # By player
+    print()
+    players = sorted(set(e.get("player", "?") for e in events))
+    for player in players:
+        pe = [e for e in events if e.get("player") == player]
+        pt = Counter(e.get("type", "?") for e in pe)
+        print(f"{player}: {dict(pt.most_common())}")
+
+    # Failed tool calls
+    print()
+    print("=== Failed Tool Calls ===")
+    fail_count = 0
+    for tc in events:
+        if tc.get("type") != "tool_call":
+            continue
+        result = str(tc.get("result", ""))
+        if any(
+            x in result.lower()
+            for x in ["error", "out of range", "required", "invalid", "failed"]
+        ):
+            fail_count += 1
+            print(
+                f"  {tc.get('player', '?')} | {tc.get('tool', '?')} "
+                f"| args={json.dumps(tc.get('args', {}))} "
+                f"| {result[:200]}"
+            )
+    if fail_count == 0:
+        print("  (none)")
+
+    # Stalls, resets, auto-pilot, errors
+    print()
+    for t in ["stall", "context_reset", "auto_pilot_mode", "llm_error"]:
+        evts = [e for e in events if e.get("type") == t]
+        if evts:
+            print(f"{t}: {len(evts)} events")
+
+    # Token/cost summary
+    responses = [
+        e for e in events if e.get("type") == "llm_response" and e.get("usage")
+    ]
+    print()
+    print("=== Token Usage ===")
+    for player in players:
+        pr = [e for e in responses if e.get("player") == player]
+        if not pr:
+            continue
+        pt = sum(e["usage"].get("promptTokens", 0) for e in pr)
+        ct = sum(e["usage"].get("completionTokens", 0) for e in pr)
+        print(f"{player}: {len(pr)} responses, {pt:,} prompt, {ct:,} completion tokens")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <game.json.gz>", file=sys.stderr)
+        sys.exit(1)
+    main(sys.argv[1])

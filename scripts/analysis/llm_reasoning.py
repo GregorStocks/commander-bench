@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Sample LLM reasoning excerpts from a .json.gz export.
+
+Extracts 3-4 reasoning samples per player to assess decision quality.
+"""
+
+import gzip
+import json
+import sys
+
+MAX_SAMPLES = 4
+MIN_REASONING_LEN = 50
+EXCERPT_LEN = 600
+
+
+def main(gz_path: str) -> None:
+    with gzip.open(gz_path, "rt") as f:
+        d = json.load(f)
+
+    events = d.get("llmEvents", [])
+    players = sorted(set(e.get("player", "?") for e in events))
+
+    for player in players:
+        print(f"=== {player} ===")
+        count = 0
+        for e in events:
+            if e.get("type") != "llm_response" or e.get("player") != player:
+                continue
+            reasoning = e.get("reasoning", "")
+            if len(reasoning) > MIN_REASONING_LEN:
+                count += 1
+                print(f"--- Sample {count} ---")
+                print(reasoning[:EXCERPT_LEN])
+                print()
+                if count >= MAX_SAMPLES:
+                    break
+        if count == 0:
+            print("  (no reasoning samples)")
+        print()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <game.json.gz>", file=sys.stderr)
+        sys.exit(1)
+    main(sys.argv[1])

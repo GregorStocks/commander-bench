@@ -25,6 +25,11 @@
             <artifactId>mage-common</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>mage-sets</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
