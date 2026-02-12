@@ -83,12 +83,20 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "cursor": {
+          "description": "Cursor to pass to the next get_game_log call",
+          "type": "integer"
+        },
+        "cursor_reset": {
+          "description": "Whether requested cursor was too old and had to be reset to oldest retained log offset",
+          "type": "boolean"
+        },
         "log": {
           "description": "Game log text (may be truncated if max_chars was set)",
           "type": "string"
         },
         "truncated": {
-          "description": "Whether the log was truncated",
+          "description": "Whether older content was omitted",
           "type": "boolean"
         },
         "total_length": {
@@ -100,13 +108,21 @@
     "examples": [
       {
         "label": "Truncated log",
-        "value": "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\",\n  \"total_length\": 5234,\n  \"truncated\": true\n}"
+        "value": "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\",\n  \"total_length\": 5234,\n  \"truncated\": true,\n  \"cursor\": 5234\n}"
+      },
+      {
+        "label": "Cursor delta",
+        "value": "{\n  \"log\": \"Player2 casts Swords to Plowshares targeting Goblin Guide.\",\n  \"total_length\": 5301,\n  \"truncated\": false,\n  \"cursor\": 5301\n}"
       }
     ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
       "properties": {
+        "cursor": {
+          "description": "Cursor offset from previous get_game_log call. Returns new log text since this offset.",
+          "type": "integer"
+        },
         "max_chars": {
           "description": "Max characters to return (0 or omit for all)",
           "type": "integer"
@@ -265,6 +281,73 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "actions_passed": {
+          "description": "Number of priority passes performed before the decision",
+          "type": "integer"
+        },
+        "action_type": {
+          "description": "XMage callback method name",
+          "type": "string"
+        },
+        "response_type": {
+          "description": "How to respond: select, boolean, index, amount, pile, or multi_amount",
+          "type": "string"
+        },
+        "recent_chat": {
+          "description": "Chat messages received since last check",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "choices": {
+          "description": "Available choices when response_type uses indexed selection",
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "message": {
+          "description": "Prompt text from XMage",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Whether the operation timed out",
+          "type": "boolean"
+        },
+        "action_pending": {
+          "description": "Whether an action requiring input is pending",
+          "type": "boolean"
+        }
+      }
+    },
+    "examples": [
+      {
+        "label": "Action with choices",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"response_type\": \"select\",\n  \"actions_passed\": 4,\n  \"choices\": [{\"index\": 0, \"description\": \"Lightning Bolt {R} [Cast]\"}]\n}"
+      },
+      {
+        "label": "Timeout",
+        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 9,\n  \"timeout\": true\n}"
+      }
+    ],
+    "inputSchema": {
+      "additionalProperties": false,
+      "type": "object",
+      "properties": {
+        "timeout_ms": {
+          "description": "Max milliseconds to wait (default 30000)",
+          "type": "integer"
+        }
+      }
+    },
+    "name": "wait_and_get_choices",
+    "description": "Block like pass_priority until a decision is needed, then return full get_action_choices output in one call. If no action arrives before timeout, returns pass_priority-style timeout payload."
+  },
+  {
+    "outputSchema": {
+      "type": "object",
+      "properties": {
         "event_occurred": {
           "description": "Whether a meaningful game state change was detected",
           "type": "boolean"
@@ -314,6 +397,10 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "cursor": {
+          "description": "Cursor for the latest known game state",
+          "type": "integer"
+        },
         "phase": {
           "description": "Current phase (e.g. PRECOMBAT_MAIN, COMBAT)",
           "type": "string"
@@ -342,6 +429,10 @@
         },
         "available": {
           "description": "Whether game state is available",
+          "type": "boolean"
+        },
+        "unchanged": {
+          "description": "True when the provided cursor already matches the latest state",
           "type": "boolean"
         },
         "step": {
@@ -374,7 +465,12 @@
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
-      "properties": {}
+      "properties": {
+        "cursor": {
+          "description": "State cursor from previous get_game_state call. If unchanged, returns a compact payload.",
+          "type": "integer"
+        }
+      }
     },
     "name": "get_game_state",
     "description": "Get full game state: turn, phase, players, stack, combat. Each player has life, mana_pool, hand (yours only), battlefield (name, tapped, P/T, counters, token/copy/face_down flags), graveyard, exile, commanders."

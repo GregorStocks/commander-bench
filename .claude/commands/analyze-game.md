@@ -80,6 +80,14 @@ for f in issues/*.json; do echo "$(basename "$f" .json): $(python3 -c "import js
 - **Error logs**: Read `*_errors.log` files. Look for Java exceptions (NPE, IndexOutOfBounds, ClassCast), MCP tool failures, and stack traces. Note the exact filename and line numbers.
 - **Pilot logs**: Read `*_pilot.log` files. Look for LLM decision failures, repeated tool call patterns (loops), models sending wrong parameters, empty responses, and context trimming warnings.
 - **Bridge logs**: Read `*_bridge.jsonl` files. Look for repeated identical MCP calls (loop signatures), failed actions, "Index out of range" errors, and action sequences that suggest confusion (e.g., cast → cancel → cast → cancel).
+  - For stale-choice race monitoring, grep for `choose_action out-of-range diagnostic` in `*_mcp.log` and classify each hit:
+    - likely model misuse: `last_choices_response=boolean` with `index>=0`, or negative index
+    - suspicious race: `last_choices_count >= 0` with tiny `last_choices_age_ms` and rapid action-type flips
+  - Suggested quick checks:
+    ```bash
+    rg -n "choose_action out-of-range diagnostic" "$GAME_DIR"/*_mcp.log
+    rg -n "Index .* out of range" "$GAME_DIR"/*_errors.log "$GAME_DIR"/*_pilot.log
+    ```
 - **Game events**: Read `game_events.jsonl`. Look for stalls (long gaps between events), excessive auto-passes, turn timeouts, and game flow anomalies.
 
 ### Step 6: Cross-reference findings

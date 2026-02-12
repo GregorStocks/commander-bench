@@ -1,0 +1,10 @@
+{
+  "title": "Add batch oracle helper for visible in-game objects",
+  "description": "get_oracle_text supports single lookups and name batches, but common gameplay flows need oracle text for many visible objects at once (stack + battlefield threats). Repeated single calls add round trips and token overhead.\n\nProposed direction:\n1. Add object-id batch support to get_oracle_text (object_ids array), or a dedicated get_visible_oracle_text tool.\n2. Return per-object results with stable identifiers and per-entry errors.\n3. Clearly define behavior for tokens, face-down cards, and unknown object IDs.\n\nDesign questions:\n- Prefer extending existing tool vs adding new tool?\n- Should default scope include only visible cards, or all known objects in state?\n\nSuggested source area: Mage.Client.Headless/src/main/java/mage/client/headless/BridgeCallbackHandler.java:getOracleText and McpServer schema.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T19:51:04.000000-08:00",
+  "updated_at": "2026-02-11T19:51:04.000000-08:00"
+}
