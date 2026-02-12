@@ -165,27 +165,42 @@ def test_update_website_youtube_url_no_files():
         _update_website_youtube_url(game_dir, "https://youtu.be/xyz", project_root)
 
 
-def test_maybe_export_defaults_to_no(capsys):
-    """Empty input should NOT trigger export (default is now N)."""
-    from puppeteer.orchestrator import _maybe_export_for_website
+def test_maybe_upload_and_export_defaults_to_no(capsys):
+    """Empty input should NOT trigger upload or export (default is N)."""
+    from puppeteer.orchestrator import _maybe_upload_and_export
 
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         project_root = Path(tmpdir)
+        (game_dir / "recording.mov").write_bytes(b"fake")
         with patch("builtins.input", return_value=""):
-            _maybe_export_for_website(game_dir, project_root)
-    # No export should have been attempted (no error about missing files)
+            _maybe_upload_and_export(game_dir, project_root)
     output = capsys.readouterr().out
     assert "Exported" not in output
+    assert "YouTube" not in output
 
 
-def test_maybe_upload_skips_without_recording():
+def test_maybe_upload_and_export_skips_without_recording():
     """Should not prompt if no recording.mov exists."""
-    from puppeteer.orchestrator import _maybe_upload_to_youtube
+    from puppeteer.orchestrator import _maybe_upload_and_export
 
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         project_root = Path(tmpdir)
         with patch("builtins.input") as mock_input:
-            _maybe_upload_to_youtube(game_dir, project_root)
+            _maybe_upload_and_export(game_dir, project_root)
         mock_input.assert_not_called()
+
+
+def test_maybe_upload_and_export_reprompts_on_bad_input(capsys):
+    """Unrecognized input should re-ask, not silently skip."""
+    from puppeteer.orchestrator import _maybe_upload_and_export
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        project_root = Path(tmpdir)
+        (game_dir / "recording.mov").write_bytes(b"fake")
+        with patch("builtins.input", side_effect=["yy", "n"]):
+            _maybe_upload_and_export(game_dir, project_root)
+    output = capsys.readouterr().out
+    assert "Unrecognized answer" in output
