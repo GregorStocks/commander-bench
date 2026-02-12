@@ -1,0 +1,10 @@
+{
+  "title": "Add explicit mana sourcing to cast_spell for token-efficient LLM control",
+  "description": "The auto-mana system handles mana payment automatically, but some LLMs may want precise control over which lands to tap and which mana abilities to use. Currently this requires multiple round-trips: the LLM must wait for each GAME_PLAY_MANA prompt, call get_action_choices, then choose_action for each mana source individually.\n\nProposal: extend choose_action (or add a new tool) to accept an optional mana plan when casting a spell, e.g.:\n\n  cast_spell(spell=\"Three Steps Ahead\", mana_sources=[\n    {\"source\": \"Island\", \"ability\": \"{T}: Add {U}\"},\n    {\"source\": \"Cascade Bluffs\", \"ability\": \"{T}: Add {U}{R}\"}\n  ])\n\nThe MCP layer would then auto-respond to the sequence of GAME_PLAY_MANA and GAME_CHOOSE_ABILITY callbacks using the provided plan, falling back to auto-mana if the plan is incomplete or invalid.\n\nThis eliminates round-trips for the common case and gives control-oriented LLMs a token-efficient way to specify exact tapping. The current auto-tap system remains the default for LLMs that don't specify a mana plan.",
+  "status": "open",
+  "priority": 3,
+  "type": "enhancement",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}
