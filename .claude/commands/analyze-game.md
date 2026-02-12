@@ -11,19 +11,16 @@ Determine which game to analyze:
 - If the user specified a game ID (e.g. `game_20260211_080409`), use that.
 - If the user said "most recent" or similar, find the latest:
   ```bash
-  ls -la ~/mage-bench-logs/last-*
-  ls -dt ~/mage-bench-logs/game_* | head -5
+  uv run python scripts/list-recent-games.py
   ```
 - If the user mentioned a config name (e.g. "standard", "gauntlet", "frontier"), use the corresponding symlink:
   ```bash
-  readlink ~/mage-bench-logs/last-{config}
+  uv run python scripts/list-recent-games.py --config {config}
   ```
-  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist.
+  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist with `--symlinks`.
 - **If ambiguous** (multiple recent games, or user just said "analyze a game"), show the 3-5 most recent games with their config and players, then ask which one:
   ```bash
-  for d in $(ls -dt ~/mage-bench-logs/game_* | head -5); do
-    echo "$(basename $d): $(python3 -c "import json; m=json.load(open('$d/game_meta.json')); print(f'{m.get(\"config\",\"?\")} | {m.get(\"deck_type\",\"?\")} | {\" vs \".join(p[\"name\"] for p in m[\"players\"])} | winner: ???')" 2>/dev/null || echo '(no metadata)')"
-  done
+  uv run python scripts/list-recent-games.py
   ```
   Ask the user to pick one before proceeding. **Do not guess.**
 
@@ -36,26 +33,7 @@ If the full log directory doesn't exist but `website/public/games/{game_id}.json
 If `website/public/games/${GAME_ID}.json.gz` exists (either on the current branch or generatable from the logs), extract a quick overview before diving into raw logs:
 
 ```bash
-GZ_PATH=website/public/games/${GAME_ID}.json.gz
-if [ ! -f "$GZ_PATH" ] && [ -f "$GAME_DIR/game_events.jsonl" ]; then
-  uv run python scripts/export_game.py ${GAME_ID}
-fi
-if [ -f "$GZ_PATH" ]; then
-  gunzip -k -c "$GZ_PATH" | python3 -c "
-import json, sys
-from collections import Counter
-d = json.load(sys.stdin)
-print(f'Game: {d[\"id\"]} | {d.get(\"deckType\",\"?\")} | {d[\"totalTurns\"]} turns | Winner: {d[\"winner\"]}')
-for p in d['players']:
-    print(f'  {p[\"name\"]} ({p.get(\"model\",\"?\")}) \${p.get(\"totalCostUsd\",0):.2f}')
-events = d.get('llmEvents', [])
-errors = [e for e in events if e.get('type')=='tool_call' and any(x in str(e.get('result','')).lower() for x in ['error','out of range','required','failed'])]
-print(f'LLM events: {len(events)} | Failed tool calls: {len(errors)}')
-for e in errors[:5]:
-    print(f'  {e.get(\"player\",\"?\")} | {e.get(\"tool\",\"?\")} | {str(e.get(\"result\",\"\"))[:120]}')
-if len(errors) > 5: print(f'  ... and {len(errors)-5} more')
-"
-fi
+uv run python scripts/game-gz-bootstrap.py ${GAME_ID}
 ```
 
 This gives you a roadmap — you'll know which players had errors, roughly when, and what to look for in the raw logs.
@@ -67,7 +45,7 @@ Read `config.json` and `game_meta.json` — understand who played, what models/d
 ### Step 4: Check existing issues
 
 ```bash
-for f in issues/*.json; do echo "$(basename "$f" .json): $(python3 -c "import json; print(json.load(open('$f'))['title'])")"; done
+scripts/list-issues.sh
 ```
 
 ### Step 5: Analyze log files in parallel

@@ -11,19 +11,16 @@ Determine which game to analyze:
 - If the user specified a game ID (e.g. `game_20260211_080409`), use that.
 - If the user said "most recent" or similar, find the latest:
   ```bash
-  ls -la ~/mage-bench-logs/last-*
-  ls -dt ~/mage-bench-logs/game_* | head -5
+  uv run python scripts/list-recent-games.py
   ```
 - If the user mentioned a config name (e.g. "standard", "gauntlet", "frontier"), use the corresponding symlink:
   ```bash
-  readlink ~/mage-bench-logs/last-{config}
+  uv run python scripts/list-recent-games.py --config {config}
   ```
-  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist.
+  where `{config}` might be `standard-gauntlet`, `standard-dumb`, `gauntlet`, `frontier`, etc. Check what symlinks exist with `--symlinks`.
 - **If ambiguous** (multiple recent games, or user just said "analyze a game"), show the 3-5 most recent games with their config and players, then ask which one:
   ```bash
-  for d in $(ls -dt ~/mage-bench-logs/game_* | head -5); do
-    echo "$(basename $d): $(python3 -c "import json; m=json.load(open('$d/game_meta.json')); print(f'{m.get(\"config\",\"?\")} | {m.get(\"deck_type\",\"?\")} | {\" vs \".join(p[\"name\"] for p in m[\"players\"])} | winner: ???')" 2>/dev/null || echo '(no metadata)')"
-  done
+  uv run python scripts/list-recent-games.py
   ```
   Ask the user to pick one before proceeding. **Do not guess.**
 
@@ -67,7 +64,7 @@ The scripts should cover:
 ### Step 4: Check existing issues and file new ones
 
 ```bash
-for f in issues/*.json; do echo "$(basename "$f" .json): $(python3 -c "import json; print(json.load(open('$f'))['title'])")"; done
+scripts/list-issues.sh
 ```
 
 For each **code bug** found (not model behavior issues), create an issue in `issues/`:

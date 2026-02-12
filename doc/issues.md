@@ -49,27 +49,23 @@ jq . issues/commander-zone-gy-exile-layout.json
 ### List all issue titles with priority
 
 ```bash
-for f in issues/*.json; do echo "$(basename "$f" .json): $(jq -r '[.priority, .title] | @tsv' "$f")"; done | sort -t$'\t' -k1 -n
+scripts/list-issues.sh
 ```
 
 ### Find issues by label
 
 ```bash
-for f in issues/*.json; do
-  jq -e '.labels | index("streaming-client")' "$f" >/dev/null && basename "$f" .json
-done
+uv run python scripts/query-issues.py --label streaming-client
 ```
 
 ### Find high priority issues (priority 1-2)
 
 ```bash
-for f in issues/*.json; do
-  jq -e '.priority <= 2' "$f" >/dev/null && echo "$(basename "$f" .json): $(jq -r .title "$f")"
-done
+uv run python scripts/query-issues.py --max-priority 2
 ```
 
-### Search descriptions
+### Search titles and descriptions
 
 ```bash
-grep -l "streaming" issues/*.json
+uv run python scripts/query-issues.py --search "streaming"
 ```
