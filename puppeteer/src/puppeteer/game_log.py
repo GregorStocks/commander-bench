@@ -1,8 +1,11 @@
 """Structured game logging: JSONL writer, decklist parser, post-game merge."""
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import TracebackType
 from zoneinfo import ZoneInfo
 
 
@@ -41,6 +44,17 @@ class GameLogWriter:
 
     def close(self):
         self._file.close()
+
+    def __enter__(self) -> GameLogWriter:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
 
 def read_decklist(deck_path: Path) -> list[str]:
