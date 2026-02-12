@@ -1842,6 +1842,12 @@ public class BridgeCallbackHandler {
                             pendingAction = null;
                         }
                     }
+                    synchronized (unseenChat) {
+                        unseenChat.add("[System] Spell cancelled — not enough mana to complete payment.");
+                        if (unseenChat.size() > 20) {
+                            unseenChat.remove(0);
+                        }
+                    }
                     session.sendPlayerBoolean(action.getGameId(), false);
                     actionsPassed++;
                     continue;
