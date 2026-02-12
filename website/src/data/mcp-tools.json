@@ -4,46 +4,6 @@
       "type": "object",
       "properties": {
         "action_type": {
-          "description": "XMage callback method name (e.g. GAME_SELECT, GAME_TARGET)",
-          "type": "string"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "message": {
-          "description": "Human-readable prompt for the action",
-          "type": "string"
-        },
-        "action_pending": {
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Action pending",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
-      },
-      {
-        "label": "No action",
-        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {}
-    },
-    "name": "is_action_on_me",
-    "description": "Check if game action is currently required. Returns action_pending, and if true: action_type and message."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "action_type": {
           "description": "The callback method that was handled",
           "type": "string"
         },
@@ -76,7 +36,7 @@
       "type": "object",
       "properties": {}
     },
-    "name": "take_action",
+    "name": "default_action",
     "description": "Execute default action (pass priority or first available choice)"
   },
   {
@@ -168,51 +128,6 @@
     "outputSchema": {
       "type": "object",
       "properties": {
-        "action_type": {
-          "description": "XMage callback method name",
-          "type": "string"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "message": {
-          "description": "Human-readable prompt for the action",
-          "type": "string"
-        },
-        "action_pending": {
-          "description": "Whether a game action is waiting for your response",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Action arrived",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"game_over\": false\n}"
-      },
-      {
-        "label": "Timeout",
-        "value": "{\n  \"action_pending\": false,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 15000)",
-          "type": "integer"
-        }
-      }
-    },
-    "name": "wait_for_action",
-    "description": "Block until a game action is required, or timeout. Returns action_pending, action_type, message."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
         "combat_phase": {
           "description": "\"declare_attackers\" or \"declare_blockers\"",
           "type": "string"
@@ -276,122 +191,6 @@
     },
     "name": "pass_priority",
     "description": "Auto-pass priority until you need to make a decision: playable cards, combat (declare attackers/blockers), or non-priority actions. Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. On timeout: action_pending=false, timeout=true."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "actions_passed": {
-          "description": "Number of priority passes performed before the decision",
-          "type": "integer"
-        },
-        "action_type": {
-          "description": "XMage callback method name",
-          "type": "string"
-        },
-        "response_type": {
-          "description": "How to respond: select, boolean, index, amount, pile, or multi_amount",
-          "type": "string"
-        },
-        "recent_chat": {
-          "description": "Chat messages received since last check",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "choices": {
-          "description": "Available choices when response_type uses indexed selection",
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "message": {
-          "description": "Prompt text from XMage",
-          "type": "string"
-        },
-        "timeout": {
-          "description": "Whether the operation timed out",
-          "type": "boolean"
-        },
-        "action_pending": {
-          "description": "Whether an action requiring input is pending",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Action with choices",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"response_type\": \"select\",\n  \"actions_passed\": 4,\n  \"choices\": [{\"index\": 0, \"description\": \"Lightning Bolt {R} [Cast]\"}]\n}"
-      },
-      {
-        "label": "Timeout",
-        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 9,\n  \"timeout\": true\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 30000)",
-          "type": "integer"
-        }
-      }
-    },
-    "name": "wait_and_get_choices",
-    "description": "Block like pass_priority until a decision is needed, then return full get_action_choices output in one call. If no action arrives before timeout, returns pass_priority-style timeout payload."
-  },
-  {
-    "outputSchema": {
-      "type": "object",
-      "properties": {
-        "event_occurred": {
-          "description": "Whether a meaningful game state change was detected",
-          "type": "boolean"
-        },
-        "new_log": {
-          "description": "New game log entries since the call started",
-          "type": "string"
-        },
-        "actions_taken": {
-          "description": "Number of actions auto-handled",
-          "type": "integer"
-        },
-        "game_over": {
-          "description": "Whether the game has ended",
-          "type": "boolean"
-        },
-        "player_dead": {
-          "description": "Whether you died during auto-passing",
-          "type": "boolean"
-        }
-      }
-    },
-    "examples": [
-      {
-        "label": "Event occurred",
-        "value": "{\n  \"event_occurred\": true,\n  \"new_log\": \"Player2 casts Lightning Bolt targeting Player1.\\nPlayer1 loses 3 life.\",\n  \"actions_taken\": 4,\n  \"game_over\": false\n}"
-      }
-    ],
-    "inputSchema": {
-      "additionalProperties": false,
-      "type": "object",
-      "properties": {
-        "min_new_chars": {
-          "description": "Min new log characters to trigger return (default 50)",
-          "type": "integer"
-        },
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 10000)",
-          "type": "integer"
-        }
-      }
-    },
-    "name": "auto_pass_until_event",
-    "description": "Auto-handle all actions and block until meaningful game state change. Returns event_occurred, new_log, actions_taken."
   },
   {
     "outputSchema": {
@@ -581,9 +380,17 @@
           "description": "Current mana pool {R, G, U, W, B, C}",
           "type": "object"
         },
+        "timeout": {
+          "description": "Whether the operation timed out",
+          "type": "boolean"
+        },
         "action_pending": {
           "description": "Whether an action is pending (false if nothing to do)",
           "type": "boolean"
+        },
+        "actions_passed": {
+          "description": "Number of priority passes performed before the decision",
+          "type": "integer"
         },
         "context": {
           "description": "Turn/phase context (e.g. \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\")",
@@ -592,6 +399,13 @@
         "max_amount": {
           "description": "Maximum allowed value",
           "type": "integer"
+        },
+        "recent_chat": {
+          "description": "Chat messages received since last check",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "choices": {
           "description": "Available choices with name, type, index, and type-specific fields",
@@ -622,10 +436,15 @@
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
-      "properties": {}
+      "properties": {
+        "timeout_ms": {
+          "description": "Max milliseconds to wait for a decision. When set, auto-passes priority until a decision is needed (like pass_priority + get_action_choices in one call). When omitted, returns immediately.",
+          "type": "integer"
+        }
+      }
     },
     "name": "get_action_choices",
-    "description": "Get available choices for the current pending action. Call before choose_action. Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
+    "description": "Get available choices for the current pending action. Call before choose_action. With timeout_ms: blocks like pass_priority until a decision is needed, then returns choices in one call. Without timeout_ms: returns immediately (action_pending=false if nothing to do). Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
   },
   {
     "outputSchema": {

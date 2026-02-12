@@ -98,6 +98,7 @@ A single bug often shows up across multiple log files. For example, an NPE in er
 
 - **Code bugs** (file issues): NPEs, wrong tool behavior, missing error handling, incorrect game state reporting — these need code fixes in Java or Python.
 - **Model behavior** (note but don't file unless extreme): Passive play, bad threat assessment, suboptimal targeting — these are model quality issues. Only file if a model is completely non-functional (e.g., never plays spells, always passes).
+- **Toolset mismatches** (file as P3): Look for tools that specific models are consistently hopeless with — always calling with wrong params, getting confused by responses, or wasting context on. Flag these as candidates for toolset changes in `presets.json` (each preset references a named toolset from `toolsets.json`). Note the model and the problematic tool so we can track patterns across games and decide whether to revoke that tool from weaker models' toolsets or design simpler alternative tools.
 - **Already handled** (skip): Transient API errors with successful retries, empty responses caught by retry logic, one-off mistakes the model recovers from.
 
 ### Step 8: Trace bugs to source code

@@ -1,14 +1,14 @@
 {
   "presets": {
-    "gem25f-medium": { "model": "google/gemini-2.5-flash", "reasoning_effort": "medium", "system_prompt": "default" },
-    "gem3f-medium":  { "model": "google/gemini-3-flash-preview", "reasoning_effort": "medium", "system_prompt": "default" },
-    "haiku-low":     { "model": "anthropic/claude-haiku-4.5", "reasoning_effort": "low", "system_prompt": "default" },
-    "sonnet-medium": { "model": "anthropic/claude-sonnet-4.5", "reasoning_effort": "medium", "system_prompt": "default" },
-    "opus-medium":   { "model": "anthropic/claude-opus-4.6", "reasoning_effort": "medium", "system_prompt": "default" },
-    "o3-medium":     { "model": "openai/o3", "reasoning_effort": "medium", "system_prompt": "default" },
-    "grok4-medium":  { "model": "x-ai/grok-4", "reasoning_effort": "medium", "system_prompt": "default" },
-    "gem3p-medium":  { "model": "google/gemini-3-pro-preview", "reasoning_effort": "medium", "system_prompt": "default" },
-    "gem2f":         { "model": "google/gemini-2.0-flash-001", "system_prompt": "default" }
+    "gem25f-medium": { "model": "google/gemini-2.5-flash", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "gem3f-medium":  { "model": "google/gemini-3-flash-preview", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "haiku-low":     { "model": "anthropic/claude-haiku-4.5", "reasoning_effort": "low", "system_prompt": "default", "toolset": "default" },
+    "sonnet-medium": { "model": "anthropic/claude-sonnet-4.5", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "opus-medium":   { "model": "anthropic/claude-opus-4.6", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "o3-medium":     { "model": "openai/o3", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "grok4-medium":  { "model": "x-ai/grok-4", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "gem3p-medium":  { "model": "google/gemini-3-pro-preview", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
+    "gem2f":         { "model": "google/gemini-2.0-flash-001", "system_prompt": "default", "toolset": "default" }
   },
   "random_pool": ["gem25f-medium", "gem3f-medium", "haiku-low"]
 }

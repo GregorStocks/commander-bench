@@ -20,6 +20,7 @@ WON_GAME_RE = re.compile(r"^(.+?) has won the game$")
 
 # LLM event types to include in the website export
 _LLM_EVENT_TYPES = {
+    "game_start",
     "llm_response",
     "tool_call",
     "stall",
@@ -88,13 +89,17 @@ def _deck_display_name(player_meta: dict, deck_type: str) -> str | None:
     return _deck_name_from_path(player_meta.get("deck_path", ""))
 
 
-def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
+def _read_llm_events(
+    game_dir: Path,
+) -> tuple[list[dict], dict[str, float], dict[str, list[str]]]:
     """Read LLM events from all *_llm.jsonl files.
 
-    Returns (llm_events sorted by timestamp, {player_name: total_cost_usd}).
+    Returns (llm_events sorted by timestamp, {player_name: total_cost_usd},
+    {player_name: available_tools}).
     """
     events = []
     player_costs: dict[str, float] = {}
+    player_tools: dict[str, list[str]] = {}
 
     for path in sorted(game_dir.glob("*_llm.jsonl")):
         for line in path.read_text().splitlines():
@@ -115,6 +120,10 @@ def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
             elif "cumulative_cost_usd" in raw:
                 player_costs[player] = raw["cumulative_cost_usd"]
 
+            # Track per-player tools from game_start
+            if event_type == "game_start" and "available_tools" in raw:
+                player_tools[player] = raw["available_tools"]
+
             if event_type not in _LLM_EVENT_TYPES:
                 continue
 
@@ -125,7 +134,10 @@ def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
                 "type": event_type,
             }
 
-            if event_type == "llm_response":
+            if event_type == "game_start":
+                exported["model"] = raw.get("model", "")
+                exported["availableTools"] = raw.get("available_tools", [])
+            elif event_type == "llm_response":
                 exported["reasoning"] = raw.get("reasoning", "")
                 if raw.get("thinking"):
                     exported["thinking"] = raw["thinking"]
@@ -164,7 +176,7 @@ def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
     # Sort by timestamp
     events.sort(key=lambda e: e.get("ts", ""))
 
-    return events, player_costs
+    return events, player_costs, player_tools
 
 
 def _read_llm_trace(game_dir: Path) -> list[dict]:
@@ -248,7 +260,7 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             }
 
     # Read LLM logs
-    llm_events, player_costs = _read_llm_events(game_dir)
+    llm_events, player_costs, player_tools = _read_llm_events(game_dir)
     llm_trace = _read_llm_trace(game_dir)
 
     # Build card images map from decklists
@@ -312,6 +324,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             entry["totalCostUsd"] = round(player_costs[name], 4)
         if name in placements:
             entry["placement"] = placements[name]
+        if name in player_tools:
+            entry["tools"] = player_tools[name]
         players_summary.append(entry)
 
     # Build output
