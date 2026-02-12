@@ -234,22 +234,6 @@ async def _fetch_state_summary(session: ClientSession) -> str:
         return ""
 
 
-# Tools the pilot is allowed to use.
-# Excludes wait_for_action: pass_priority is strictly better (auto-skips empty
-# priorities). Models that discover wait_for_action use it instead of pass_priority,
-# creating rapid polling loops that waste context and tokens.
-# Excludes auto_pass_until_event: prevents accidentally skipping all decisions.
-# Excludes is_action_on_me: pass_priority handles this.
-DEFAULT_PILOT_TOOLS = {
-    "pass_priority",
-    "get_action_choices",
-    "choose_action",
-    "get_game_state",
-    "get_oracle_text",
-    "send_chat_message",
-    "take_action",
-}
-
 # Tools that are purely informational (don't advance game state).
 # Used by stall detection to classify LLM turns.
 INFO_ONLY_TOOLS = {"get_game_state", "get_oracle_text", "send_chat_message", "save_strategy"}
@@ -291,9 +275,8 @@ def mcp_tools_to_openai(mcp_tools, allowed_tools: set[str] | None = None) -> lis
 
     Args:
         mcp_tools: Tool definitions from the MCP session.
-        allowed_tools: Set of tool names to include. Defaults to DEFAULT_PILOT_TOOLS.
+        allowed_tools: Set of tool names to include. None means include all.
     """
-    tool_filter = allowed_tools if allowed_tools is not None else DEFAULT_PILOT_TOOLS
     return [
         {
             "type": "function",
@@ -304,7 +287,7 @@ def mcp_tools_to_openai(mcp_tools, allowed_tools: set[str] | None = None) -> lis
             },
         }
         for tool in mcp_tools
-        if tool.name in tool_filter
+        if allowed_tools is None or tool.name in allowed_tools
     ]
 
 
@@ -804,13 +787,13 @@ async def run_pilot(
             _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
             tools_result = await session.list_tools()
-            allowed_tools = tools if tools is not None else DEFAULT_PILOT_TOOLS
             # Warn about tool names not available from the MCP bridge
-            available_mcp_names = {t.name for t in tools_result.tools}
-            unknown = allowed_tools - available_mcp_names
-            if unknown:
-                _log(f"[pilot] WARNING: Unknown tools not in MCP bridge: {sorted(unknown)}")
-            openai_tools = mcp_tools_to_openai(tools_result.tools, allowed_tools)
+            if tools is not None:
+                available_mcp_names = {t.name for t in tools_result.tools}
+                unknown = tools - available_mcp_names
+                if unknown:
+                    _log(f"[pilot] WARNING: Unknown tools not in MCP bridge: {sorted(unknown)}")
+            openai_tools = mcp_tools_to_openai(tools_result.tools, tools)
             openai_tools.append(SAVE_STRATEGY_TOOL)
             tool_names = [t["function"]["name"] for t in openai_tools]
             _log(f"[pilot] Available tools: {tool_names}")
@@ -861,7 +844,7 @@ def main() -> int:
     parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
     parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
     parser.add_argument("--reasoning-effort", default="", help="OpenRouter reasoning effort: low, medium, high")
-    parser.add_argument("--tools", default="", help="Comma-separated MCP tool names (default: DEFAULT_PILOT_TOOLS)")
+    parser.add_argument("--tools", default="", help="Comma-separated MCP tool names (default: all)")
     args = parser.parse_args()
 
     # Determine project root

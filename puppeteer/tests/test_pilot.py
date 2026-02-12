@@ -129,14 +129,12 @@ def _make_mcp_tool(name: str) -> MagicMock:
     return tool
 
 
-def test_mcp_tools_to_openai_default_filter():
-    """With no allowed_tools, should filter to DEFAULT_PILOT_TOOLS."""
+def test_mcp_tools_to_openai_no_filter():
+    """With no allowed_tools, should include all MCP tools."""
     mcp_tools = [_make_mcp_tool(name) for name in ["pass_priority", "choose_action", "wait_for_action"]]
     result = mcp_tools_to_openai(mcp_tools)
     names = {t["function"]["name"] for t in result}
-    assert "pass_priority" in names
-    assert "choose_action" in names
-    assert "wait_for_action" not in names  # Excluded from DEFAULT_PILOT_TOOLS
+    assert names == {"pass_priority", "choose_action", "wait_for_action"}
 
 
 def test_mcp_tools_to_openai_custom_filter():
