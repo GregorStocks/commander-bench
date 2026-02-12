@@ -2,7 +2,7 @@
 
 Issues are stored as individual JSON files in the `issues/` directory. The filename serves as the issue ID (e.g., `commander-zone-gy-exile-layout.json`).
 
-Closed issues should be deleted, not marked as closed.
+Resolved issues should be deleted, not marked as resolved/closed.
 
 ## Format
 

@@ -43,10 +43,10 @@ def lint_issues(project_root: Path) -> list[str]:
             )
             continue
 
-        # Closed issues should be deleted
-        if issue["status"] == "closed":
+        # Resolved/closed issues should be deleted
+        if issue["status"] != "open":
             errors.append(
-                f"{issue_file.name}: status is 'closed' (delete closed issues)"
+                f"{issue_file.name}: status is '{issue['status']}' (delete resolved issues)"
             )
 
         # Priority should be 1-4
