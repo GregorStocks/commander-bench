@@ -1,0 +1,10 @@
+{
+  "title": "Refactor McpServer.java into smaller, cleaner files",
+  "description": "McpServer.java is a monolithic file that handles tool definitions, tool dispatch, JSON serialization helpers, and the MCP stdio protocol all in one place. As we add/remove/modify tools, this file keeps growing and is hard to navigate.\n\nProposed split:\n- McpServer.java — stdio transport, JSON-RPC framing, main loop\n- McpToolRegistry.java — tool definitions (schemas, descriptions, examples)\n- McpToolDispatcher.java — switch/dispatch from tool name to BridgeCallbackHandler calls, argument parsing\n\nThe tool definition blocks are especially verbose (each tool is 20-40 lines of HashMap boilerplate). Consider a builder pattern or declarative approach to reduce noise.\n\nSource: Mage.Client.Headless/src/main/java/mage/client/headless/McpServer.java",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["headless-client", "mcp"],
+  "created_at": "2026-02-11T20:58:00.000000-08:00",
+  "updated_at": "2026-02-11T20:58:00.000000-08:00"
+}
