@@ -42,129 +42,29 @@ b. If not, check if `~/mage-bench-logs/${GAME_ID}/game_events.jsonl` exists. If 
    This creates `website/public/games/${GAME_ID}.json.gz`.
 c. If neither exists, tell the user and stop.
 
-### Step 3: Extract game overview
+### Step 3: Use reusable analysis scripts
 
-Decompress the gz to a temp file, then extract overview fields:
-```bash
-gunzip -k -c $GZ_PATH > /tmp/game_analysis.json
-python3 -c "
-import json
-d = json.load(open('/tmp/game_analysis.json'))
-print(f'Game: {d[\"id\"]}')
-print(f'Format: {d.get(\"deckType\",\"?\")} ({d.get(\"gameType\",\"?\")})')
-print(f'Turns: {d[\"totalTurns\"]}')
-print(f'Winner: {d[\"winner\"]}')
-for p in d['players']:
-    print(f'  {p[\"name\"]} ({p.get(\"model\",\"?\")}) - cost: \${p.get(\"totalCostUsd\",0):.2f} - placement: {p.get(\"placement\",\"?\")}')
-"
-```
+All analysis logic lives in `scripts/analysis/`. Check what already exists there before creating anything new — reuse or extend existing scripts. Run all scripts with `uv run python`.
 
-### Step 4: Reconstruct the game narrative
+If a script you need doesn't exist yet, **create it in `scripts/analysis/`** and check it in. Do NOT write inline `python3 -c "..."` one-liners. These scripts accumulate over time into a reusable analysis toolkit.
 
-Extract turn boundaries and key actions:
-```bash
-python3 -c "
-import json
-d = json.load(open('/tmp/game_analysis.json'))
-snapshots = d['snapshots']
-actions = d['actions']
-
-# Turn-boundary snapshots
-seen = set()
-for s in snapshots:
-    turn = s.get('turn', 0)
-    if turn not in seen:
-        seen.add(turn)
-        info = []
-        for p in s.get('players', []):
-            bf = [c.get('name','?') for c in p.get('battlefield', [])]
-            info.append(f'{p[\"name\"]}: {p.get(\"life\",\"?\")}hp hand={p.get(\"hand_count\", len(p.get(\"hand\",[])))}'
-                + (f' bf=[{\", \".join(bf)}]' if bf else ''))
-        print(f'Turn {turn}: {\" | \".join(info)}')
-
-print()
-# Key actions
-for a in actions:
-    msg = a.get('message', '')
-    dominated = any(x in msg.lower() for x in ['plays', 'casts', 'attacks', 'blocks', 'damage',
-        'destroys', 'dies', 'mulligans', 'wins', 'lost', 'activates', 'targets', 'sacrifices'])
-    if dominated or a.get('type') == 'chat':
-        prefix = '[CHAT] ' if a.get('type') == 'chat' else ''
-        print(f'  {prefix}{msg[:200]}')
-" 2>&1 | head -100
-```
-
-### Step 5: Analyze LLM events and errors
+Each script should accept a gz file path as an argument:
 
 ```bash
-python3 -c "
-import json
-from collections import Counter
-d = json.load(open('/tmp/game_analysis.json'))
-events = d.get('llmEvents', [])
-
-# Event type counts
-types = Counter(e.get('type','?') for e in events)
-print('=== LLM Event Types ===')
-for t, c in types.most_common(): print(f'  {t}: {c}')
-
-# By player
-print()
-for player in set(e.get('player','?') for e in events):
-    pe = [e for e in events if e.get('player') == player]
-    pt = Counter(e.get('type','?') for e in pe)
-    print(f'{player}: {dict(pt.most_common())}')
-
-# Failed tool calls
-print()
-print('=== Failed Tool Calls ===')
-for tc in events:
-    if tc.get('type') != 'tool_call': continue
-    result = str(tc.get('result', ''))
-    if any(x in result.lower() for x in ['error', 'out of range', 'required', 'invalid', 'failed']):
-        print(f'  {tc.get(\"player\",\"?\")} | {tc.get(\"tool\",\"?\")} | args={json.dumps(tc.get(\"args\",{}))} | {result[:200]}')
-
-# Stalls, resets, auto-pilot, errors
-print()
-for t in ['stall', 'context_reset', 'auto_pilot_mode', 'llm_error']:
-    evts = [e for e in events if e.get('type') == t]
-    if evts: print(f'{t}: {len(evts)} events')
-
-# Token/cost summary
-responses = [e for e in events if e.get('type') == 'llm_response' and e.get('usage')]
-print()
-for player in set(e.get('player','?') for e in responses):
-    pr = [e for e in responses if e.get('player') == player]
-    pt = sum(e['usage'].get('promptTokens',0) for e in pr)
-    ct = sum(e['usage'].get('completionTokens',0) for e in pr)
-    print(f'{player}: {len(pr)} responses, {pt:,} prompt, {ct:,} completion tokens')
-"
+uv run python scripts/analysis/game_overview.py $GZ_PATH
+uv run python scripts/analysis/game_narrative.py $GZ_PATH
+uv run python scripts/analysis/llm_events.py $GZ_PATH
+uv run python scripts/analysis/llm_reasoning.py $GZ_PATH
 ```
 
-### Step 6: Sample LLM reasoning
+The scripts should cover:
 
-Extract a few reasoning samples from each player to assess decision quality (mulligan, combat, spell targeting):
-```bash
-python3 -c "
-import json
-d = json.load(open('/tmp/game_analysis.json'))
-events = d.get('llmEvents', [])
-for player in set(e.get('player','?') for e in events):
-    print(f'=== {player} ===')
-    count = 0
-    for e in events:
-        if e.get('type') == 'llm_response' and e.get('player') == player:
-            r = e.get('reasoning', '')
-            if len(r) > 50:
-                print(f'--- Sample {count+1} ---')
-                print(r[:600])
-                print()
-                count += 1
-                if count >= 4: break
-" 2>&1 | head -80
-```
+- **game_overview.py**: Game ID, format, turns, winner, player names/models/costs/placements.
+- **game_narrative.py**: Turn-boundary board states (life, hand size, battlefield) and key actions (plays, casts, attacks, blocks, damage, etc.). Include chat messages prefixed with `[CHAT]`.
+- **llm_events.py**: Event type counts by player, failed tool calls (with args and error messages), stalls/resets/auto-pilot/llm_error counts, and token/cost summaries.
+- **llm_reasoning.py**: Sample 3-4 reasoning excerpts per player from `llm_response` events to assess decision quality (mulligan, combat, spell targeting).
 
-### Step 7: Check existing issues and file new ones
+### Step 4: Check existing issues and file new ones
 
 ```bash
 for f in issues/*.json; do echo "$(basename "$f" .json): $(python3 -c "import json; print(json.load(open('$f'))['title'])")"; done
@@ -189,7 +89,7 @@ Priority: P1 = crashes/broken actions, P2 = loops/stalling/repeated errors, P3 =
 
 Labels: `headless-client`, `puppeteer`, `pilot`, `streaming-client`
 
-### Step 8: Present summary
+### Step 5: Present summary
 
 Summarize findings: game outcome, key plays, LLM quality assessment, bugs found (with issue filenames), and any model-only issues noted.
 
@@ -197,7 +97,6 @@ Summarize findings: game outcome, key plays, LLM quality assessment, bugs found 
 
 - Read raw pilot logs, bridge logs, error logs, or server logs
 - Trace bugs to specific source code lines
-- Create debugging scripts in `scripts/debugging/`
 - Update `doc/investigating-game-logs.md`
 
 For deeper analysis with source code tracing, use `/analyze-game` instead.
