@@ -26,15 +26,16 @@ Pick and solve exactly **one** issue, then create a PR.
    - If the script **succeeds** (exit 0): you claimed it. Continue to step 6.
    - If the script **fails** (exit 1): someone else claimed it first. Re-run step 3 and go back to step 4. Give up after 5 failed attempts and tell the user no unclaimed issues are available.
 6. **Enter plan mode** — explore the codebase, design your approach, and present it to the user for feedback before writing any code. This is the user's chance to redirect you if the approach is wrong.
-7. Implement the fix. Push progress:
+7. **Create tasks** using `TaskCreate` for the remaining steps (implement, test, make check, delete issue file, push & update PR). This ensures no steps get skipped — mark each task in_progress when you start it and completed when you finish it.
+8. Implement the fix. Push progress:
    ```bash
    git push origin HEAD
    ```
-8. Update tests to expect the correct behavior
-9. Run `make check` to verify lint, typecheck, and tests pass
-10. Delete the issue file (e.g., `rm issues/<issue-filename>.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
-11. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
-12. Push final changes, update the PR title/description, and mark it as ready:
+9. Update tests to expect the correct behavior
+10. Run `make check` to verify lint, typecheck, and tests pass
+11. Delete the issue file (e.g., `rm issues/<issue-filename>.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
+12. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
+13. Push final changes, update the PR title/description, and mark it as ready:
     ```bash
     git push origin HEAD
     gh pr edit --title "<concise PR title>" --body "<PR description with summary, test plan>"
