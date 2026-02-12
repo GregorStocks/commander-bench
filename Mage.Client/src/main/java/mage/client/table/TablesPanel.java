@@ -1714,7 +1714,7 @@ public class TablesPanel extends javax.swing.JPanel {
 
             int numPlayers = config.getPlayers().size();
             int botCount = config.getBotCount();
-            List<DeckCardLists> aiDecks = pickAiPuppeteerDecks(botCount, testDeck);
+            List<DeckCardLists> aiDecks = pickAiPuppeteerDecks(botCount);
 
             String gameTypeStr = config.getGameType() != null ? config.getGameType() : "Commander Free For All";
             String deckTypeStr = config.getDeckType() != null ? config.getDeckType() : "Variant Magic - Freeform Commander";
@@ -1760,12 +1760,17 @@ public class TablesPanel extends javax.swing.JPanel {
                         // Try from parent directory (when running from Mage.Client/)
                         deckFile = new File("../" + deckPath);
                     }
+                    if (!deckFile.exists()) {
+                        LOGGER.error("AI Puppeteer: deck file not found: " + deckPath + " for " + name + ". Exiting.");
+                        System.exit(1);
+                    }
                     try {
                         deckToUse = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
                         LOGGER.info("AI Puppeteer: loaded deck from " + deckFile.getPath() + " for " + name);
                     } catch (Exception ex) {
-                        LOGGER.warn("AI Puppeteer: failed to load deck " + deckPath + " for " + name + ", using fallback", ex);
-                        deckToUse = player.isBot() && deckIndex < aiDecks.size() ? aiDecks.get(deckIndex) : testDeck;
+                        LOGGER.error("AI Puppeteer: failed to load deck " + deckPath + " for " + name + ". Exiting.", ex);
+                        System.exit(1);
+                        throw new RuntimeException(ex); // unreachable, satisfies compiler
                     }
                 } else if (player.isBot() && deckIndex < aiDecks.size()) {
                     deckToUse = aiDecks.get(deckIndex);
@@ -1793,7 +1798,7 @@ public class TablesPanel extends javax.swing.JPanel {
                 // Start a thread to wait for bridge clients and then start the match
                 final UUID finalTableId = table.getTableId();
                 Thread starter = new Thread(() -> {
-                    long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(180);
+                    long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(600);
                     while (System.currentTimeMillis() < deadline) {
                         try {
                             Collection<TableView> tables = SessionHandler.getTables(roomId);
@@ -1812,7 +1817,7 @@ public class TablesPanel extends javax.swing.JPanel {
                             LOGGER.warn("AI Puppeteer: error polling for ready state", e);
                         }
                     }
-                    LOGGER.error("AI Puppeteer: timed out waiting for bridge clients to join table " + finalTableId + " (180s). Exiting.");
+                    LOGGER.error("AI Puppeteer: timed out waiting for bridge clients to join table " + finalTableId + " (600s). Exiting.");
                     System.exit(1);
                 }, "AIPuppeteer-MatchStarter");
                 starter.setDaemon(true);
@@ -1847,7 +1852,7 @@ public class TablesPanel extends javax.swing.JPanel {
         }
         aiPuppeteerAutoWatchTriggered = true;
         Thread watcher = new Thread(() -> {
-            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(180);
+            long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(600);
             while (System.currentTimeMillis() < deadline) {
                 Collection<TableView> tables = SessionHandler.getTables(roomId);
                 for (TableView tableView : tables) {
@@ -1893,7 +1898,7 @@ public class TablesPanel extends javax.swing.JPanel {
             int aiPlayers = includeHuman ? numPlayers - 1 : numPlayers;
             List<DeckCardLists> aiDecks = null;
             if (!includeHuman && SessionHandler.isAiPuppeteerMode()) {
-                aiDecks = pickAiPuppeteerDecks(aiPlayers, testDeck);
+                aiDecks = pickAiPuppeteerDecks(aiPlayers);
             }
 
             MatchOptions options = new MatchOptions(gameName, gameType, multiPlayer);
@@ -1944,26 +1949,26 @@ public class TablesPanel extends javax.swing.JPanel {
         }
     }
 
-    private List<DeckCardLists> pickAiPuppeteerDecks(int count, DeckCardLists fallbackDeck) {
+    private List<DeckCardLists> pickAiPuppeteerDecks(int count) {
+        if (count == 0) {
+            return Collections.emptyList();
+        }
         List<File> deckFiles = findAiPuppeteerDeckFiles();
         if (deckFiles.isEmpty()) {
-            LOGGER.warn("AI puppeteer decks not found; using fallback deck.");
-            return Collections.nCopies(count, fallbackDeck);
+            LOGGER.error("AI puppeteer decks not found and " + count + " bot deck(s) needed. Exiting.");
+            System.exit(1);
         }
         Collections.shuffle(deckFiles, RandomUtil.getRandom());
         List<DeckCardLists> decks = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             File deckFile = deckFiles.get(i % deckFiles.size());
-            DeckCardLists deck = null;
             try {
-                deck = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
+                DeckCardLists deck = DeckImporter.importDeckFromFile(deckFile.getPath(), false);
+                decks.add(deck);
             } catch (Exception ex) {
-                LOGGER.warn("AI puppeteer failed to load deck " + deckFile.getPath() + ", using fallback.", ex);
+                LOGGER.error("AI puppeteer failed to load deck " + deckFile.getPath() + ". Exiting.", ex);
+                System.exit(1);
             }
-            if (deck == null) {
-                deck = fallbackDeck;
-            }
-            decks.add(deck);
         }
         LOGGER.info("AI puppeteer using " + decks.size() + " commander decks from " + deckFiles.get(0).getParent());
         return decks;
