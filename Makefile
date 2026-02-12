@@ -77,14 +77,14 @@ website-build: leaderboard
 
 # Run a game. CONFIG selects a config from configs/ (or a path to a custom file).
 # Default: 4 CPU players, no API keys needed.
-#   make run                        # free, no API keys (4 CPU players)
-#   make run CONFIG=gauntlet           # 4 random LLM pilots (needs OPENROUTER_API_KEY)
-#   make run CONFIG=frontier        # frontier models from 4 major labs
+#   make run                              # free, no API keys (2 CPU Standard duel)
+#   make run CONFIG=commander-gauntlet    # 4 random LLM pilots (needs OPENROUTER_API_KEY)
+#   make run CONFIG=commander-frontier    # frontier models from 4 major labs
 #   make run CONFIG=path/to/x.json  # custom config file
 # Pass OUTPUT to specify recording path: make run OUTPUT=/path/to/video.mov
 # Overlay controls: make run ARGS="--overlay-port 18080"
 # Disable overlay: make run ARGS="--no-overlay"
-CONFIG ?= dumb
+CONFIG ?= standard-dumb
 .PHONY: run
 run: website-build
 	@CONFIG_PATH="$(CONFIG)"; \

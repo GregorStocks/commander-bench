@@ -178,24 +178,24 @@ def test_run_tag_no_config_file_raises():
         _ = config.run_tag
 
 
-def test_run_tag_dumb():
-    config = Config(config_file=Path("configs/dumb.json"))
-    assert config.run_tag == "dumb"
+def test_run_tag_commander_dumb():
+    config = Config(config_file=Path("configs/commander-dumb.json"))
+    assert config.run_tag == "commander-dumb"
 
 
-def test_run_tag_gauntlet():
-    config = Config(config_file=Path("configs/gauntlet.json"))
-    assert config.run_tag == "gauntlet"
+def test_run_tag_commander_gauntlet():
+    config = Config(config_file=Path("configs/commander-gauntlet.json"))
+    assert config.run_tag == "commander-gauntlet"
 
 
-def test_run_tag_frontier():
-    config = Config(config_file=Path("configs/frontier.json"))
-    assert config.run_tag == "frontier"
+def test_run_tag_commander_frontier():
+    config = Config(config_file=Path("configs/commander-frontier.json"))
+    assert config.run_tag == "commander-frontier"
 
 
-def test_run_tag_llm4():
-    config = Config(config_file=Path("configs/llm4.json"))
-    assert config.run_tag == "llm4"
+def test_run_tag_commander_1v3():
+    config = Config(config_file=Path("configs/commander-1v3.json"))
+    assert config.run_tag == "commander-1v3"
 
 
 def test_run_tag_legacy_dumb():

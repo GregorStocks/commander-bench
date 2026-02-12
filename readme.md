@@ -28,25 +28,34 @@ Card images aren't included in the repo. Download them once via the XMage deskto
 
 ```bash
 export OPENROUTER_API_KEY="sk-..."
-make run-llm4
+make run CONFIG=commander-gauntlet
 ```
 
-This runs 4 LLM pilots against each other in a Commander game with streaming and video recording. Recordings and logs are saved to `~/mage-bench-logs/`.
+This runs 4 random LLM pilots against each other in a Commander game with streaming and video recording. Recordings and logs are saved to `~/mage-bench-logs/`.
 
-Other targets:
+Other configs:
 
 ```bash
-# No LLM, no API keys needed — 1 sleepwalker + 1 potato + 2 CPU players
-make run-dumb
+# Default: no API keys needed (2 CPU Standard duel)
+make run
+
+# Frontier models: one from each major lab
+make run CONFIG=commander-frontier
 
 # 1 LLM pilot + 3 CPU opponents
-make run-llm
+make run CONFIG=commander-1v3
 
 # Long-lived test server (stays running between games)
-make run-staller
+make run CONFIG=modern-staller
+
+# List all available configs
+make configs
+
+# Custom config file
+make run CONFIG=path/to/my-config.json
 
 # Record to a specific file
-make run-dumb OUTPUT=/path/to/video.mov
+make run OUTPUT=/path/to/video.mov
 ```
 
 ### YouTube upload (optional)
