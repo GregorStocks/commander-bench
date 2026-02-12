@@ -36,6 +36,11 @@ fi
 TITLE=$(jq -r '.title' "issues/$ISSUE.json")
 BRANCH=$(git branch --show-current)
 
+# Ensure at least one commit ahead of master so the PR can be created
+if [ -z "$(git log origin/master..HEAD --oneline 2>/dev/null)" ]; then
+    git commit --allow-empty -m "Claim: $TITLE"
+fi
+
 # Push current branch
 git push -u origin "$BRANCH"
 
