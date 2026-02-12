@@ -408,7 +408,7 @@ public class SessionImpl implements Session {
                  with a default value of 3. Once the configured number of retries has been exhausted,
                  an org.jboss.remoting.InvocationFailureException will be thrown.
                  */
-                clientMetadata.put("numberOfCallRetries", "1");
+                clientMetadata.put("numberOfCallRetries", String.valueOf(connection.getNumberOfCallRetries()));
 
                 /**
                  * I'll explain the meaning of "secondaryBindPort" and

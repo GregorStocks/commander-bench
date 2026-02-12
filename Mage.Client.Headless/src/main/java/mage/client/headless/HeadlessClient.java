@@ -137,6 +137,8 @@ public class HeadlessClient {
         connection.setUsername(username);
         connection.setPassword(password);
         connection.setProxyType(Connection.ProxyType.NONE);
+        connection.setSocketWriteTimeout(30000);   // 30s (default 10s too short for large game states)
+        connection.setNumberOfCallRetries(3);      // JBoss default (default 1 fails on transient errors)
 
         // Set user data with allowRequestShowHandCards=true so spectators can see hands
         UserData userData = new UserData(
