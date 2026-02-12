@@ -787,12 +787,15 @@ async def run_pilot(
             _log(f"[pilot] MCP initialized: {result.serverInfo}")
 
             tools_result = await session.list_tools()
-            # Warn about tool names not available from the MCP bridge
+            # Fail fast if toolset references tools the MCP bridge doesn't have
             if tools is not None:
                 available_mcp_names = {t.name for t in tools_result.tools}
                 unknown = tools - available_mcp_names
                 if unknown:
-                    _log(f"[pilot] WARNING: Unknown tools not in MCP bridge: {sorted(unknown)}")
+                    raise ValueError(
+                        f"Toolset references unknown MCP tools: {sorted(unknown)}. "
+                        f"Available: {sorted(available_mcp_names)}"
+                    )
             openai_tools = mcp_tools_to_openai(tools_result.tools, tools)
             openai_tools.append(SAVE_STRATEGY_TOOL)
             tool_names = [t["function"]["name"] for t in openai_tools]
