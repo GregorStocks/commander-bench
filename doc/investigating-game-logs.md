@@ -113,7 +113,7 @@ jq -r 'select(.type=="context_trim") | .rendered_size' "$GAME_DIR"/*_llm.jsonl |
 ## Mana payment errors
 
 ```bash
-# Find GAME_CHOOSE_ABILITY errors (dual land mana selection)
+# Find GAME_CHOOSE_ABILITY errors (dual land mana selection or multi-ability permanents)
 grep "GAME_CHOOSE_ABILITY" "$GAME_DIR"/*_errors.log
 
 # Find GAME_PLAY_MANA answer=true rejections
@@ -126,6 +126,9 @@ grep "choose mana source/pool" "$GAME_DIR"/*_errors.log
 grep "no auto source available" "$GAME_DIR"/*_pilot.log
 # 2. Check if the spell is still in hand after the "cast" (compare hand before/after in bridge log)
 jq -r 'select(.method=="GAME_UPDATE" or .method=="GAME_UPDATE_AND_INFORM") | "\(.ts) \(.data)"' "$GAME_DIR"/*_bridge.jsonl | grep -A1 "GAME_PLAY_MANA"
+
+# Find mana pool payment loop circuit breaker triggers
+grep "pool payment not progressing" "$GAME_DIR"/*_pilot.log
 ```
 
 ## Tracing auto-mana payment sequences
@@ -138,4 +141,28 @@ jq -r 'select(.method=="GAME_PLAY_MANA") | .ts' "$GAME_DIR"/*_bridge.jsonl
 # If the pilot log shows no GAME_PLAY_MANA interaction between the cast and pass_priority,
 # auto-mana handled it silently (or the pending action was consumed by pass_priority)
 grep -n "GAME_PLAY_MANA\|pass_priority\|no auto source" "$GAME_DIR"/*_pilot.log
+```
+
+## Oracle text lookup issues
+
+```bash
+# Check if card database is broken (all lookups fail = H2 race condition)
+# If every lookup returns "not found", the DB is empty — not a per-card issue
+jq -r 'select(.tool=="get_oracle_text") | .result' "$GAME_DIR"/*_llm.jsonl | grep -c "not found"
+
+# Find oracle text stall loops (model retrying card name variations)
+grep -c "get_oracle_text" "$GAME_DIR"/*_pilot.log
+
+# Check if stall was caused by oracle lookups
+grep "last tools.*get_oracle_text" "$GAME_DIR"/*_pilot.log
+```
+
+## Loop detector firing frequency
+
+```bash
+# Count loop detections per player (high counts = model spinning)
+grep -c "Loop detected" "$GAME_DIR"/*_pilot.log
+
+# See which callback types triggered loop detection
+grep -oP "auto-handling \K\w+" "$GAME_DIR"/*_pilot.log | sort | uniq -c | sort -rn
 ```
