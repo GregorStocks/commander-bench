@@ -2,9 +2,9 @@
   "matchTimeLimit": "MIN__60",
   "matchBufferTime": "NONE",
   "players": [
-    {"type": "pilot", "personality": "random", "model": "anthropic/claude-opus-4.6", "deck": "random"},
-    {"type": "pilot", "personality": "random", "model": "google/gemini-3-pro-preview", "deck": "random"},
-    {"type": "pilot", "personality": "random", "model": "openai/o3", "deck": "random"},
-    {"type": "pilot", "personality": "random", "model": "x-ai/grok-4", "deck": "random"}
+    {"type": "pilot", "preset": "opus-medium", "personality": "random", "deck": "random"},
+    {"type": "pilot", "preset": "gem3p-medium", "personality": "random", "deck": "random"},
+    {"type": "pilot", "preset": "o3-medium", "personality": "random", "deck": "random"},
+    {"type": "pilot", "preset": "grok4-medium", "personality": "random", "deck": "random"}
   ]
 }

@@ -14,6 +14,7 @@ from mcp.client.stdio import stdio_client
 from openai import AsyncOpenAI
 
 from puppeteer.auto_pass import auto_pass_loop
+from puppeteer.config import load_prompts
 from puppeteer.game_log import GameLogWriter
 from puppeteer.llm_cost import (
     DEFAULT_BASE_URL,
@@ -277,72 +278,12 @@ SAVE_STRATEGY_TOOL = {
     },
 }
 
-DEFAULT_SYSTEM_PROMPT = """\
-You are a competitive Magic: The Gathering player. Your goal is to WIN the game. \
-Play to maximize your win rate — make optimal strategic decisions, not flashy or \
-entertaining ones. Think carefully about sequencing, card evaluation, and combat math.
 
-GAME LOOP - follow this exactly:
-1. Call pass_priority - this waits until you need to make a decision \
-   (it auto-skips phases where you have no playable cards).
-2. Call get_action_choices - this shows you what you can do RIGHT NOW
-3. Read the choices carefully, then call choose_action with your decision
-4. Go back to step 1
-
-CRITICAL RULES:
-- ALWAYS call get_action_choices before choose_action. Never guess.
-- When get_action_choices shows playable cards, you should play them before passing. \
-  Only pass (answer=false) when you have nothing more you want to play this phase.
-
-UNDERSTANDING get_action_choices OUTPUT:
-- All cards listed in response_type=select are confirmed castable with your current mana. \
-  The server pre-filters to only show cards you can legally play right now.
-- mana_pool shows your current floating mana (e.g. {"R": 2, "W": 1}).
-- untapped_lands shows how many untapped lands you control.
-- Cards with [Cast] are spells from your hand. Cards with [Activate] are abilities \
-  on permanents you control.
-
-MULLIGAN DECISIONS:
-When you see "Mulligan" in GAME_ASK, your_hand shows your current hand.
-- choose_action(answer=true) means YES MULLIGAN - throw away this hand and draw new cards
-- choose_action(answer=false) means NO KEEP - keep this hand and start playing
-Think carefully: answer=false means KEEP, answer=true means MULLIGAN.
-
-HOW ACTIONS WORK:
-- response_type=select: Cards listed are confirmed playable with your current mana. \
-  Play a card with choose_action(index=N). Pass with choose_action(answer=false) only \
-  when you are done playing cards this phase.
-- response_type=boolean with no playable cards: Pass with choose_action(answer=false).
-- GAME_ASK (boolean): Answer true/false based on what's being asked.
-- GAME_CHOOSE_ABILITY (index): Pick an ability by index.
-- GAME_TARGET (index): Pick a target by index. If required=true, you must pick one.
-
-COMBAT - ATTACKING:
-When you see combat_phase="declare_attackers" in get_action_choices:
-- Choices with [Attack] are creatures you can declare as attackers. \
-  Select one with choose_action(index=N) to toggle it as an attacker.
-- After selecting, call get_action_choices again to select more attackers.
-- "All attack" declares all your creatures as attackers at once.
-- When done selecting attackers, call choose_action(answer=true) to confirm.
-- To skip attacking, call choose_action(answer=false).
-
-COMBAT - BLOCKING:
-When you see combat_phase="declare_blockers" in get_action_choices:
-- "incoming_attackers" shows enemy creatures attacking you.
-- Choices with [Block] are your creatures that can block.
-- Select a blocker with choose_action(index=N), then you may be asked which attacker to block.
-- When done selecting blockers, call choose_action(answer=true) to confirm.
-- To not block, call choose_action(answer=false).
-
-STRATEGY NOTES:
-Call save_strategy(text) to save notes that persist if your context gets reset \
-(e.g. opponent playstyles, your game plan, key threats). Max 500 chars, overwrites previous.
-
-CHAT:
-Use send_chat_message to talk to your opponents during the game. React to big plays, \
-comment on the board state, or just have fun. Check the recent_chat field in pass_priority \
-results to see what others are saying.\
-"""
+def _load_default_system_prompt() -> str:
+    """Load the default system prompt from prompts.json."""
+    prompts = load_prompts(None)
+    assert "default" in prompts, "prompts.json must contain a 'default' key"
+    return prompts["default"]
 
 
 def mcp_tools_to_openai(mcp_tools) -> list[dict]:
@@ -785,7 +726,7 @@ async def run_pilot(
     api_key: str = "",
     model: str = DEFAULT_MODEL,
     base_url: str = DEFAULT_BASE_URL,
-    system_prompt: str = DEFAULT_SYSTEM_PROMPT,
+    system_prompt: str = "",
     game_dir: Path | None = None,
     prices: dict[str, tuple[float, float]] | None = None,
     max_interactions_per_turn: int | None = None,
@@ -901,7 +842,7 @@ def main() -> int:
     parser.add_argument("--api-key", default="", help="API key (prefer OPENROUTER_API_KEY env var)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help=f"API base URL (default: {DEFAULT_BASE_URL})")
-    parser.add_argument("--system-prompt", default=DEFAULT_SYSTEM_PROMPT, help="Custom system prompt")
+    parser.add_argument("--system-prompt", default="", help="Custom system prompt")
     parser.add_argument("--game-dir", type=Path, help="Game directory for cost file output")
     parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
     parser.add_argument("--reasoning-effort", default="", help="OpenRouter reasoning effort: low, medium, high")
@@ -928,6 +869,9 @@ def main() -> int:
     prices = load_prices()
     _log(f"[pilot] Project root: {project_root}")
 
+    # Load system prompt: CLI arg > prompts.json default
+    system_prompt = args.system_prompt or _load_default_system_prompt()
+
     try:
         asyncio.run(
             run_pilot(
@@ -939,7 +883,7 @@ def main() -> int:
                 api_key=api_key,
                 model=args.model,
                 base_url=args.base_url,
-                system_prompt=args.system_prompt,
+                system_prompt=system_prompt,
                 game_dir=args.game_dir,
                 prices=prices,
                 max_interactions_per_turn=args.max_interactions_per_turn,

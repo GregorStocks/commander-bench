@@ -14,10 +14,13 @@ from puppeteer.config import (
     PotatoPlayer,
     _generate_player_name,
     _resolve_personality,
+    _resolve_preset,
     _resolve_randoms,
     _validate_name_parts,
     load_models,
     load_personalities,
+    load_presets,
+    load_prompts,
 )
 
 
@@ -34,17 +37,28 @@ def test_config_load_players_from_json():
         "players": [
             {"type": "potato", "name": "spud"},
             {"type": "cpu", "name": "skynet"},
-            {"type": "pilot", "name": "ace", "model": "test/model"},
+            {"type": "pilot", "name": "ace", "preset": "test-preset"},
         ],
         "matchTimeLimit": "MIN__60",
         "gameType": "Two Player Duel",
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(config_data, f)
-        config_path = Path(f.name)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
 
-    try:
+        # Create presets + prompts so preset resolution works
+        presets = {
+            "presets": {"test-preset": {"model": "test/model", "system_prompt": "default"}},
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "You are a test player."}))
+        (tmpdir_path / "personalities.json").write_text("{}")
+        (tmpdir_path / "models.json").write_text('{"models": []}')
+
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
         config = Config(config_file=config_path)
         config.load_config()
 
@@ -54,10 +68,9 @@ def test_config_load_players_from_json():
         assert isinstance(config.cpu_players[0], CpuPlayer)
         assert len(config.pilot_players) == 1
         assert isinstance(config.pilot_players[0], PilotPlayer)
+        assert config.pilot_players[0].model == "test/model"
         assert config.match_time_limit == "MIN__60"
         assert config.game_type == "Two Player Duel"
-    finally:
-        config_path.unlink()
 
 
 def test_player_dataclass_fields():
@@ -71,21 +84,31 @@ def test_player_dataclass_fields():
 
 def test_get_players_config_json_roundtrip():
     """Load players from JSON, serialize back, verify structure is preserved."""
-    config_data = {
-        "players": [
-            {"type": "potato", "name": "spud", "deck": "decks/burn.dck"},
-            {"type": "pilot", "name": "ace", "model": "test/model", "deck": "decks/control.dck"},
-            {"type": "cpu", "name": "skynet"},
-        ],
-        "gameType": "Two Player Duel",
-        "deckType": "Constructed - Legacy",
-    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(config_data, f)
-        config_path = Path(f.name)
+        presets = {
+            "presets": {"test-preset": {"model": "test/model", "system_prompt": "default"}},
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test prompt."}))
+        (tmpdir_path / "personalities.json").write_text("{}")
+        (tmpdir_path / "models.json").write_text('{"models": []}')
 
-    try:
+        config_data = {
+            "players": [
+                {"type": "potato", "name": "spud", "deck": "decks/burn.dck"},
+                {"type": "pilot", "name": "ace", "preset": "test-preset", "deck": "decks/control.dck"},
+                {"type": "cpu", "name": "skynet"},
+            ],
+            "gameType": "Two Player Duel",
+            "deckType": "Constructed - Legacy",
+        }
+
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
         config = Config(config_file=config_path)
         config.load_config()
         result = json.loads(config.get_players_config_json())
@@ -96,8 +119,6 @@ def test_get_players_config_json_roundtrip():
         assert "spud" in names
         assert "ace" in names
         assert "skynet" in names
-    finally:
-        config_path.unlink()
 
 
 def test_get_players_config_json_empty():
@@ -186,39 +207,90 @@ def test_run_tag_custom():
     assert config.run_tag == "custom-thing"
 
 
+# --- Preset tests ---
+
+SAMPLE_PRESETS = {
+    "presets": {
+        "fast-medium": {"model": "test/model-a", "reasoning_effort": "medium", "system_prompt": "default"},
+        "slow-high": {"model": "test/model-b", "reasoning_effort": "high", "system_prompt": "default"},
+        "bare": {"model": "test/model-c", "system_prompt": "default"},
+    },
+    "random_pool": ["fast-medium", "slow-high"],
+}
+
+SAMPLE_PROMPTS: dict[str, str] = {
+    "default": "You are a test player.",
+}
+
+
+def test_preset_resolves_model_and_effort():
+    """Preset should set model and reasoning_effort on player."""
+    player = PilotPlayer(name="test", preset="fast-medium")
+    _resolve_preset(player, SAMPLE_PRESETS, SAMPLE_PROMPTS)
+    assert player.model == "test/model-a"
+    assert player.reasoning_effort == "medium"
+    assert player.system_prompt == "You are a test player."
+
+
+def test_preset_without_reasoning_effort():
+    """Preset without reasoning_effort should leave it None."""
+    player = PilotPlayer(name="test", preset="bare")
+    _resolve_preset(player, SAMPLE_PRESETS, SAMPLE_PROMPTS)
+    assert player.model == "test/model-c"
+    assert player.reasoning_effort is None
+
+
+def test_preset_unknown_raises():
+    """Unknown preset name should raise ValueError."""
+    player = PilotPlayer(name="test", preset="nonexistent")
+    with pytest.raises(ValueError, match="Unknown preset"):
+        _resolve_preset(player, SAMPLE_PRESETS, SAMPLE_PROMPTS)
+
+
+def test_preset_unknown_prompt_raises():
+    """Preset referencing unknown prompt key should raise ValueError."""
+    presets = {"presets": {"bad": {"model": "test/m", "system_prompt": "missing"}}, "random_pool": []}
+    player = PilotPlayer(name="test", preset="bad")
+    with pytest.raises(ValueError, match="unknown prompt"):
+        _resolve_preset(player, presets, SAMPLE_PROMPTS)
+
+
+def test_preset_no_preset_is_noop():
+    """Player without preset should not be modified."""
+    player = PilotPlayer(name="test")
+    _resolve_preset(player, SAMPLE_PRESETS, SAMPLE_PROMPTS)
+    assert player.model is None
+    assert player.reasoning_effort is None
+
+
 # --- Personality tests ---
 
 SAMPLE_PERSONALITIES = {
     "test-pal": {
-        "model": "test/model-x",
-        "name": "TestPal",
+        "name_part": "Pal",
         "prompt_suffix": "You are very friendly.",
-        "reasoning_effort": "high",
     },
     "test-villain": {
-        "model": "test/model-y",
-        "name": "TestVillain",
+        "name_part": "Villain",
         "prompt_suffix": "You are evil.",
     },
 }
 
 
-def test_personality_resolves_model():
-    """Personality should set model on player."""
-    player = PilotPlayer(name="placeholder")
+def test_personality_sets_prompt_suffix():
+    """Personality should set prompt_suffix on player."""
+    player = PilotPlayer(name="TestName", model="test/model-a")
     player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player.model == "test/model-x"
-    assert player.name == "TestPal"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, {}, had_explicit_name=True)
+    assert player.prompt_suffix == "You are very friendly."
 
 
-def test_personality_player_override_wins():
-    """Explicit model on player should beat personality default."""
-    player = PilotPlayer(name="MyName", model="my/override")
+def test_personality_does_not_set_model():
+    """Personality should NOT set model (that's the preset's job)."""
+    player = PilotPlayer(name="TestName")
     player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
-    assert player.model == "my/override"
-    assert player.name == "MyName"
+    _resolve_personality(player, SAMPLE_PERSONALITIES, {}, had_explicit_name=True)
+    assert player.model is None
 
 
 def test_personality_unknown_raises():
@@ -226,110 +298,101 @@ def test_personality_unknown_raises():
     player = PilotPlayer(name="test")
     player.personality = "nonexistent"
     with pytest.raises(ValueError, match="Unknown personality"):
-        _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
+        _resolve_personality(player, SAMPLE_PERSONALITIES, {}, had_explicit_name=True)
 
 
-def test_personality_name_from_personality():
-    """When no explicit name in JSON, personality name is used."""
-    player = PilotPlayer(name="player-0")
+def test_personality_explicit_name_preserved():
+    """Explicit name in player JSON should be kept."""
+    player = PilotPlayer(name="CustomName", model="test/model-a")
     player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player.name == "TestPal"
-
-
-def test_personality_explicit_name_overrides():
-    """Explicit name in player JSON should beat personality name."""
-    player = PilotPlayer(name="CustomName")
-    player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=True)
+    _resolve_personality(player, SAMPLE_PERSONALITIES, {}, had_explicit_name=True)
     assert player.name == "CustomName"
-
-
-def test_personality_prompt_suffix():
-    """prompt_suffix from personality should be stored on player."""
-    player = PilotPlayer(name="placeholder")
-    player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player.prompt_suffix == "You are very friendly."
-
-
-def test_personality_reasoning_effort():
-    """reasoning_effort from personality should fill in when not set on player."""
-    player = PilotPlayer(name="placeholder")
-    player.personality = "test-pal"
-    _resolve_personality(player, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player.reasoning_effort == "high"
-
-    # Player-level override wins
-    player2 = PilotPlayer(name="placeholder", reasoning_effort="low")
-    player2.personality = "test-pal"
-    _resolve_personality(player2, SAMPLE_PERSONALITIES, had_explicit_name=False)
-    assert player2.reasoning_effort == "low"
-
-
-def test_personality_missing_name_in_definition_raises():
-    """Personality without a name field should raise when player has no explicit name."""
-    bad_personalities = {"no-name": {"model": "test/model"}}
-    player = PilotPlayer(name="player-0")
-    player.personality = "no-name"
-    with pytest.raises(ValueError, match="must have a 'name' field"):
-        _resolve_personality(player, bad_personalities, had_explicit_name=False)
 
 
 def test_personality_name_too_long_raises():
     """Name exceeding 14 chars should raise ValueError."""
-    long_personalities = {"long": {"model": "test/m", "name": "ThisNameIsTooLong"}}
-    player = PilotPlayer(name="placeholder")
-    player.personality = "long"
+    player = PilotPlayer(name="ThisNameIsTooLong")
+    player.personality = "test-pal"
     with pytest.raises(ValueError, match="3-14 characters"):
-        _resolve_personality(player, long_personalities, had_explicit_name=False)
+        _resolve_personality(player, SAMPLE_PERSONALITIES, {}, had_explicit_name=True)
 
 
 def test_load_personalities_from_file():
     """load_personalities should read a JSON file."""
-    pdata = {"my-pal": {"model": "x/y", "name": "MyPal", "prompt_suffix": "hi"}}
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", prefix="personalities", delete=False, dir=tempfile.gettempdir()
-    ) as pf:
-        json.dump(pdata, pf)
-        pf_path = Path(pf.name)
+    pdata = {"my-pal": {"name_part": "Pal", "prompt_suffix": "hi"}}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        (tmpdir_path / "personalities.json").write_text(json.dumps(pdata))
+        config_path = tmpdir_path / "test-config.json"
+        config_path.write_text("{}")
 
-    # Create a fake config file in the same directory so load_personalities finds it
-    config_path = pf_path.parent / "test-config.json"
-    config_path.write_text("{}")
-
-    try:
-        # Rename personalities file to match expected name
-        personalities_path = pf_path.parent / "personalities.json"
-        pf_path.rename(personalities_path)
         result = load_personalities(config_path)
         assert "my-pal" in result
-        assert result["my-pal"]["model"] == "x/y"
-    finally:
-        personalities_path.unlink(missing_ok=True)
-        config_path.unlink(missing_ok=True)
+        assert result["my-pal"]["name_part"] == "Pal"
 
 
-def test_personality_end_to_end_config_load():
-    """Full integration: config JSON with personality field loads correctly."""
-    # Create a temp dir with both config and personalities files
+def test_load_presets_from_file():
+    """load_presets should read a JSON file."""
+    pdata = {"presets": {"x": {"model": "test/m", "system_prompt": "default"}}, "random_pool": []}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        (tmpdir_path / "presets.json").write_text(json.dumps(pdata))
+        config_path = tmpdir_path / "test-config.json"
+        config_path.write_text("{}")
+
+        result = load_presets(config_path)
+        assert "presets" in result
+        assert "x" in result["presets"]
+
+
+def test_load_prompts_from_file():
+    """load_prompts should read a JSON file."""
+    pdata = {"default": "Hello world"}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        (tmpdir_path / "prompts.json").write_text(json.dumps(pdata))
+        config_path = tmpdir_path / "test-config.json"
+        config_path.write_text("{}")
+
+        result = load_prompts(config_path)
+        assert result["default"] == "Hello world"
+
+
+def test_preset_end_to_end_config_load():
+    """Full integration: config JSON with preset+personality loads correctly."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
         personalities = {
             "test-hero": {
-                "model": "test/hero-model",
-                "name": "TheHero",
+                "name_part": "Hero",
                 "prompt_suffix": "You are heroic.",
-                "reasoning_effort": "medium",
             }
         }
         (tmpdir_path / "personalities.json").write_text(json.dumps(personalities))
 
+        presets = {
+            "presets": {
+                "test-preset": {"model": "test/hero-model", "reasoning_effort": "medium", "system_prompt": "default"},
+            },
+            "random_pool": [],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Be a great player."}))
+        (tmpdir_path / "models.json").write_text(
+            json.dumps({"models": [{"id": "test/hero-model", "name": "Hero Model", "name_part": "HeroM"}]})
+        )
+
         config_data = {
             "players": [
-                {"type": "pilot", "personality": "test-hero", "deck": "random"},
-                {"type": "pilot", "name": "Override", "personality": "test-hero", "deck": "random"},
+                {"type": "pilot", "preset": "test-preset", "personality": "test-hero", "deck": "random"},
+                {
+                    "type": "pilot",
+                    "name": "Override",
+                    "preset": "test-preset",
+                    "personality": "test-hero",
+                    "deck": "random",
+                },
             ]
         }
         config_path = tmpdir_path / "config.json"
@@ -340,15 +403,16 @@ def test_personality_end_to_end_config_load():
 
         assert len(config.pilot_players) == 2
 
-        # First player: name and model from personality
+        # First player: model from preset, prompt_suffix from personality, name generated
         p1 = config.pilot_players[0]
-        assert p1.name == "TheHero"
         assert p1.model == "test/hero-model"
         assert p1.prompt_suffix == "You are heroic."
         assert p1.reasoning_effort == "medium"
+        assert p1.system_prompt == "Be a great player."
         assert p1.personality == "test-hero"
+        assert p1.name == "HeroM Hero"
 
-        # Second player: explicit name overrides personality name
+        # Second player: explicit name overrides generated name
         p2 = config.pilot_players[1]
         assert p2.name == "Override"
         assert p2.model == "test/hero-model"
@@ -363,14 +427,20 @@ SAMPLE_MODELS_DATA = {
         {"id": "test/model-b", "name": "Model B", "name_part": "ModB"},
         {"id": "test/model-c", "name": "Model C", "name_part": "ModC"},
     ],
-    "random_pool": ["test/model-a", "test/model-b", "test/model-c"],
+}
+
+SAMPLE_PRESETS_WITH_POOL = {
+    "presets": {
+        "preset-a": {"model": "test/model-a", "reasoning_effort": "medium", "system_prompt": "default"},
+        "preset-b": {"model": "test/model-b", "reasoning_effort": "high", "system_prompt": "default"},
+        "preset-c": {"model": "test/model-c", "system_prompt": "default"},
+    },
+    "random_pool": ["preset-a", "preset-b", "preset-c"],
 }
 
 SAMPLE_PERSONALITIES_WITH_PARTS = {
     "hero": {
-        "name": "TheHero",
         "name_part": "Hero",
-        "model": "test/model-a",
         "prompt_suffix": "You are heroic.",
     },
     "chill": {
@@ -386,7 +456,7 @@ SAMPLE_PERSONALITIES_WITH_PARTS = {
 
 def test_validate_name_parts_valid():
     """Valid name_part combos should not raise."""
-    _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+    _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_MODELS_DATA)
 
 
 def test_validate_name_parts_catches_overflow():
@@ -394,33 +464,37 @@ def test_validate_name_parts_catches_overflow():
     bad_personalities = {
         "longname": {"name_part": "TooLong!", "prompt_suffix": "hi"},
     }
+    bad_presets = {
+        "presets": {"p": {"model": "test/m", "system_prompt": "default"}},
+        "random_pool": ["p"],
+    }
     bad_models = {
         "models": [{"id": "test/m", "name": "M", "name_part": "Longish"}],
-        "random_pool": ["test/m"],
     }
     # "Longish TooLong!" = 16 chars
     with pytest.raises(ValueError, match="Invalid name_part combinations"):
-        _validate_name_parts(bad_personalities, bad_models)
+        _validate_name_parts(bad_personalities, bad_presets, bad_models)
 
 
-def test_validate_name_parts_missing_model_in_pool():
-    """random_pool model not in models list should raise."""
-    bad_models = {
-        "models": [],
-        "random_pool": ["test/missing"],
+def test_validate_name_parts_missing_preset_in_pool():
+    """random_pool preset not in presets should raise."""
+    bad_presets = {
+        "presets": {},
+        "random_pool": ["missing"],
     }
-    with pytest.raises(ValueError, match="not found in models list"):
-        _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, bad_models)
+    with pytest.raises(ValueError, match="not found in presets"):
+        _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, bad_presets, SAMPLE_MODELS_DATA)
 
 
 def test_validate_name_parts_real_data():
-    """Validate actual personalities.json x models.json name_part combos all fit."""
+    """Validate actual personalities.json x presets.json x models.json name_part combos all fit."""
     personalities = load_personalities(None)
+    presets_data = load_presets(None)
     models_data = load_models(None)
-    if not personalities or not models_data:
-        pytest.skip("personalities.json or models.json not found")
+    if not personalities or not presets_data or not models_data:
+        pytest.skip("personalities.json, presets.json, or models.json not found")
     # Should not raise — if it does, we have a real misconfiguration
-    _validate_name_parts(personalities, models_data)
+    _validate_name_parts(personalities, presets_data, models_data)
 
 
 def test_generate_player_name():
@@ -436,15 +510,18 @@ def test_generate_player_name_fallback():
     assert name == "model unknown"
 
 
-def test_resolve_randoms_picks_personality_and_model():
-    """Random resolution should pick concrete personality and model."""
-    player = PilotPlayer(name="player-0", personality="random", model="random")
+def test_resolve_randoms_picks_personality_and_preset():
+    """Random resolution should pick concrete personality and preset."""
+    player = PilotPlayer(name="player-0", personality="random", preset="random")
     players = [(player, False)]
 
-    with patch("puppeteer.config.random.choice", side_effect=["hero", "test/model-b"]):
-        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+    with patch("puppeteer.config.random.choice", side_effect=["hero", "preset-b"]):
+        _resolve_randoms(
+            players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_PROMPTS, SAMPLE_MODELS_DATA
+        )
 
     assert player.personality == "hero"
+    assert player.preset == "preset-b"
     assert player.model == "test/model-b"
     assert player.prompt_suffix == "You are heroic."
     assert player.name == "ModB Hero"
@@ -452,26 +529,31 @@ def test_resolve_randoms_picks_personality_and_model():
 
 def test_resolve_randoms_no_duplicate_personalities():
     """Multiple random players should get different personalities."""
-    p1 = PilotPlayer(name="p0", personality="random", model="random")
-    p2 = PilotPlayer(name="p1", personality="random", model="random")
+    p1 = PilotPlayer(name="p0", personality="random", preset="random")
+    p2 = PilotPlayer(name="p1", personality="random", preset="random")
     players = [(p1, False), (p2, False)]
 
-    choices = ["hero", "test/model-a", "chill", "test/model-b"]
+    choices = ["hero", "preset-a", "chill", "preset-b"]
     with patch("puppeteer.config.random.choice", side_effect=choices):
-        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+        _resolve_randoms(
+            players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_PROMPTS, SAMPLE_MODELS_DATA
+        )
 
     assert p1.personality != p2.personality
-    assert p1.model != p2.model
+    assert p1.preset != p2.preset
 
 
-def test_resolve_randoms_explicit_model_not_randomized():
-    """Explicit model should not be replaced by random."""
-    player = PilotPlayer(name="player-0", personality="random", model="test/model-c")
+def test_resolve_randoms_explicit_preset_not_randomized():
+    """Explicit preset should not be replaced by random."""
+    player = PilotPlayer(name="player-0", personality="random", preset="preset-c")
     players = [(player, False)]
 
     with patch("puppeteer.config.random.choice", return_value="nerd"):
-        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+        _resolve_randoms(
+            players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_PROMPTS, SAMPLE_MODELS_DATA
+        )
 
+    assert player.preset == "preset-c"
     assert player.model == "test/model-c"
     assert player.personality == "nerd"
     assert player.name == "ModC Nerd"
@@ -479,25 +561,30 @@ def test_resolve_randoms_explicit_model_not_randomized():
 
 def test_resolve_randoms_explicit_name_preserved():
     """Explicit name in config should not be overwritten."""
-    player = PilotPlayer(name="MyCustom", personality="random", model="random")
+    player = PilotPlayer(name="MyCustom", personality="random", preset="random")
     players = [(player, True)]  # had_explicit_name=True
 
-    with patch("puppeteer.config.random.choice", side_effect=["hero", "test/model-a"]):
-        _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+    with patch("puppeteer.config.random.choice", side_effect=["hero", "preset-a"]):
+        _resolve_randoms(
+            players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_PROMPTS, SAMPLE_MODELS_DATA
+        )
 
     assert player.name == "MyCustom"
 
 
 def test_resolve_randoms_non_random_untouched():
-    """Players with non-random personality/model should pass through normally."""
-    player = PilotPlayer(name="player-0", personality="hero", model="test/model-a")
+    """Players with non-random personality/preset should pass through normally."""
+    player = PilotPlayer(name="player-0", personality="hero", preset="preset-a")
     players = [(player, False)]
 
-    _resolve_randoms(players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_MODELS_DATA)
+    _resolve_randoms(
+        players, SAMPLE_PERSONALITIES_WITH_PARTS, SAMPLE_PRESETS_WITH_POOL, SAMPLE_PROMPTS, SAMPLE_MODELS_DATA
+    )
 
     assert player.personality == "hero"
+    assert player.preset == "preset-a"
     assert player.model == "test/model-a"
-    assert player.name == "TheHero"  # From personality name field
+    assert player.name == "ModA Hero"  # Generated from model + personality
 
 
 def test_random_end_to_end_config_load():
@@ -517,26 +604,35 @@ def test_random_end_to_end_config_load():
         }
         (tmpdir_path / "personalities.json").write_text(json.dumps(personalities))
 
+        presets = {
+            "presets": {
+                "fast-med": {"model": "test/fast", "reasoning_effort": "medium", "system_prompt": "default"},
+                "smart-med": {"model": "test/smart", "reasoning_effort": "medium", "system_prompt": "default"},
+            },
+            "random_pool": ["fast-med", "smart-med"],
+        }
+        (tmpdir_path / "presets.json").write_text(json.dumps(presets))
+        (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test prompt."}))
+
         models = {
             "models": [
                 {"id": "test/fast", "name": "Fast", "name_part": "Fast"},
                 {"id": "test/smart", "name": "Smart", "name_part": "Smart"},
             ],
-            "random_pool": ["test/fast", "test/smart"],
         }
         (tmpdir_path / "models.json").write_text(json.dumps(models))
 
         config_data = {
             "matchTimeLimit": "MIN__60",
             "players": [
-                {"type": "pilot", "personality": "random", "model": "random", "deck": "random"},
-                {"type": "pilot", "personality": "random", "model": "random", "deck": "random"},
+                {"type": "pilot", "preset": "random", "personality": "random", "deck": "random"},
+                {"type": "pilot", "preset": "random", "personality": "random", "deck": "random"},
             ],
         }
         config_path = tmpdir_path / "config.json"
         config_path.write_text(json.dumps(config_data))
 
-        with patch("puppeteer.config.random.choice", side_effect=["alpha", "test/fast", "beta", "test/smart"]):
+        with patch("puppeteer.config.random.choice", side_effect=["alpha", "fast-med", "beta", "smart-med"]):
             config = Config(config_file=config_path)
             config.load_config()
 
@@ -544,11 +640,13 @@ def test_random_end_to_end_config_load():
         p1, p2 = config.pilot_players
 
         assert p1.personality == "alpha"
+        assert p1.preset == "fast-med"
         assert p1.model == "test/fast"
         assert p1.name == "Fast Alpha"
         assert p1.prompt_suffix == "You are alpha."
 
         assert p2.personality == "beta"
+        assert p2.preset == "smart-med"
         assert p2.model == "test/smart"
         assert p2.name == "Smart Beta"
         assert p2.prompt_suffix == "You are beta."

@@ -37,11 +37,12 @@ class PilotPlayer:
 
     name: str
     deck: str | None = None  # Path to .dck file, relative to project root
-    model: str | None = None  # LLM model (e.g., "google/gemini-2.0-flash-001")
+    preset: str | None = None  # Named preset from presets.json
+    model: str | None = None  # LLM model (resolved from preset)
     base_url: str | None = None  # API base URL (e.g., "https://openrouter.ai/api/v1")
-    system_prompt: str | None = None  # Custom system prompt
+    system_prompt: str | None = None  # System prompt (resolved from preset -> prompts.json)
     max_interactions_per_turn: int | None = None  # Loop detection threshold (default 25 in Java)
-    reasoning_effort: str | None = None  # OpenRouter reasoning effort: "low", "medium", "high"
+    reasoning_effort: str | None = None  # Reasoning effort (resolved from preset)
     personality: str | None = None  # Named personality from personalities.json
     prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
 
@@ -62,57 +63,93 @@ MIN_USERNAME_LENGTH = 3
 MAX_USERNAME_LENGTH = 14
 
 
-def load_personalities(config_file: Path | None) -> dict[str, dict]:
-    """Load personality definitions from personalities.json.
+def _load_json_file(name: str, config_file: Path | None) -> dict:
+    """Load a JSON file by name, searching config dir then puppeteer/.
 
-    Search order: same directory as config_file, then puppeteer/ directory.
     Returns empty dict if no file found.
     """
     candidates: list[Path] = []
     if config_file is not None:
-        candidates.append(config_file.parent / "personalities.json")
-    candidates.append(Path("puppeteer/personalities.json"))
+        candidates.append(config_file.parent / name)
+    candidates.append(Path(f"puppeteer/{name}"))
 
     for candidate in candidates:
         if candidate.exists():
             with open(candidate) as f:
                 return json.load(f)
     return {}
+
+
+def load_personalities(config_file: Path | None) -> dict[str, dict]:
+    """Load personality definitions from personalities.json."""
+    return _load_json_file("personalities.json", config_file)
 
 
 def load_models(config_file: Path | None) -> dict:
-    """Load model definitions from models.json.
-
-    Search order: same directory as config_file, then puppeteer/ directory.
-    Returns empty dict if no file found.
-    """
-    candidates: list[Path] = []
-    if config_file is not None:
-        candidates.append(config_file.parent / "models.json")
-    candidates.append(Path("puppeteer/models.json"))
-
-    for candidate in candidates:
-        if candidate.exists():
-            with open(candidate) as f:
-                return json.load(f)
-    return {}
+    """Load model definitions from models.json."""
+    return _load_json_file("models.json", config_file)
 
 
-def _validate_name_parts(personalities: dict[str, dict], models_data: dict) -> None:
+def load_presets(config_file: Path | None) -> dict:
+    """Load preset definitions from presets.json."""
+    return _load_json_file("presets.json", config_file)
+
+
+def load_prompts(config_file: Path | None) -> dict[str, str]:
+    """Load prompt definitions from prompts.json."""
+    return _load_json_file("prompts.json", config_file)
+
+
+def _resolve_preset(
+    player: PilotPlayer,
+    presets_data: dict,
+    prompts: dict[str, str],
+) -> None:
+    """Apply preset defaults to a player in-place. Player-level fields win."""
+    if not player.preset:
+        return
+
+    presets = presets_data.get("presets", {})
+    pdata = presets.get(player.preset)
+    if pdata is None:
+        raise ValueError(f"Unknown preset: {player.preset!r}. Available: {sorted(presets.keys())}")
+
+    # Fill in defaults from preset (player-level fields win)
+    if player.model is None and "model" in pdata:
+        player.model = pdata["model"]
+    if player.reasoning_effort is None and "reasoning_effort" in pdata:
+        player.reasoning_effort = pdata["reasoning_effort"]
+    if player.system_prompt is None and "system_prompt" in pdata:
+        prompt_key = pdata["system_prompt"]
+        if prompt_key not in prompts:
+            raise ValueError(
+                f"Preset {player.preset!r} references unknown prompt {prompt_key!r}. "
+                f"Available: {sorted(prompts.keys())}"
+            )
+        player.system_prompt = prompts[prompt_key]
+
+
+def _validate_name_parts(personalities: dict[str, dict], presets_data: dict, models_data: dict) -> None:
     """Validate all random_pool x personality name_part combos fit XMage name limits.
 
     Called at startup when random resolution is needed. Fails fast with a clear
     error listing any offending combinations.
     """
-    pool = models_data.get("random_pool", [])
+    pool = presets_data.get("random_pool", [])
     if not pool:
         return
+    presets = presets_data.get("presets", {})
     models_by_id = {m["id"]: m for m in models_data.get("models", [])}
     errors: list[str] = []
-    for model_id in pool:
+    for preset_key in pool:
+        preset = presets.get(preset_key)
+        if preset is None:
+            errors.append(f"random_pool preset {preset_key!r} not found in presets")
+            continue
+        model_id = preset.get("model", "")
         model = models_by_id.get(model_id)
         if model is None:
-            errors.append(f"random_pool model {model_id!r} not found in models list")
+            errors.append(f"Preset {preset_key!r} model {model_id!r} not found in models list")
             continue
         if "name_part" not in model:
             errors.append(f"Model {model_id!r} missing name_part")
@@ -123,7 +160,7 @@ def _validate_name_parts(personalities: dict[str, dict], models_data: dict) -> N
             name = f"{m_part} {p_part}"
             if len(name) < MIN_USERNAME_LENGTH or len(name) > MAX_USERNAME_LENGTH:
                 errors.append(
-                    f"{name!r} ({model_id} + {p_key}) is {len(name)} chars, "
+                    f"{name!r} ({preset_key}/{model_id} + {p_key}) is {len(name)} chars, "
                     f"must be {MIN_USERNAME_LENGTH}-{MAX_USERNAME_LENGTH}"
                 )
     if errors:
@@ -148,23 +185,25 @@ def _generate_player_name(
 def _resolve_randoms(
     players: list[tuple[PilotPlayer, bool]],
     personalities: dict[str, dict],
+    presets_data: dict,
+    prompts: dict[str, str],
     models_data: dict,
 ) -> None:
-    """Resolve 'random' personality/model values and apply personality defaults.
+    """Resolve 'random' preset/personality values and apply preset/personality defaults.
 
     Each player tuple is (player, had_explicit_name). Modifies players in-place.
-    Avoids duplicate personalities and models across players.
+    Avoids duplicate personalities and presets across players.
     """
-    has_randoms = any(p.personality == "random" or p.model == "random" for p, _ in players)
+    has_randoms = any(p.preset == "random" or p.personality == "random" for p, _ in players)
     if has_randoms:
-        _validate_name_parts(personalities, models_data)
+        _validate_name_parts(personalities, presets_data, models_data)
 
-    pool_ids = models_data.get("random_pool", [])
+    preset_pool = presets_data.get("random_pool", [])
     available_personalities = list(personalities.keys())
-    available_models = list(pool_ids)
+    available_presets = list(preset_pool)
 
     used_personalities: set[str] = set()
-    used_models: set[str] = set()
+    used_presets: set[str] = set()
 
     for player, had_explicit_name in players:
         was_random_personality = player.personality == "random"
@@ -180,15 +219,18 @@ def _resolve_randoms(
             used_personalities.add(chosen_p)
             player.personality = chosen_p
 
-        # Resolve random model
-        if player.model == "random":
-            remaining = [m for m in available_models if m not in used_models]
+        # Resolve random preset
+        if player.preset == "random":
+            remaining = [m for m in available_presets if m not in used_presets]
             if not remaining:
-                used_models.clear()
-                remaining = available_models
-            chosen_m = random.choice(remaining)
-            used_models.add(chosen_m)
-            player.model = chosen_m
+                used_presets.clear()
+                remaining = available_presets
+            chosen_preset = random.choice(remaining)
+            used_presets.add(chosen_preset)
+            player.preset = chosen_preset
+
+        # Apply preset (sets model, reasoning_effort, system_prompt)
+        _resolve_preset(player, presets_data, prompts)
 
         # Generate name if needed (personality was random and no explicit name)
         if was_random_personality and not had_explicit_name:
@@ -197,15 +239,16 @@ def _resolve_randoms(
             # Mark as having a name so _resolve_personality skips the name requirement
             had_explicit_name = True
 
-        _resolve_personality(player, personalities, had_explicit_name)
+        _resolve_personality(player, personalities, models_data, had_explicit_name)
 
 
 def _resolve_personality(
     player: PilotPlayer,
     personalities: dict[str, dict],
+    models_data: dict,
     had_explicit_name: bool,
 ) -> None:
-    """Apply personality defaults to a player in-place. Player-level fields win."""
+    """Apply personality defaults to a player in-place (prompt_suffix and name only)."""
     if not player.personality:
         return
 
@@ -213,11 +256,17 @@ def _resolve_personality(
     if pdata is None:
         raise ValueError(f"Unknown personality: {player.personality!r}. Available: {sorted(personalities.keys())}")
 
-    # Name: player JSON name > personality name (required in personality)
+    # Name: player JSON name > generated name (from random resolution)
     if not had_explicit_name:
-        if "name" not in pdata:
-            raise ValueError(f"Personality {player.personality!r} must have a 'name' field")
-        player.name = pdata["name"]
+        # For non-random personalities without a preset, we need a name.
+        # Use name_part as a fallback, but it may be too short on its own.
+        if player.model:
+            # Generate from model + personality
+            player.name = _generate_player_name(player.model, player.personality, models_data, personalities)
+        else:
+            # No model set — use name_part directly
+            p_part = pdata.get("name_part", player.personality[:7])
+            player.name = p_part
 
     # Validate name length
     if len(player.name) < MIN_USERNAME_LENGTH or len(player.name) > MAX_USERNAME_LENGTH:
@@ -226,14 +275,7 @@ def _resolve_personality(
             f"characters (XMage server limit)"
         )
 
-    # Fill in defaults (player-level fields win)
-    if player.model is None and "model" in pdata:
-        player.model = pdata["model"]
-    if player.base_url is None and "base_url" in pdata:
-        player.base_url = pdata["base_url"]
-    if hasattr(player, "reasoning_effort"):
-        if player.reasoning_effort is None and "reasoning_effort" in pdata:
-            player.reasoning_effort = pdata["reasoning_effort"]
+    # Set prompt_suffix from personality
     if player.prompt_suffix is None and "prompt_suffix" in pdata:
         player.prompt_suffix = pdata["prompt_suffix"]
 
@@ -337,6 +379,8 @@ class Config:
             self.skip_post_game_prompts = data.get("skipPostGamePrompts", False)
             personalities = load_personalities(self.config_file)
             models_data = load_models(self.config_file)
+            presets_data = load_presets(self.config_file)
+            prompts = load_prompts(self.config_file)
 
             # First pass: construct player objects, collecting LLM players for random resolution
             llm_players: list[tuple[PilotPlayer, bool]] = []
@@ -353,10 +397,8 @@ class Config:
                     p = PilotPlayer(
                         name=name,
                         deck=deck,
-                        model=player.get("model"),
+                        preset=player.get("preset"),
                         base_url=player.get("base_url"),
-                        system_prompt=player.get("system_prompt"),
-                        reasoning_effort=player.get("reasoning_effort"),
                         personality=player.get("personality"),
                     )
                     llm_players.append((p, has_explicit_name))
@@ -371,8 +413,8 @@ class Config:
                     # Legacy: treat as potato for backwards compatibility
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
 
-            # Second pass: resolve random personalities/models and generate names
-            _resolve_randoms(llm_players, personalities, models_data)
+            # Second pass: resolve random presets/personalities and generate names
+            _resolve_randoms(llm_players, personalities, presets_data, prompts, models_data)
 
     def get_players_config_json(self) -> str:
         """Serialize resolved player config to JSON for passing to spectator/GUI client."""
