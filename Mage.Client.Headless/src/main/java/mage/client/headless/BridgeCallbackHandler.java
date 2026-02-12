@@ -493,7 +493,7 @@ public class BridgeCallbackHandler {
                 StringBuilder sb = new StringBuilder();
                 if (multiMsg.getMessages() != null) {
                     for (int i = 0; i < multiMsg.getMessages().size(); i++) {
-                        if (i > 0) sb.append(",");
+                        if (i > 0) sb.append(" ");
                         sb.append(multiMsg.getMessages().get(i).defaultValue);
                     }
                 }
@@ -1539,7 +1539,7 @@ public class BridgeCallbackHandler {
                     }
                     StringBuilder sb = new StringBuilder();
                     for (int i = 0; i < amounts.length; i++) {
-                        if (i > 0) sb.append(",");
+                        if (i > 0) sb.append(" ");
                         sb.append(amounts[i]);
                     }
                     String multiAmountStr = sb.toString();
@@ -3308,7 +3308,7 @@ public class BridgeCallbackHandler {
         StringBuilder sb = new StringBuilder();
         if (message.getMessages() != null) {
             for (int i = 0; i < count; i++) {
-                if (i > 0) sb.append(",");
+                if (i > 0) sb.append(" ");
                 sb.append(message.getMessages().get(i).defaultValue);
             }
         }
