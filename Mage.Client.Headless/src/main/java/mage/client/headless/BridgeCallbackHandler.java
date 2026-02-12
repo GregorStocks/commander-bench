@@ -99,6 +99,9 @@ public class BridgeCallbackHandler {
     private final RoundTracker roundTracker = new RoundTracker();
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
     private final Set<UUID> failedManaCasts = ConcurrentHashMap.newKeySet(); // Spells that failed mana payment (avoid retry loops)
+    private volatile UUID poolManaPayingForId = null; // Tracks which spell pool-mana is being paid for (loop detection)
+    private volatile int poolManaAttempts = 0; // Consecutive pool-mana sends for the same spell
+    private static final int MAX_POOL_MANA_ATTEMPTS = 10; // Cancel payment after this many pool retries
     private volatile int lastTurnNumber = -1; // For clearing failedManaCasts on turn change
     private volatile int interactionsThisTurn = 0; // Generic loop detection: count model interactions per turn
     private volatile int landsPlayedThisTurn = 0; // Track land plays for land_drops_used hint
@@ -648,7 +651,7 @@ public class BridgeCallbackHandler {
                 List<Object> indexToUuid = new ArrayList<>();
 
                 if (playable != null && !playable.isEmpty()) {
-                    // Clear failed casts and loop counter on turn change
+                    // Clear failed casts and loop counters on turn change
                     if (gameView != null) {
                         int turn = gameView.getTurn();
                         if (turn != lastTurnNumber) {
@@ -656,6 +659,8 @@ public class BridgeCallbackHandler {
                             failedManaCasts.clear();
                             interactionsThisTurn = 0;
                             landsPlayedThisTurn = 0;
+                            poolManaAttempts = 0;
+                            poolManaPayingForId = null;
                         }
                     }
 
@@ -1738,6 +1743,8 @@ public class BridgeCallbackHandler {
                             failedManaCasts.clear();
                             interactionsThisTurn = 0;
                             landsPlayedThisTurn = 0;
+                            poolManaAttempts = 0;
+                            poolManaPayingForId = null;
                         }
                     }
                 }
@@ -3220,6 +3227,7 @@ public class BridgeCallbackHandler {
                 }
                 if (hasTapManaAbility) {
                     logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> tapping " + objectId.toString().substring(0, 8));
+                    poolManaAttempts = 0; // Reset pool counter — tap may produce needed mana
                     session.sendPlayerUUID(gameId, objectId);
                     return true;
                 }
@@ -3232,6 +3240,27 @@ public class BridgeCallbackHandler {
             UUID manaPlayerId = getManaPoolPlayerId(gameId, gameView);
             boolean canAutoSelectPoolType = poolChoices.size() == 1 || hasExplicitManaSymbol(msg);
             if (manaPlayerId != null) {
+                // Track consecutive pool payment attempts for the same spell.
+                // If XMage keeps re-sending GAME_PLAY_MANA after we send pool mana,
+                // the payment isn't actually progressing — cancel to break the loop.
+                if (payingForId != null && payingForId.equals(poolManaPayingForId)) {
+                    poolManaAttempts++;
+                } else {
+                    poolManaPayingForId = payingForId;
+                    poolManaAttempts = 1;
+                }
+                if (poolManaAttempts > MAX_POOL_MANA_ATTEMPTS) {
+                    logger.warn("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> pool payment not progressing after "
+                            + poolManaAttempts + " attempts, cancelling spell");
+                    poolManaAttempts = 0;
+                    poolManaPayingForId = null;
+                    if (payingForId != null) {
+                        failedManaCasts.add(payingForId);
+                    }
+                    session.sendPlayerBoolean(gameId, false);
+                    return true;
+                }
+
                 if (!canAutoSelectPoolType && mcpMode) {
                     logger.info("[" + client.getUsername() + "] Mana: \"" + msg + "\" -> pool has multiple options, waiting for manual choice");
                     return false;
