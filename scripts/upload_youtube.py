@@ -37,6 +37,12 @@ def _format_label(meta: dict) -> str:
     return _DECK_TYPE_TO_FORMAT.get(deck_type, "Commander")
 
 
+_COMMANDER_DECK_TYPES = {
+    "Variant Magic - Freeform Commander",
+    "Variant Magic - Commander",
+}
+
+
 def _extract_commander(player: dict) -> str | None:
     """Find commander name from decklist (SB: entries)."""
     for entry in player.get("decklist", []):
@@ -47,19 +53,38 @@ def _extract_commander(player: dict) -> str | None:
     return None
 
 
+def _deck_name_from_path(deck_path: str) -> str | None:
+    """Derive human-readable deck name from file path stem."""
+    if not deck_path:
+        return None
+    return Path(deck_path).stem.replace("-", " ")
+
+
+def _deck_display_name(player: dict, deck_type: str) -> str | None:
+    """Get display name for a player's deck.
+
+    For commander formats, returns the commander card name.
+    For other formats, derives the name from the deck filename.
+    """
+    if deck_type in _COMMANDER_DECK_TYPES:
+        return _extract_commander(player)
+    return _deck_name_from_path(player.get("deck_path", ""))
+
+
 def _build_title(meta: dict) -> str:
     """Generate video title from game metadata.
 
-    Format: "mage-bench: Name (Commander) vs Name (Commander) vs ..."
+    Format: "mage-bench Format: Name (Deck) vs Name (Deck) vs ..."
     Truncated to 100 chars (YouTube limit).
     """
+    deck_type = meta.get("deck_type", "")
     players = meta.get("players", [])
     parts = []
     for p in players:
         name = p.get("name", "?")
-        commander = _extract_commander(p)
-        if commander:
-            parts.append(f"{name} ({commander})")
+        deck_name = _deck_display_name(p, deck_type)
+        if deck_name:
+            parts.append(f"{name} ({deck_name})")
         else:
             parts.append(name)
 
@@ -78,17 +103,18 @@ def _build_description(meta: dict, game_dir: Path) -> str:
     game_id = game_dir.name
     game_url = f"https://mage-bench.com/games/{game_id}"
 
+    deck_type = meta.get("deck_type", "")
     fmt = _format_label(meta)
     lines = [f"AI models play {fmt} (Magic: The Gathering) via mage-bench.", ""]
 
     players = meta.get("players", [])
     for p in players:
-        commander = _extract_commander(p)
+        deck_name = _deck_display_name(p, deck_type)
         model = p.get("model", "")
         name = p.get("name", "?")
         parts = [name]
-        if commander:
-            parts.append(f"playing {commander}")
+        if deck_name:
+            parts.append(f"playing {deck_name}")
         if model:
             parts.append(f"({model})")
         lines.append(" ".join(parts))

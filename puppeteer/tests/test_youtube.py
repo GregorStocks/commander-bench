@@ -31,7 +31,11 @@ def _make_meta(players=None):
                 "decklist": ["SB: 1 [C16:28] Atraxa, Praetors' Voice"],
             },
         ]
-    return {"timestamp": "20260210_120000", "players": players}
+    return {
+        "timestamp": "20260210_120000",
+        "deck_type": "Variant Magic - Freeform Commander",
+        "players": players,
+    }
 
 
 def test_build_title_basic():
@@ -60,6 +64,36 @@ def test_build_title_no_commander():
     meta = _make_meta([{"name": "Alice", "type": "cpu", "decklist": []}])
     title = _build_title(meta)
     assert "Alice" in title
+
+
+def test_build_title_non_commander_uses_deck_filename():
+    """Non-commander formats should use deck filename, not sideboard card."""
+    meta = {
+        "timestamp": "20260210_120000",
+        "deck_type": "Constructed - Legacy",
+        "players": [
+            {
+                "name": "Alice",
+                "type": "pilot",
+                "model": "openai/gpt-4",
+                "deck_path": "Mage.Client/release/sample-decks/Legacy/Izzet-Delver.dck",
+                "decklist": ["SB: 1 [MH2:52] Subtlety"],
+            },
+            {
+                "name": "Bob",
+                "type": "pilot",
+                "model": "google/gemini-3-flash",
+                "deck_path": "Mage.Client/release/sample-decks/Legacy/Eldrazi-Stompy.dck",
+                "decklist": ["SB: 1 [BFZ:15] Ulamog, the Ceaseless Hunger"],
+            },
+        ],
+    }
+    title = _build_title(meta)
+    assert "Izzet Delver" in title
+    assert "Eldrazi Stompy" in title
+    # Should NOT contain sideboard card names
+    assert "Subtlety" not in title
+    assert "Ulamog" not in title
 
 
 def test_build_description():

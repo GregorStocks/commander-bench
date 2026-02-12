@@ -54,6 +54,12 @@ def _build_card_images(players_meta: list[dict]) -> dict[str, str]:
     return images
 
 
+_COMMANDER_DECK_TYPES = {
+    "Variant Magic - Freeform Commander",
+    "Variant Magic - Commander",
+}
+
+
 def _extract_commander(player_meta: dict) -> str | None:
     """Find commander name from decklist (SB: entries)."""
     for entry in player_meta.get("decklist", []):
@@ -62,6 +68,24 @@ def _extract_commander(player_meta: dict) -> str | None:
             if m:
                 return m.group(4).strip()
     return None
+
+
+def _deck_name_from_path(deck_path: str) -> str | None:
+    """Derive human-readable deck name from file path stem."""
+    if not deck_path:
+        return None
+    return Path(deck_path).stem.replace("-", " ")
+
+
+def _deck_display_name(player_meta: dict, deck_type: str) -> str | None:
+    """Get display name for a player's deck.
+
+    For commander formats, returns the commander card name.
+    For other formats, derives the name from the deck filename.
+    """
+    if deck_type in _COMMANDER_DECK_TYPES:
+        return _extract_commander(player_meta)
+    return _deck_name_from_path(player_meta.get("deck_path", ""))
 
 
 def _read_llm_events(game_dir: Path) -> tuple[list[dict], dict[str, float]]:
@@ -280,7 +304,7 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         entry: dict = {
             "name": name,
             "type": p.get("type", "?"),
-            "commander": _extract_commander(p),
+            "deckName": _deck_display_name(p, meta.get("deck_type", "")),
         }
         if p.get("model"):
             entry["model"] = p["model"]
