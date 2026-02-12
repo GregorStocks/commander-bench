@@ -1,0 +1,10 @@
+{
+  "title": "Upload missing YouTube videos for two exported games",
+  "description": "Precondition: must be running on the Arch Linux machine (where the game recordings live).\n\nTwo games exported to the website are missing YouTube videos. The previous uploads were deleted and need to be re-uploaded.\n\n1. Upload game_20260211_002821 (Commander: Gem25F Analyst vs Gem3F Libby vs Sonnet Timmy vs Haiku ESPN):\n   make upload-youtube GAME=game_20260211_002821\n\n2. Upload game_20260211_163230 (Gem3F Johnny vs Haiku Coach):\n   make upload-youtube GAME=game_20260211_163230\n\n3. After uploading, update the website .json.gz files with the new YouTube URLs. Decompress each file, add the youtubeUrl field, and recompress:\n   gzip -dc website/public/games/game_20260211_002821.json.gz | jq '.youtubeUrl = \"<URL>\"' | gzip > tmp && mv tmp website/public/games/game_20260211_002821.json.gz\n   (same for game_20260211_163230)\n\n4. Commit the updated .json.gz files.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "labels": ["puppeteer"],
+  "created_at": "2026-02-11T00:00:00.000000-08:00",
+  "updated_at": "2026-02-11T00:00:00.000000-08:00"
+}
