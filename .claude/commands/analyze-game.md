@@ -67,4 +67,6 @@ Analyze recent game logs, identify bugs and problems, and file issues for each o
 
 10. Present a summary of all issues created, grouped by priority. For model-only issues, mention them in the summary but note they don't need code fixes.
 
-11. **Document useful log investigation tricks.** If you discovered any useful jq queries, grep patterns, cross-referencing techniques, or other tricks for investigating game logs during this analysis, append them to `doc/investigating-game-logs.md`. Don't duplicate what's already there — read the file first. This builds up a shared knowledge base over time.
+11. **Create reusable debugging scripts.** If you need to write any non-trivial log analysis logic (more than a simple jq one-liner), create a Python script in `scripts/debugging/` rather than writing throwaway one-off code. Run these scripts with `uv run python scripts/debugging/your_script.py`. These scripts accumulate over time into a reusable debugging toolkit. Check what already exists in `scripts/debugging/` before creating something new — you may be able to reuse or extend an existing script.
+
+12. **Document useful log investigation tricks.** If you discovered any useful jq queries, grep patterns, cross-referencing techniques, or other tricks for investigating game logs during this analysis, append them to `doc/investigating-game-logs.md`. Don't duplicate what's already there — read the file first. This builds up a shared knowledge base over time.
