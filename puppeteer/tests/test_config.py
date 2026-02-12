@@ -50,7 +50,7 @@ def test_config_load_players_from_json():
         # Create presets + prompts so preset resolution works
         presets = {
             "presets": {"test-preset": {"model": "test/model", "system_prompt": "default"}},
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "You are a test player."}))
@@ -90,7 +90,7 @@ def test_get_players_config_json_roundtrip():
 
         presets = {
             "presets": {"test-preset": {"model": "test/model", "system_prompt": "default"}},
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test prompt."}))
@@ -216,7 +216,7 @@ SAMPLE_PRESETS = {
         "slow-high": {"model": "test/model-b", "reasoning_effort": "high", "system_prompt": "default"},
         "bare": {"model": "test/model-c", "system_prompt": "default"},
     },
-    "random_pool": ["fast-medium", "slow-high"],
+    "gauntlet": ["fast-medium", "slow-high"],
 }
 
 SAMPLE_PROMPTS: dict[str, str] = {
@@ -250,7 +250,7 @@ def test_preset_unknown_raises():
 
 def test_preset_unknown_prompt_raises():
     """Preset referencing unknown prompt key should raise ValueError."""
-    presets = {"presets": {"bad": {"model": "test/m", "system_prompt": "missing"}}, "random_pool": []}
+    presets = {"presets": {"bad": {"model": "test/m", "system_prompt": "missing"}}, "gauntlet": []}
     player = PilotPlayer(name="test", preset="bad")
     with pytest.raises(ValueError, match="unknown prompt"):
         _resolve_preset(player, presets, SAMPLE_PROMPTS)
@@ -334,7 +334,7 @@ def test_load_personalities_from_file():
 
 def test_load_presets_from_file():
     """load_presets should read a JSON file."""
-    pdata = {"presets": {"x": {"model": "test/m", "system_prompt": "default"}}, "random_pool": []}
+    pdata = {"presets": {"x": {"model": "test/m", "system_prompt": "default"}}, "gauntlet": []}
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         (tmpdir_path / "presets.json").write_text(json.dumps(pdata))
@@ -376,7 +376,7 @@ def test_preset_end_to_end_config_load():
             "presets": {
                 "test-preset": {"model": "test/hero-model", "reasoning_effort": "medium", "system_prompt": "default"},
             },
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Be a great player."}))
@@ -436,7 +436,7 @@ SAMPLE_PRESETS_WITH_POOL = {
         "preset-b": {"model": "test/model-b", "reasoning_effort": "high", "system_prompt": "default"},
         "preset-c": {"model": "test/model-c", "system_prompt": "default"},
     },
-    "random_pool": ["preset-a", "preset-b", "preset-c"],
+    "gauntlet": ["preset-a", "preset-b", "preset-c"],
 }
 
 SAMPLE_PERSONALITIES_WITH_PARTS = {
@@ -467,7 +467,7 @@ def test_validate_name_parts_catches_overflow():
     }
     bad_presets = {
         "presets": {"p": {"model": "test/m", "system_prompt": "default"}},
-        "random_pool": ["p"],
+        "gauntlet": ["p"],
     }
     bad_models = {
         "models": [{"id": "test/m", "name": "M", "name_part": "Longish"}],
@@ -478,10 +478,10 @@ def test_validate_name_parts_catches_overflow():
 
 
 def test_validate_name_parts_missing_preset_in_pool():
-    """random_pool preset not in presets should raise."""
+    """gauntlet preset not in presets should raise."""
     bad_presets = {
         "presets": {},
-        "random_pool": ["missing"],
+        "gauntlet": ["missing"],
     }
     with pytest.raises(ValueError, match="not found in presets"):
         _validate_name_parts(SAMPLE_PERSONALITIES_WITH_PARTS, bad_presets, SAMPLE_MODELS_DATA)
@@ -610,7 +610,7 @@ def test_random_end_to_end_config_load():
                 "fast-med": {"model": "test/fast", "reasoning_effort": "medium", "system_prompt": "default"},
                 "smart-med": {"model": "test/smart", "reasoning_effort": "medium", "system_prompt": "default"},
             },
-            "random_pool": ["fast-med", "smart-med"],
+            "gauntlet": ["fast-med", "smart-med"],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test prompt."}))
@@ -756,7 +756,7 @@ def test_preset_resolves_toolset():
                 "toolset": "minimal",
             }
         },
-        "random_pool": [],
+        "gauntlet": [],
     }
     player = PilotPlayer(name="test", preset="with-tools")
     _resolve_preset(player, presets, SAMPLE_PROMPTS, SAMPLE_TOOLSETS)
@@ -780,7 +780,7 @@ def test_player_tools_override_preset_toolset():
                 "toolset": "default",
             }
         },
-        "random_pool": [],
+        "gauntlet": [],
     }
     player = PilotPlayer(
         name="test",
@@ -796,7 +796,7 @@ def test_preset_unknown_toolset_raises():
     """Preset referencing unknown toolset should raise ValueError."""
     presets = {
         "presets": {"bad": {"model": "test/m", "system_prompt": "default", "toolset": "nonexistent"}},
-        "random_pool": [],
+        "gauntlet": [],
     }
     player = PilotPlayer(name="test", preset="bad")
     with pytest.raises(ValueError, match="unknown toolset"):
@@ -819,7 +819,7 @@ def test_tools_loaded_from_config_json():
         tmpdir_path = Path(tmpdir)
         presets = {
             "presets": {"test-preset": {"model": "test/m", "system_prompt": "default"}},
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test."}))
@@ -847,7 +847,7 @@ def test_tools_none_when_not_specified():
         tmpdir_path = Path(tmpdir)
         presets = {
             "presets": {"test-preset": {"model": "test/m", "system_prompt": "default"}},
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Test."}))
@@ -881,7 +881,7 @@ def test_toolset_end_to_end_config_load():
                     "toolset": "minimal",
                 },
             },
-            "random_pool": [],
+            "gauntlet": [],
         }
         (tmpdir_path / "presets.json").write_text(json.dumps(presets))
         (tmpdir_path / "prompts.json").write_text(json.dumps({"default": "Be great."}))
