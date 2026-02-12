@@ -120,6 +120,10 @@ make run CONFIG=staller    # No API keys needed (burn vs staller)
 
 **Never run** `CONFIG=gauntlet`, `CONFIG=frontier`, or other LLM configs — these consume real API tokens and cost money.
 
+## YouTube Uploads
+
+YouTube API credentials are already set up at `~/.mage-bench/`. Don't check for their existence — just run the upload script and let it error out if something is wrong.
+
 ## Coding Style: Fail Fast
 
 **Never add graceful fallbacks, silent defaults, or backwards-compatibility shims.** If something fails or is missing, crash immediately with a clear error. Do not invent fallback behavior, even if it seems "safe" or "helpful." This includes:
