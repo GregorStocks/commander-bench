@@ -149,8 +149,7 @@ public class BridgeCallbackHandler {
         ClientCallbackMethod.GAME_TARGET, ClientCallbackMethod.GAME_CHOOSE_ABILITY,
         ClientCallbackMethod.GAME_CHOOSE_CHOICE, ClientCallbackMethod.GAME_CHOOSE_PILE,
         ClientCallbackMethod.GAME_PLAY_MANA, ClientCallbackMethod.GAME_PLAY_XMANA,
-        ClientCallbackMethod.GAME_GET_AMOUNT, ClientCallbackMethod.GAME_GET_MULTI_AMOUNT,
-        ClientCallbackMethod.GAME_PLAY_LAND);
+        ClientCallbackMethod.GAME_GET_AMOUNT, ClientCallbackMethod.GAME_GET_MULTI_AMOUNT);
     private volatile long lastActionableCallbackAt = 0;
     // Lost callback recovery: if we're stuck with no pendingAction and no tracked response,
     // the server may have sent a callback we never received. Send a speculative pass to nudge.

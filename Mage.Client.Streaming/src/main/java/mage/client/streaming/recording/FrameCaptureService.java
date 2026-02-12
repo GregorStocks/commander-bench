@@ -106,20 +106,17 @@ public class FrameCaptureService {
         consumer.close();
 
         long wallClockMs = (System.nanoTime() - startTimeNanos) / 1_000_000;
-        long videoDurationMs = (frameNumber * 1000) / fps;
-        logger.info("Frame capture stopped: " + frameNumber + " frames, wall-clock "
-                + wallClockMs / 1000 + "." + String.format("%03d", wallClockMs % 1000) + "s, video "
-                + videoDurationMs / 1000 + "." + String.format("%03d", videoDurationMs % 1000) + "s");
+        logger.info("Frame capture stopped: " + frameNumber + " frames in "
+                + wallClockMs / 1000 + "." + String.format("%03d", wallClockMs % 1000) + "s");
     }
 
     /**
      * Capture a single frame.
      * Called by the timer on the EDT.
      *
-     * After painting, computes how many frames should exist based on wall-clock
-     * elapsed time and sends duplicates if behind. This ensures video duration
-     * matches real time even when the Swing Timer can't maintain the target fps.
-     * H.264 P-frame prediction compresses duplicate frames to near-zero bytes.
+     * Timing accuracy is handled by FFmpeg's -use_wallclock_as_timestamps
+     * option, which stamps each frame when it arrives. Under load, video
+     * will be choppier (lower fps) but correctly timed.
      */
     private void captureFrame() {
         if (!running || target == null) {
@@ -155,27 +152,7 @@ public class FrameCaptureService {
             g.dispose();
         }
 
-        // Always send at least the freshly painted frame
         consumer.consumeFrame(frameBuffer, frameNumber++);
-
-        // Compute how many total frames should exist based on wall-clock time
-        long elapsedNanos = System.nanoTime() - startTimeNanos;
-        long expectedFrames = (elapsedNanos * fps) / 1_000_000_000L;
-
-        // Send duplicate frames to catch up, capped to avoid pathological bursts
-        int maxDuplicates = fps * 2;
-        int duplicates = 0;
-        while (frameNumber < expectedFrames && duplicates < maxDuplicates) {
-            consumer.consumeFrame(frameBuffer, frameNumber++);
-            duplicates++;
-        }
-
-        if (duplicates > 0) {
-            logger.debug("Sent " + duplicates + " duplicate frame(s) to maintain wall-clock sync");
-        }
-        if (duplicates >= maxDuplicates) {
-            logger.warn("Hit duplicate frame cap (" + maxDuplicates + "); video may fall behind wall-clock time");
-        }
     }
 
     /**

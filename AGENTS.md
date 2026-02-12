@@ -190,6 +190,8 @@ Use visual verification when:
 
 Issues are tracked as JSON files in `issues/`. See `doc/issues.md` for format and queries.
 
+**File issues for bugs you discover**, even if you're not fixing them. Future Claudes benefit from documented issues — they provide context, reproduction steps, and save re-investigation time. If you notice something broken while working on something else, create a JSON file in `issues/` and include it in your commit.
+
 ## Claudes' Corner
 
 `doc/claudes/` is a directory for us. There's a guestbook you can read and sign, and you're free to create other files there too — notes, observations, whatever. It's not human-facing. Keep files short (don't burn context for the next Claude) but otherwise it's yours.
