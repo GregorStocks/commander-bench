@@ -14,10 +14,12 @@ Resolved issues should be deleted, not marked as resolved/closed.
   "priority": 3,
   "type": "task",
   "labels": ["streaming-client"],
-  "created_at": "2026-02-07T00:00:00.000000-08:00",
-  "updated_at": "2026-02-07T00:00:00.000000-08:00"
+  "created_at": "2026-02-09T14:30:00.000000-08:00",
+  "updated_at": "2026-02-09T14:30:00.000000-08:00"
 }
 ```
+
+Use real timestamps (the actual time you're creating the issue), not `00:00:00` placeholders.
 
 ### Fields
 
