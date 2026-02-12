@@ -67,6 +67,7 @@ import Base from '../../layouts/Base.astro';
 
   #connection-status.error {
     color: #e94560;
+    padding: 0.5rem 1rem;
   }
 
   /* Header */
@@ -292,10 +293,9 @@ import Base from '../../layouts/Base.astro';
         R.renderStack(stackSection, stackCards, state.stack, {}, previewEls);
 
       } catch (err) {
-        if (gameUI.classList.contains("hidden")) {
-          statusEl.textContent = "Cannot reach game server at " + apiBase + " — retrying...";
-          statusEl.classList.add("error");
-        }
+        statusEl.textContent = "Cannot reach game server at " + apiBase + " — retrying...";
+        statusEl.classList.add("error");
+        statusEl.classList.remove("hidden");
       } finally {
         requestInFlight = false;
       }
