@@ -434,7 +434,7 @@ const { slug } = Astro.params;
           var div = document.createElement("div");
           div.className = "llm-event llm-thought " + playerColorClass(event.player);
 
-          var header = playerSpan(event.player);
+          var header = '<span class="thinking-badge">thinking</span>' + playerSpan(event.player);
           if (event.costUsd != null) {
             header += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
           }
@@ -624,7 +624,7 @@ const { slug } = Astro.params;
           line.className = "chat-line";
           var fromIdx = playerColorMap[a.from];
           var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
-          line.innerHTML = '<span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
+          line.innerHTML = '<span class="chat-badge">chat</span><span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
           actionList.appendChild(line);
         } else {
           var line = document.createElement("div");
