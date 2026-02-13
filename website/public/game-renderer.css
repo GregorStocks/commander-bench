@@ -360,7 +360,7 @@
   z-index: 9999;
 }
 
-#card-preview img {
+#card-preview img:not(.mana-icon) {
   width: 100%;
   height: auto;
   border-radius: 6px;
