@@ -25,8 +25,21 @@ Pick and solve exactly **one** issue, then create a PR.
    This pushes your branch, creates a draft PR, and checks for race conditions (lowest PR number wins).
    - If the script **succeeds** (exit 0): you claimed it. Continue to step 6.
    - If the script **fails** (exit 1): someone else claimed it first. Re-run step 3 and go back to step 4. Give up after 5 failed attempts and tell the user no unclaimed issues are available.
-6. **Enter plan mode** — explore the codebase, design your approach, and present it to the user for feedback before writing any code. This is the user's chance to redirect you if the approach is wrong.
-7. **Create tasks** using `TaskCreate` for the remaining steps (implement, test, make check, delete issue file, push & update PR). This ensures no steps get skipped — mark each task in_progress when you start it and completed when you finish it.
+6. **Enter plan mode** — explore the codebase, design your approach, and present it to the user for feedback before writing any code. This is the user's chance to redirect you if the approach is wrong. **Your plan must end with this checklist** (copy it verbatim into your plan):
+
+   ```
+   ## Post-implementation checklist
+   - [ ] Implement the changes described above
+   - [ ] Add/update tests
+   - [ ] Run `make check` (lint, typecheck, tests)
+   - [ ] Delete the issue file and include deletion in the commit
+   - [ ] Push final changes: `git push origin HEAD`
+   - [ ] Update PR title and description: `gh pr edit --title "..." --body "..."`
+   - [ ] Mark PR ready: `gh pr ready`
+   ```
+
+   This checklist survives the plan mode boundary and ensures no steps are skipped even if earlier context is compressed.
+7. After the plan is approved, **create tasks** from the checklist using `TaskCreate`. Mark each task in_progress when you start it and completed when you finish it.
 8. Implement the fix. Push progress:
    ```bash
    git push origin HEAD

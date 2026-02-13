@@ -864,6 +864,44 @@ def test_tools_none_when_not_specified():
         assert config.pilot_players[0].tools is None
 
 
+def test_resolve_random_decks_crashes_on_unresolved_choice():
+    """resolve_random_decks should crash if any player still has deck='choice'."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        deck_dir = root / "Mage.Client" / "release" / "sample-decks" / "Commander"
+        deck_dir.mkdir(parents=True)
+        (deck_dir / "Zurgo.dck").write_text("1 [CMD:1] Sol Ring\n")
+
+        config = Config()
+        config.pilot_players = [PilotPlayer(name="ace", deck="choice", model="test/m")]
+        with pytest.raises(AssertionError, match="Unresolved deck='choice'"):
+            config.resolve_random_decks(root)
+
+
+def test_load_config_choice_on_non_pilot_crashes():
+    """deck='choice' on a non-pilot player should crash during load_config."""
+    config_data = {
+        "players": [
+            {"type": "potato", "name": "spud", "deck": "choice"},
+        ],
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        (tmpdir_path / "personalities.json").write_text("{}")
+        (tmpdir_path / "models.json").write_text('{"models": []}')
+        (tmpdir_path / "presets.json").write_text('{"presets": {}, "gauntlet": []}')
+        (tmpdir_path / "prompts.json").write_text("{}")
+
+        import json
+
+        config_path = tmpdir_path / "config.json"
+        config_path.write_text(json.dumps(config_data))
+
+        config = Config(config_file=config_path)
+        with pytest.raises(AssertionError, match="deck='choice' requires a pilot player"):
+            config.load_config()
+
+
 def test_toolset_end_to_end_config_load():
     """Full integration: config with preset referencing toolset resolves correctly."""
     with tempfile.TemporaryDirectory() as tmpdir:
