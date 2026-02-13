@@ -705,10 +705,10 @@ public class BridgeCallbackHandler {
                         }
 
                         if (cardView != null) {
-                            StringBuilder desc = new StringBuilder();
+                            choiceEntry.put("name", safeDisplayName(cardView));
                             if (isOnBattlefield) {
-                                // Show as activated ability, not a card to cast
-                                // Filter out mana abilities from the description
+                                choiceEntry.put("action", "activate");
+                                // Filter out mana abilities
                                 Set<String> manaNameSet = new HashSet<>(stats.getAllManaAbilityNames());
                                 List<String> nonManaAbilities = new ArrayList<>();
                                 for (String name : abilityNames) {
@@ -716,31 +716,27 @@ public class BridgeCallbackHandler {
                                         nonManaAbilities.add(name);
                                     }
                                 }
-                                desc.append(cardView.getDisplayName());
                                 if (!nonManaAbilities.isEmpty()) {
-                                    desc.append(" — ").append(String.join("; ", nonManaAbilities));
+                                    choiceEntry.put("playable_abilities", nonManaAbilities);
                                 }
-                                desc.append(" [Activate]");
                             } else {
-                                desc.append(cardView.getDisplayName());
+                                if (cardView.isLand()) {
+                                    choiceEntry.put("action", "land");
+                                } else {
+                                    choiceEntry.put("action", "cast");
+                                }
                                 String manaCost = cardView.getManaCostStr();
                                 if (manaCost != null && !manaCost.isEmpty()) {
-                                    desc.append(" ").append(manaCost);
+                                    choiceEntry.put("mana_cost", manaCost);
+                                    choiceEntry.put("mana_value", cardView.getManaValue());
                                 }
                                 if (cardView.isCreature() && cardView.getPower() != null) {
-                                    desc.append(" ").append(cardView.getPower()).append("/").append(cardView.getToughness());
-                                }
-                                if (cardView.isLand()) {
-                                    desc.append(" [Land]");
-                                } else if (cardView.isCreature()) {
-                                    desc.append(" [Creature]");
-                                } else {
-                                    desc.append(" [Cast]");
+                                    choiceEntry.put("power", cardView.getPower());
+                                    choiceEntry.put("toughness", cardView.getToughness());
                                 }
                             }
-                            choiceEntry.put("description", desc.toString());
                         } else {
-                            choiceEntry.put("description", "Unknown (" + objectId.toString().substring(0, 8) + ")");
+                            choiceEntry.put("name", "Unknown (" + objectId.toString().substring(0, 8) + ")");
                         }
 
                         choiceList.add(choiceEntry);
@@ -763,17 +759,17 @@ public class BridgeCallbackHandler {
                             result.put("combat_phase", "declare_attackers");
 
                             // Show which creatures are already attacking
-                            List<String> alreadyAttacking = new ArrayList<>();
+                            List<Map<String, Object>> alreadyAttacking = new ArrayList<>();
                             if (gameView != null && gameView.getCombat() != null) {
                                 for (CombatGroupView group : gameView.getCombat()) {
                                     for (CardView attacker : group.getAttackers().values()) {
-                                        StringBuilder desc = new StringBuilder();
-                                        desc.append(attacker.getDisplayName());
+                                        Map<String, Object> aInfo = new HashMap<>();
+                                        aInfo.put("name", safeDisplayName(attacker));
                                         if (attacker.getPower() != null) {
-                                            desc.append(" ").append(attacker.getPower())
-                                                .append("/").append(attacker.getToughness());
+                                            aInfo.put("power", attacker.getPower());
+                                            aInfo.put("toughness", attacker.getToughness());
                                         }
-                                        alreadyAttacking.add(desc.toString());
+                                        alreadyAttacking.add(aInfo);
                                     }
                                 }
                             }
@@ -788,14 +784,11 @@ public class BridgeCallbackHandler {
 
                                 Map<String, Object> choiceEntry = new HashMap<>();
                                 choiceEntry.put("index", idx);
-                                StringBuilder desc = new StringBuilder();
-                                desc.append(perm.getDisplayName());
+                                choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
-                                    desc.append(" ").append(perm.getPower())
-                                        .append("/").append(perm.getToughness());
+                                    choiceEntry.put("power", perm.getPower());
+                                    choiceEntry.put("toughness", perm.getToughness());
                                 }
-                                desc.append(" [Attack]");
-                                choiceEntry.put("description", desc.toString());
                                 choiceEntry.put("choice_type", "attacker");
                                 choiceList.add(choiceEntry);
                                 indexToUuid.add(attackerId);
@@ -806,7 +799,7 @@ public class BridgeCallbackHandler {
                             if (options.containsKey("specialButton")) {
                                 Map<String, Object> allAttackEntry = new HashMap<>();
                                 allAttackEntry.put("index", idx);
-                                allAttackEntry.put("description", "All attack");
+                                allAttackEntry.put("name", "All attack");
                                 allAttackEntry.put("choice_type", "special");
                                 choiceList.add(allAttackEntry);
                                 indexToUuid.add("special");
@@ -843,14 +836,11 @@ public class BridgeCallbackHandler {
 
                                 Map<String, Object> choiceEntry = new HashMap<>();
                                 choiceEntry.put("index", idx);
-                                StringBuilder desc = new StringBuilder();
-                                desc.append(perm.getDisplayName());
+                                choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
-                                    desc.append(" ").append(perm.getPower())
-                                        .append("/").append(perm.getToughness());
+                                    choiceEntry.put("power", perm.getPower());
+                                    choiceEntry.put("toughness", perm.getToughness());
                                 }
-                                desc.append(" [Block]");
-                                choiceEntry.put("description", desc.toString());
                                 choiceEntry.put("choice_type", "blocker");
                                 choiceList.add(choiceEntry);
                                 indexToUuid.add(blockerId);
@@ -906,7 +896,8 @@ public class BridgeCallbackHandler {
                             choiceEntry.put("index", idx);
                             boolean isTap = manaAbilityText.contains("{T}");
                             choiceEntry.put("choice_type", isTap ? "tap_source" : "mana_source");
-                            choiceEntry.put("description", cardName + " — " + manaAbilityText);
+                            choiceEntry.put("name", cardName);
+                            choiceEntry.put("ability", manaAbilityText);
                             manaChoiceList.add(choiceEntry);
                             manaIndexToChoice.add(manaObjectId);
                             idx++;
@@ -922,7 +913,8 @@ public class BridgeCallbackHandler {
                         Map<String, Object> choiceEntry = new HashMap<>();
                         choiceEntry.put("index", idx);
                         choiceEntry.put("choice_type", "pool_mana");
-                        choiceEntry.put("description", "Mana Pool — " + prettyManaType(manaType) + " (" + getManaPoolCount(manaPool, manaType) + ")");
+                        choiceEntry.put("name", prettyManaType(manaType));
+                        choiceEntry.put("count", getManaPoolCount(manaPool, manaType));
                         manaChoiceList.add(choiceEntry);
                         manaIndexToChoice.add(manaType);
                         idx++;
@@ -953,11 +945,14 @@ public class BridgeCallbackHandler {
 
                 if (targets != null) {
                     CardsView cardsView = msg.getCardsView1();
+                    GameView targetGameView = msg.getGameView() != null ? msg.getGameView() : lastGameView;
+                    UUID gameId = currentGameId;
+                    UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
                     int idx = 0;
                     for (UUID targetId : targets) {
                         Map<String, Object> choiceEntry = new HashMap<>();
                         choiceEntry.put("index", idx);
-                        choiceEntry.put("description", describeTarget(targetId, cardsView, msg.getGameView()));
+                        buildTargetInfo(choiceEntry, targetId, cardsView, targetGameView, myPlayerId);
                         choiceList.add(choiceEntry);
                         indexToUuid.add(targetId);
                         idx++;
@@ -1086,16 +1081,16 @@ public class BridgeCallbackHandler {
                 GameClientMessage msg = (GameClientMessage) data;
                 result.put("response_type", "pile");
 
-                List<String> pile1 = new ArrayList<>();
-                List<String> pile2 = new ArrayList<>();
+                List<Map<String, Object>> pile1 = new ArrayList<>();
+                List<Map<String, Object>> pile2 = new ArrayList<>();
                 if (msg.getCardsView1() != null) {
                     for (CardView card : msg.getCardsView1().values()) {
-                        pile1.add(card.getDisplayName());
+                        pile1.add(buildCardInfoMap(card));
                     }
                 }
                 if (msg.getCardsView2() != null) {
                     for (CardView card : msg.getCardsView2().values()) {
-                        pile2.add(card.getDisplayName());
+                        pile2.add(buildCardInfoMap(card));
                     }
                 }
                 result.put("pile1", pile1);
@@ -1628,6 +1623,65 @@ public class BridgeCallbackHandler {
     }
 
     /**
+     * Populate a choice entry map with structured target fields: name, target_type,
+     * is_you, controller, power, toughness, tapped.
+     */
+    private void buildTargetInfo(Map<String, Object> entry, UUID targetId,
+                                  CardsView cardsView, GameView gameView, UUID myPlayerId) {
+        // Try cardsView first (cards presented in the targeting UI)
+        CardView cv = null;
+        if (cardsView != null) {
+            cv = cardsView.get(targetId);
+        }
+        if (cv == null) {
+            cv = findCardViewById(targetId, gameView);
+        }
+        if (cv != null) {
+            entry.put("name", safeDisplayName(cv));
+            if (cv instanceof PermanentView) {
+                entry.put("target_type", "permanent");
+                PermanentView pv = (PermanentView) cv;
+                if (pv.isCreature() && cv.getPower() != null) {
+                    entry.put("power", cv.getPower());
+                    entry.put("toughness", cv.getToughness());
+                }
+                if (pv.isTapped()) {
+                    entry.put("tapped", true);
+                }
+            } else {
+                entry.put("target_type", "card");
+            }
+            // Add controller info for permanents on the battlefield
+            if (gameView != null) {
+                for (PlayerView player : gameView.getPlayers()) {
+                    if (player.getBattlefield().get(targetId) != null) {
+                        if (!player.getPlayerId().equals(myPlayerId)) {
+                            entry.put("controller", player.getName());
+                        }
+                        break;
+                    }
+                }
+            }
+            return;
+        }
+        // Check if the target is a player
+        if (gameView != null) {
+            for (PlayerView player : gameView.getPlayers()) {
+                if (player.getPlayerId().equals(targetId)) {
+                    entry.put("name", player.getName());
+                    entry.put("target_type", "player");
+                    if (player.getPlayerId().equals(myPlayerId)) {
+                        entry.put("is_you", true);
+                    }
+                    return;
+                }
+            }
+        }
+        entry.put("name", "Unknown (" + targetId.toString().substring(0, 8) + ")");
+        entry.put("target_type", "card");
+    }
+
+    /**
      * Return a suffix like " (yours)" or " (PlayerName's)" indicating who controls
      * the permanent with the given ID. Returns "" if not found on any battlefield.
      */
@@ -1657,6 +1711,25 @@ public class BridgeCallbackHandler {
             name = cv.getName() != null ? cv.getName() : "Unknown";
         }
         return name;
+    }
+
+    /**
+     * Build a structured info map for a card, with name, mana_cost, mana_value, power, toughness.
+     * Consistent with the card representation in getGameState().
+     */
+    private Map<String, Object> buildCardInfoMap(CardView cv) {
+        Map<String, Object> info = new HashMap<>();
+        info.put("name", safeDisplayName(cv));
+        String manaCost = cv.getManaCostStr();
+        if (manaCost != null && !manaCost.isEmpty()) {
+            info.put("mana_cost", manaCost);
+            info.put("mana_value", cv.getManaValue());
+        }
+        if (cv.isCreature() && cv.getPower() != null) {
+            info.put("power", cv.getPower());
+            info.put("toughness", cv.getToughness());
+        }
+        return info;
     }
 
     private String buildCardDescription(CardView cv) {
