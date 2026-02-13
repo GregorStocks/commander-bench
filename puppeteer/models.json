@@ -145,6 +145,17 @@
       "notes": "Very cheap reasoning model. Extended thinking with up to 32K reasoning tokens. Unclear how well it handles tool calling — DeepSeek models can be inconsistent with complex tool schemas. Worth testing."
     },
     {
+      "id": "deepseek/deepseek-r1-distill-qwen-32b",
+      "name": "DeepSeek R1 Distill 32B",
+      "name_part": "DSR1d",
+      "input_per_m": 0.29,
+      "output_per_m": 0.29,
+      "context_k": 32,
+      "thinking": true,
+      "tier": "dirt-cheap",
+      "notes": "Distilled 32B variant of R1. Extremely cheap with reasoning support. Small context window (32K). Good for comparison against full R1 to measure distillation quality loss."
+    },
+    {
       "id": "deepseek/deepseek-v3.2",
       "name": "DeepSeek V3.2",
       "name_part": "DSV3",
