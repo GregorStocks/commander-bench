@@ -1,39 +1,27 @@
 package mage.client.headless.tools;
 
-import com.google.gson.JsonObject;
-
-import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
 
-import static mage.client.headless.tools.McpTool.*;
-
-public class DefaultActionTool implements McpTool {
-    @Override public String name() { return "default_action"; }
-
-    @Override public String description() {
-        return "Execute default action (pass priority or first available choice)";
-    }
-
-    @Override public Map<String, Object> outputSchema() {
-        return McpTool.outputSchema(
-                field("success", "boolean", "Whether the action was executed successfully"),
-                field("action_type", "string", "The callback method that was handled", "success=true"),
-                field("action_taken", "string", "Description of what was done (e.g. \"passed_priority\")", "success=true"),
-                field("error", "string", "Error message", "success=false"));
-    }
-
-    @Override public List<Map<String, Object>> examples() {
-        return listOf(
-                example("Success",
-                        "{\n  \"success\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"action_taken\": \"passed_priority\"\n}"),
-                example("No pending action",
-                        "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}"));
-    }
-
-    @Override public Map<String, Object> execute(JsonObject arguments, BridgeCallbackHandler handler) {
+public class DefaultActionTool {
+    @Tool(
+        name = "default_action",
+        description = "Execute default action (pass priority or first available choice)",
+        output = {
+            @Tool.Field(name = "success", type = "boolean", description = "Whether the action was executed successfully"),
+            @Tool.Field(name = "action_type", type = "string", description = "The callback method that was handled"),
+            @Tool.Field(name = "action_taken", type = "string", description = "Description of what was done (e.g. \"passed_priority\")"),
+            @Tool.Field(name = "error", type = "string", description = "Error message")
+        },
+        examples = {
+            @Tool.Example(label = "Success",
+                value = "{\n  \"success\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"action_taken\": \"passed_priority\"\n}"),
+            @Tool.Example(label = "No pending action",
+                value = "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}")
+        }
+    )
+    public static Map<String, Object> execute(BridgeCallbackHandler handler) {
         return handler.executeDefaultAction();
     }
 }

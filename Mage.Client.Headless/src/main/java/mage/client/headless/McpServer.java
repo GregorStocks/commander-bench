@@ -15,7 +15,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,52 +31,30 @@ public class McpServer {
     private static final String SERVER_NAME = "xmage-bridge";
     private static final String SERVER_VERSION = "1.0.0";
 
+    private static final Class<?>[] TOOL_CLASSES = {
+        DefaultActionTool.class,
+        GetGameLogTool.class,
+        SendChatMessageTool.class,
+        PassPriorityTool.class,
+        GetGameStateTool.class,
+        GetOracleTextTool.class,
+        GetActionChoicesTool.class,
+        ChooseActionTool.class,
+        GetMyDecklistTool.class,
+    };
+
     private final BridgeCallbackHandler callbackHandler;
     private final Gson gson;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final PrintWriter stdout;
     private boolean initialized = false;
-    private final Map<String, McpTool> tools;
+    private final McpToolRegistry registry;
 
     public McpServer(BridgeCallbackHandler callbackHandler) {
         this.callbackHandler = callbackHandler;
         this.gson = new GsonBuilder().create();
         this.stdout = new PrintWriter(System.out, true);
-        this.tools = buildToolMap();
-    }
-
-    private static Map<String, McpTool> buildToolMap() {
-        Map<String, McpTool> map = new LinkedHashMap<>();
-        for (McpTool tool : getTools()) {
-            map.put(tool.name(), tool);
-        }
-        return map;
-    }
-
-    private static McpTool[] getTools() {
-        return new McpTool[] {
-            new DefaultActionTool(),
-            new GetGameLogTool(),
-            new SendChatMessageTool(),
-            new PassPriorityTool(),
-            new GetGameStateTool(),
-            new GetOracleTextTool(),
-            new GetActionChoicesTool(),
-            new ChooseActionTool(),
-            new GetMyDecklistTool(),
-        };
-    }
-
-    /**
-     * Returns the static list of MCP tool definitions.
-     * Can be called without a server instance (used by main() for JSON export).
-     */
-    public static List<Map<String, Object>> getToolDefinitions() {
-        List<Map<String, Object>> defs = new ArrayList<>();
-        for (McpTool tool : getTools()) {
-            defs.add(tool.definition());
-        }
-        return defs;
+        this.registry = new McpToolRegistry(TOOL_CLASSES);
     }
 
     /**
@@ -176,11 +153,7 @@ public class McpServer {
 
     private Map<String, Object> handleToolsList(JsonObject params) {
         Map<String, Object> result = new HashMap<>();
-        List<Map<String, Object>> defs = new ArrayList<>();
-        for (McpTool tool : tools.values()) {
-            defs.add(tool.definition());
-        }
-        result.put("tools", defs);
+        result.put("tools", registry.getDefinitions());
         return result;
     }
 
@@ -192,12 +165,7 @@ public class McpServer {
         }
         JsonObject arguments = params.has("arguments") ? params.getAsJsonObject("arguments") : new JsonObject();
 
-        McpTool tool = tools.get(toolName);
-        if (tool == null) {
-            throw new RuntimeException("Unknown tool: " + toolName);
-        }
-
-        Map<String, Object> toolResult = tool.execute(arguments, callbackHandler);
+        Map<String, Object> toolResult = registry.call(toolName, arguments, callbackHandler);
 
         // Format as MCP tool result
         Map<String, Object> result = new HashMap<>();
@@ -243,7 +211,8 @@ public class McpServer {
      * Used by `make mcp-tools` to generate mcp-tools.json.
      */
     public static void main(String[] args) {
+        McpToolRegistry reg = new McpToolRegistry(TOOL_CLASSES);
         Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-        System.out.println(gson.toJson(getToolDefinitions()));
+        System.out.println(gson.toJson(reg.getDefinitions()));
     }
 }

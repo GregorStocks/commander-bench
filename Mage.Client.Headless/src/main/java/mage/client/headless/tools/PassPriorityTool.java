@@ -1,56 +1,39 @@
 package mage.client.headless.tools;
 
-import com.google.gson.JsonObject;
-
-import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
 
-import static mage.client.headless.tools.McpTool.*;
-
-public class PassPriorityTool implements McpTool {
-    @Override public String name() { return "pass_priority"; }
-
-    @Override public String description() {
-        return "Auto-pass priority until you need to make a decision: playable cards, combat " +
-                "(declare attackers/blockers), or non-priority actions. " +
-                "Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. " +
-                "On timeout: action_pending=false, timeout=true.";
-    }
-
-    @Override public Map<String, Object> inputSchema() {
-        return McpTool.inputSchema(
-                param("timeout_ms", "integer", "Max milliseconds to wait (default 30000)"));
-    }
-
-    @Override public Map<String, Object> outputSchema() {
-        return McpTool.outputSchema(
-                field("action_pending", "boolean", "Whether a decision-requiring action was found"),
-                field("action_type", "string", "XMage callback method name", "action_pending=true"),
-                field("actions_passed", "integer", "Number of priority passes performed"),
-                field("has_playable_cards", "boolean", "Whether you have playable cards in hand", "action_pending=true"),
-                field("combat_phase", "string", "\"declare_attackers\" or \"declare_blockers\"", "In combat"),
-                field("recent_chat", "array[string]", "Chat messages received since last check", "Chat received"),
-                field("player_dead", "boolean", "Whether you died during priority passing", "Player died"),
-                field("timeout", "boolean", "Whether the operation timed out", "Timeout"));
-    }
-
-    @Override public List<Map<String, Object>> examples() {
-        return listOf(
-                example("Playable cards found",
-                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"actions_passed\": 3,\n  \"has_playable_cards\": true\n}"),
-                example("Combat phase",
-                        "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n" +
-                        "  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n" +
-                        "  \"combat_phase\": \"declare_attackers\"\n}"),
-                example("Timeout",
-                        "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}"));
-    }
-
-    @Override public Map<String, Object> execute(JsonObject arguments, BridgeCallbackHandler handler) {
-        int timeout = getInt(arguments, "timeout_ms", 30000);
+public class PassPriorityTool {
+    @Tool(
+        name = "pass_priority",
+        description = "Auto-pass priority until you need to make a decision: playable cards, combat "
+            + "(declare attackers/blockers), or non-priority actions. "
+            + "Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. "
+            + "On timeout: action_pending=false, timeout=true.",
+        output = {
+            @Tool.Field(name = "action_pending", type = "boolean", description = "Whether a decision-requiring action was found"),
+            @Tool.Field(name = "action_type", type = "string", description = "XMage callback method name"),
+            @Tool.Field(name = "actions_passed", type = "integer", description = "Number of priority passes performed"),
+            @Tool.Field(name = "has_playable_cards", type = "boolean", description = "Whether you have playable cards in hand"),
+            @Tool.Field(name = "combat_phase", type = "string", description = "\"declare_attackers\" or \"declare_blockers\""),
+            @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
+            @Tool.Field(name = "player_dead", type = "boolean", description = "Whether you died during priority passing"),
+            @Tool.Field(name = "timeout", type = "boolean", description = "Whether the operation timed out")
+        },
+        examples = {
+            @Tool.Example(label = "Playable cards found",
+                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 3,\n  \"has_playable_cards\": true\n}"),
+            @Tool.Example(label = "Combat phase",
+                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\"\n}"),
+            @Tool.Example(label = "Timeout",
+                value = "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}")
+        }
+    )
+    public static Map<String, Object> execute(
+            BridgeCallbackHandler handler,
+            @Param(description = "Max milliseconds to wait (default 30000)") Integer timeout_ms) {
+        int timeout = timeout_ms != null ? timeout_ms : 30000;
         return handler.passPriority(timeout);
     }
 }

@@ -1,36 +1,25 @@
 package mage.client.headless.tools;
 
-import com.google.gson.JsonObject;
-
-import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
 
-import static mage.client.headless.tools.McpTool.*;
-
-public class GetMyDecklistTool implements McpTool {
-    @Override public String name() { return "get_my_decklist"; }
-
-    @Override public String description() {
-        return "Get your original decklist (card names and quantities).";
-    }
-
-    @Override public Map<String, Object> outputSchema() {
-        return McpTool.outputSchema(
-                field("cards", "string", "Main deck cards, one per line (e.g. \"4x Lightning Bolt\")"),
-                field("sideboard", "string", "Sideboard cards, same format", "Deck has sideboard"),
-                field("error", "string", "Error message", "No deck loaded"));
-    }
-
-    @Override public List<Map<String, Object>> examples() {
-        return listOf(
-                example("Decklist loaded",
-                        "{\n  \"cards\": \"4x Lightning Bolt\\n4x Goblin Guide\\n20x Mountain\",\n" +
-                        "  \"sideboard\": \"2x Smash to Smithereens\\n3x Eidolon of the Great Revel\"\n}"));
-    }
-
-    @Override public Map<String, Object> execute(JsonObject arguments, BridgeCallbackHandler handler) {
+public class GetMyDecklistTool {
+    @Tool(
+        name = "get_my_decklist",
+        description = "Get your original decklist (card names and quantities).",
+        output = {
+            @Tool.Field(name = "cards", type = "string", description = "Main deck cards, one per line (e.g. \"4x Lightning Bolt\")"),
+            @Tool.Field(name = "sideboard", type = "string", description = "Sideboard cards, same format"),
+            @Tool.Field(name = "error", type = "string", description = "Error message")
+        },
+        examples = {
+            @Tool.Example(label = "Decklist loaded",
+                value = "{\n  \"cards\": \"4x Lightning Bolt\\n4x Goblin Guide\\n20x Mountain\",\n"
+                    + "  \"sideboard\": \"2x Smash to Smithereens\\n3x Eidolon of the Great Revel\"\n}")
+        }
+    )
+    public static Map<String, Object> execute(BridgeCallbackHandler handler) {
         return handler.getMyDecklist();
     }
 }
