@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Claim an issue by creating a draft PR. Lowest PR number wins ties.
+
+Usage:
+    claim-issue.py <issue-filename>   Claim an issue
+    claim-issue.py --list             List already-claimed issues
+
+Exit codes:
+    0  Claimed successfully (or --list succeeded)
+    1  Already claimed or lost race
+    2  Bad input
+"""
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ISSUES_DIR = Path("issues")
+
+
+def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, capture_output=True, text=True, **kwargs)  # type: ignore[arg-type]
+
+
+def list_claimed() -> list[str]:
+    """Return list of claimed issue filenames from open PRs."""
+    result = run(
+        ["gh", "pr", "list", "--state", "open", "--json", "body", "--jq", ".[].body"]
+    )
+    if result.returncode != 0:
+        return []
+    claimed = []
+    for line in result.stdout.splitlines():
+        line = line.strip().replace("\r", "")
+        m = re.search(r"<!-- claim: (.+?) -->", line)
+        if m:
+            claimed.append(m.group(1))
+    return sorted(set(claimed))
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: claim-issue.py <issue-filename>", file=sys.stderr)
+        print("       claim-issue.py --list", file=sys.stderr)
+        sys.exit(2)
+
+    if sys.argv[1] == "--list":
+        for name in list_claimed():
+            print(name)
+        sys.exit(0)
+
+    issue = sys.argv[1].removesuffix(".json")
+
+    issue_path = ISSUES_DIR / f"{issue}.json"
+    if not issue_path.exists():
+        print(f"Error: {issue_path} not found", file=sys.stderr)
+        sys.exit(2)
+
+    data = json.loads(issue_path.read_text())
+    title = data["title"]
+
+    branch = run(["git", "branch", "--show-current"]).stdout.strip()
+
+    # Ensure at least one commit ahead of master so the PR can be created
+    log_result = run(["git", "log", "origin/master..HEAD", "--oneline"])
+    if not log_result.stdout.strip():
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", f"Claim: {title}"], check=True
+        )
+
+    # Push current branch
+    subprocess.run(["git", "push", "-u", "origin", branch], check=True)
+
+    # Reuse existing PR for this branch if one exists, otherwise create a new one
+    existing = run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--state",
+            "open",
+            "--json",
+            "number",
+            "--jq",
+            ".[0].number // empty",
+        ]
+    )
+    existing_pr = existing.stdout.strip()
+
+    if existing_pr:
+        our_pr = existing_pr
+        subprocess.run(
+            [
+                "gh",
+                "pr",
+                "edit",
+                our_pr,
+                "--title",
+                f"Solve: {title}",
+                "--body",
+                f"<!-- claim: {issue} -->",
+            ],
+            check=True,
+        )
+        print(f"Updated existing PR #{our_pr} for {issue}")
+    else:
+        result = run(
+            [
+                "gh",
+                "pr",
+                "create",
+                "--draft",
+                "--base",
+                "master",
+                "--title",
+                f"Solve: {title}",
+                "--body",
+                f"<!-- claim: {issue} -->",
+            ]
+        )
+        assert result.returncode == 0, f"gh pr create failed: {result.stderr}"
+        pr_url = result.stdout.strip()
+        m = re.search(r"(\d+)$", pr_url)
+        assert m, f"Could not extract PR number from: {pr_url}"
+        our_pr = m.group(1)
+        print(f"Created draft PR #{our_pr}: {pr_url}")
+
+    # Race resolution: lowest PR number claiming this issue wins
+    race_result = run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--state",
+            "open",
+            "--json",
+            "number,body",
+            "--jq",
+            f'[.[] | select(.body | test("<!-- claim: {issue} -->")) | .number] | sort | .[0]',
+        ]
+    )
+    winner = race_result.stdout.strip()
+
+    if winner and winner != "null" and winner != our_pr:
+        print(f"Lost race: PR #{winner} already claims {issue}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Claimed {issue} (PR #{our_pr})")
+    print(f"Branch: {branch}")
+    print(f"Push: git push origin {branch}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "setup": "./scripts/worktree-setup.sh",
+    "setup": "uv run python scripts/worktree-setup.py",
     "run": "make run-dumb"
   }
 }

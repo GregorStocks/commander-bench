@@ -51,7 +51,7 @@ jq . issues/commander-zone-gy-exile-layout.json
 ### List all issue titles with priority
 
 ```bash
-scripts/list-issues.sh
+uv run python scripts/list-issues.py
 ```
 
 ### Find issues by label

@@ -64,7 +64,7 @@ The scripts should cover:
 ### Step 4: Check existing issues and file new ones
 
 ```bash
-scripts/list-issues.sh
+uv run python scripts/list-issues.py
 ```
 
 For each **code bug** found (not model behavior issues), create an issue in `issues/`:

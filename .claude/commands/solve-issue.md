@@ -10,17 +10,17 @@ Pick and solve exactly **one** issue, then create a PR.
    ```
 2. List open issues sorted by priority:
    ```bash
-   scripts/list-issues.sh
+   uv run python scripts/list-issues.py
    ```
 3. Check which issues are already claimed by other agents:
    ```bash
-   scripts/claim-issue.sh --list
+   uv run python scripts/claim-issue.py --list
    ```
    Any issue whose filename appears in this list is taken — skip it.
 4. Pick **one** unclaimed issue, preferring higher-priority (lower number) first (see criteria below). **Read the issue JSON** and check any preconditions — some issues only apply in specific circumstances. If the issue doesn't apply or isn't actionable, skip it and pick the next one.
 5. **Claim the issue** by running:
    ```bash
-   scripts/claim-issue.sh <issue-filename>
+   uv run python scripts/claim-issue.py <issue-filename>
    ```
    This pushes your branch, creates a draft PR, and checks for race conditions (lowest PR number wins).
    - If the script **succeeds** (exit 0): you claimed it. Continue to step 6.
