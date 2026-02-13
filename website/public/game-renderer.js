@@ -62,7 +62,27 @@
     };
   }
 
+  // ── Card classification helpers ──
+
+  function isTokenCard(card) {
+    if (!card || typeof card === "string") return false;
+    var name = card.name || "";
+    return name.indexOf(" Token") !== -1 || name.indexOf(" token") !== -1;
+  }
+
+  function isLikelyLand(card) {
+    if (!card || typeof card === "string") return false;
+    // Creatures have P/T, planeswalkers have loyalty, battles have defense
+    if (card.power || card.toughness || card.loyalty || card.defense) return false;
+    // Tokens are not lands
+    if (isTokenCard(card)) return false;
+    return true;
+  }
+
   // ── Card image resolution ──
+
+  // Cache for token image lookups (cardName -> imageUrl or null)
+  var _tokenImageCache = {};
 
   function resolveCardImage(cardName, cardObj, cardImages, version) {
     version = version || "small";
@@ -76,12 +96,45 @@
     if (cardImages && cardImages[cardName]) {
       return cardImages[cardName].replace("version=small", "version=" + version);
     }
-    // Priority 3: Scryfall name-based fallback
+    // Priority 3: cached token image
+    if (_tokenImageCache[cardName]) {
+      return _tokenImageCache[cardName].replace("version=small", "version=" + version);
+    }
+    // Priority 4: Scryfall name-based fallback
     return (
       "https://api.scryfall.com/cards/named?exact=" +
       encodeURIComponent(cardName) +
       "&format=image&version=" + version
     );
+  }
+
+  /**
+   * Try to fetch a token image from Scryfall search API.
+   * If found, caches the result and calls onFound(imageUrl).
+   */
+  function fetchTokenImage(cardName, onFound) {
+    if (_tokenImageCache[cardName] !== undefined) {
+      if (_tokenImageCache[cardName]) onFound(_tokenImageCache[cardName]);
+      return;
+    }
+    // Strip " Token" suffix for search
+    var baseName = cardName.replace(/ Token$/i, "").trim();
+    var searchUrl = "https://api.scryfall.com/cards/search?q=" +
+      encodeURIComponent('!"' + baseName + '" t:token') +
+      "&unique=art&order=released&dir=desc";
+    fetch(searchUrl)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && data.data && data.data.length > 0) {
+          var card = data.data[0];
+          var url = (card.image_uris && card.image_uris.small) || null;
+          _tokenImageCache[cardName] = url;
+          if (url) onFound(url);
+        } else {
+          _tokenImageCache[cardName] = null;
+        }
+      })
+      .catch(function () { _tokenImageCache[cardName] = null; });
   }
 
   // ── Mana symbol rendering ──
@@ -189,11 +242,12 @@
     return chip;
   }
 
-  // ── Card thumbnail (battlefield) ──
+  // ── Card thumbnail (battlefield + zones) ──
 
   function makeCardThumbnail(cardName, cardObj, cardImages, isTapped, previewEls) {
     var wrapper = document.createElement("div");
     wrapper.className = "card-thumb" + (isTapped ? " tapped" : "");
+    var isToken = isTokenCard(cardObj || { name: cardName });
 
     var img = document.createElement("img");
     img.src = resolveCardImage(cardName, cardObj, cardImages, "small");
@@ -202,10 +256,40 @@
     img.draggable = false;
 
     img.addEventListener("error", function () {
+      // For tokens, try fetching from Scryfall search before showing fallback
+      if (isToken) {
+        fetchTokenImage(cardName, function (url) {
+          img.src = url;
+          img.style.display = "";
+          var fb = wrapper.querySelector(".card-thumb-fallback");
+          if (fb) fb.remove();
+        });
+      }
       img.style.display = "none";
-      var fallback = document.createElement("span");
-      fallback.className = "card-thumb-fallback";
-      fallback.textContent = cardName;
+      var fallback = document.createElement("div");
+      fallback.className = "card-thumb-fallback" + (isToken ? " token-fallback" : "");
+
+      if (isToken) {
+        var label = document.createElement("div");
+        label.className = "token-label";
+        label.textContent = "TOKEN";
+        fallback.appendChild(label);
+
+        var nameEl = document.createElement("div");
+        nameEl.className = "token-name";
+        nameEl.textContent = cardName.replace(/ Token$/i, "");
+        fallback.appendChild(nameEl);
+
+        if (cardObj && (cardObj.power || cardObj.toughness)) {
+          var ptEl = document.createElement("div");
+          ptEl.className = "token-pt";
+          ptEl.textContent = (cardObj.power || "?") + "/" + (cardObj.toughness || "?");
+          fallback.appendChild(ptEl);
+        }
+      } else {
+        fallback.textContent = cardName;
+      }
+
       wrapper.appendChild(fallback);
     });
 
@@ -231,11 +315,12 @@
   // ── Zone rendering ──
 
   function makeZone(title, cards, opts) {
-    // opts: { cardImages, countOverride, useThumbnails, diffInfo, previewEls }
+    // opts: { cardImages, countOverride, useThumbnails, diffInfo, previewEls, smallThumbs }
     opts = opts || {};
     var cardImages = opts.cardImages || {};
     var countOverride = opts.countOverride;
     var useThumbnails = opts.useThumbnails || false;
+    var smallThumbs = opts.smallThumbs || false;
     var diffInfo = opts.diffInfo || null;
     var previewEls = opts.previewEls;
 
@@ -250,6 +335,7 @@
 
     var row = document.createElement("div");
     row.className = useThumbnails ? "cards-row cards-grid" : "cards-row";
+    if (smallThumbs) row.classList.add("cards-grid-sm");
     zone.appendChild(row);
 
     if (!cards || cards.length === 0) {
@@ -279,6 +365,7 @@
       var el;
       if (useThumbnails) {
         el = makeCardThumbnail(name, obj, cardImages, tapped, previewEls);
+        if (smallThumbs) el.classList.add("card-thumb-sm");
       } else {
         el = makeCardChip(name, obj, cardImages, tapped, previewEls);
       }
@@ -299,6 +386,161 @@
 
     if (diffInfo && diffInfo.ghostCards) {
       _renderGhosts(row, diffInfo.ghostCards, cardImages, useThumbnails, previewEls);
+    }
+
+    return zone;
+  }
+
+  // ── Battlefield zone with land/nonland split ──
+
+  function _groupLands(lands) {
+    // Group lands by name+tapped → { key: { name, tapped, count, card } }
+    var groups = {};
+    lands.forEach(function (card) {
+      var name = card.name || "Unknown";
+      var tapped = !!card.tapped;
+      var key = name + (tapped ? "|T" : "|U");
+      if (!groups[key]) {
+        groups[key] = { name: name, tapped: tapped, count: 0, card: card };
+      }
+      groups[key].count++;
+    });
+    return Object.keys(groups).map(function (k) { return groups[k]; });
+  }
+
+  function makeBattlefieldZone(cards, opts) {
+    // opts: { cardImages, diffInfo, previewEls }
+    opts = opts || {};
+    var cardImages = opts.cardImages || {};
+    var diffInfo = opts.diffInfo || null;
+    var previewEls = opts.previewEls;
+
+    // Split into non-lands (top) and lands (bottom)
+    var nonLands = [];
+    var lands = [];
+    (cards || []).forEach(function (card) {
+      if (typeof card === "string") {
+        nonLands.push(card);
+      } else if (isLikelyLand(card)) {
+        lands.push(card);
+      } else {
+        nonLands.push(card);
+      }
+    });
+
+    var zone = document.createElement("div");
+    zone.className = "zone battlefield-zone";
+
+    var totalCount = (cards || []).length;
+    var titleEl = document.createElement("div");
+    titleEl.className = "zone-title";
+    titleEl.textContent = "Battlefield (" + totalCount + ")";
+    zone.appendChild(titleEl);
+
+    // Non-lands section (creatures, artifacts, etc.) - full thumbnails
+    if (nonLands.length > 0) {
+      var creaturesRow = document.createElement("div");
+      creaturesRow.className = "cards-row cards-grid";
+      zone.appendChild(creaturesRow);
+
+      var enteredBag = diffInfo ? diffInfo.enteredNames.slice() : [];
+      var tapChangedSet = diffInfo ? diffInfo.tapChangedNames : [];
+
+      nonLands.forEach(function (card) {
+        var name, obj, tapped;
+        if (typeof card === "string") {
+          name = card; obj = null; tapped = false;
+        } else {
+          name = card.name || "Unknown"; obj = card; tapped = !!card.tapped;
+        }
+        var el = makeCardThumbnail(name, obj, cardImages, tapped, previewEls);
+        if (diffInfo) {
+          var enteredIdx = enteredBag.indexOf(name);
+          if (enteredIdx !== -1) {
+            el.classList.add("card-entered");
+            enteredBag.splice(enteredIdx, 1);
+          }
+          if (tapChangedSet.indexOf(name) !== -1) {
+            el.classList.add("card-tap-changed");
+          }
+        }
+        creaturesRow.appendChild(el);
+      });
+
+      // Ghost non-lands
+      if (diffInfo && diffInfo.ghostCards) {
+        diffInfo.ghostCards.forEach(function (ghost) {
+          var gObj = typeof ghost === "string" ? { name: ghost } : ghost;
+          if (!isLikelyLand(gObj)) {
+            var gName = gObj.name || "Unknown";
+            var gTapped = !!gObj.tapped;
+            var el = makeCardThumbnail(gName, gObj, cardImages, gTapped, previewEls);
+            el.classList.add("card-ghost");
+            creaturesRow.appendChild(el);
+          }
+        });
+      }
+    }
+
+    // Lands section - stacked with count badges
+    if (lands.length > 0 || (diffInfo && diffInfo.ghostCards && diffInfo.ghostCards.some(function (g) {
+      var go = typeof g === "string" ? { name: g } : g;
+      return isLikelyLand(go);
+    }))) {
+      var landsRow = document.createElement("div");
+      landsRow.className = "cards-row cards-grid land-row";
+      zone.appendChild(landsRow);
+
+      var landGroups = _groupLands(lands);
+      var landEnteredBag = diffInfo ? diffInfo.enteredNames.slice() : [];
+      var landTapChangedSet = diffInfo ? diffInfo.tapChangedNames : [];
+
+      landGroups.forEach(function (group) {
+        var el = makeCardThumbnail(group.name, group.card, cardImages, group.tapped, previewEls);
+        el.classList.add("land-stack");
+
+        if (group.count > 1) {
+          var badge = document.createElement("span");
+          badge.className = "land-count-badge";
+          badge.textContent = "x" + group.count;
+          el.appendChild(badge);
+        }
+
+        // Check diff info for entered lands
+        if (diffInfo) {
+          for (var i = 0; i < group.count; i++) {
+            var enteredIdx = landEnteredBag.indexOf(group.name);
+            if (enteredIdx !== -1) {
+              el.classList.add("card-entered");
+              landEnteredBag.splice(enteredIdx, 1);
+            }
+          }
+          if (landTapChangedSet.indexOf(group.name) !== -1) {
+            el.classList.add("card-tap-changed");
+          }
+        }
+
+        landsRow.appendChild(el);
+      });
+
+      // Ghost lands
+      if (diffInfo && diffInfo.ghostCards) {
+        diffInfo.ghostCards.forEach(function (ghost) {
+          var gObj = typeof ghost === "string" ? { name: ghost } : ghost;
+          if (isLikelyLand(gObj)) {
+            var gName = gObj.name || "Unknown";
+            var gTapped = !!gObj.tapped;
+            var el = makeCardThumbnail(gName, gObj, cardImages, gTapped, previewEls);
+            el.classList.add("card-ghost");
+            landsRow.appendChild(el);
+          }
+        });
+      }
+    }
+
+    // Empty state
+    if (totalCount === 0 && !(diffInfo && diffInfo.ghostCards && diffInfo.ghostCards.length > 0)) {
+      // no content needed
     }
 
     return zone;
@@ -337,6 +579,9 @@
 
     container.innerHTML = "";
     if (!players || players.length === 0) return;
+
+    // In 1v1 (2 players), stack vertically instead of side-by-side
+    container.classList.toggle("players-1v1", players.length === 2);
 
     players.forEach(function (player) {
       var playerDiff = diffs ? diffs[player.name] : null;
@@ -434,8 +679,8 @@
       } : null;
 
       card.appendChild(makeZone("Commander", player.commanders, zoneOpts));
-      card.appendChild(makeZone("Battlefield", player.battlefield, {
-        cardImages: cardImages, useThumbnails: true, diffInfo: bfDiff, previewEls: previewEls,
+      card.appendChild(makeBattlefieldZone(player.battlefield, {
+        cardImages: cardImages, diffInfo: bfDiff, previewEls: previewEls,
       }));
 
       var handDiff = playerDiff ? {
@@ -445,6 +690,7 @@
       } : null;
       card.appendChild(makeZone("Hand", player.hand, {
         cardImages: cardImages, countOverride: player.hand_count, diffInfo: handDiff, previewEls: previewEls,
+        useThumbnails: player.hand.length > 0, smallThumbs: true,
       }));
 
       var gyDiff = playerDiff ? {
@@ -454,6 +700,7 @@
       } : null;
       card.appendChild(makeZone("Graveyard", player.graveyard, {
         cardImages: cardImages, diffInfo: gyDiff, previewEls: previewEls,
+        useThumbnails: player.graveyard.length > 0, smallThumbs: true,
       }));
 
       if (player.exile && player.exile.length > 0) {
@@ -464,6 +711,7 @@
         } : null;
         card.appendChild(makeZone("Exile", player.exile, {
           cardImages: cardImages, diffInfo: exDiff, previewEls: previewEls,
+          useThumbnails: true, smallThumbs: true,
         }));
       }
 
@@ -712,8 +960,12 @@
     // Normalisation
     normalizeLiveState: normalizeLiveState,
     normalizeCard: normalizeCard,
+    // Classification
+    isTokenCard: isTokenCard,
+    isLikelyLand: isLikelyLand,
     // Images
     resolveCardImage: resolveCardImage,
+    fetchTokenImage: fetchTokenImage,
     renderManaCost: renderManaCost,
     // Preview
     showPreview: showPreview,
@@ -722,6 +974,7 @@
     makeCardChip: makeCardChip,
     makeCardThumbnail: makeCardThumbnail,
     makeZone: makeZone,
+    makeBattlefieldZone: makeBattlefieldZone,
     // Rendering
     renderPlayers: renderPlayers,
     renderStack: renderStack,

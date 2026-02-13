@@ -47,6 +47,7 @@ const { slug } = Astro.params;
           <button id="btn-next-turn" title="Next turn (])">T&gt;</button>
         </div>
         <input type="range" id="slider" min="0" max="0" value="0" />
+        <input type="number" id="snapshot-jump" min="1" max="1" value="1" title="Jump to snapshot #" />
         <div id="snapshot-counter"></div>
       </div>
 
@@ -226,6 +227,27 @@ const { slug } = Astro.params;
     accent-color: #e94560;
   }
 
+  #snapshot-jump {
+    width: 5rem;
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+    font-family: monospace;
+    font-size: 0.8rem;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  /* Hide spin buttons on number input */
+  #snapshot-jump::-webkit-inner-spin-button,
+  #snapshot-jump::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  #snapshot-jump { -moz-appearance: textfield; }
+
   #snapshot-counter {
     font-size: 0.8rem;
     color: #a0a0b8;
@@ -323,6 +345,7 @@ const { slug } = Astro.params;
     var btnAuto = document.getElementById("btn-auto");
     var slider = document.getElementById("slider");
     var counterEl = document.getElementById("snapshot-counter");
+    var snapshotJump = document.getElementById("snapshot-jump");
 
     // Display
     var gameTitleEl = document.getElementById("game-title");
@@ -651,6 +674,7 @@ const { slug } = Astro.params;
 
       // Update transport
       slider.value = String(index);
+      snapshotJump.value = String(index + 1);
       counterEl.textContent = (index + 1) + " / " + game.snapshots.length;
 
       // Sync turn dropdown
@@ -780,6 +804,24 @@ const { slug } = Astro.params;
 
         // Set up transport
         slider.max = String(game.snapshots.length - 1);
+        snapshotJump.max = String(game.snapshots.length);
+
+        snapshotJump.addEventListener("change", function () {
+          var val = Number(snapshotJump.value);
+          if (val >= 1 && val <= game.snapshots.length) {
+            goTo(val - 1);
+          }
+        });
+        snapshotJump.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            snapshotJump.blur();
+            var val = Number(snapshotJump.value);
+            if (val >= 1 && val <= game.snapshots.length) {
+              goTo(val - 1);
+            }
+          }
+        });
 
         btnStart.addEventListener("click", function () { goTo(0); });
         btnPrev.addEventListener("click", function () { goTo(currentIndex - 1); });
