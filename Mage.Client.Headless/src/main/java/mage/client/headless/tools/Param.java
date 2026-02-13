@@ -14,4 +14,6 @@ import java.lang.annotation.Target;
 public @interface Param {
     String description();
     boolean required() default false;
+    /** If non-empty, emitted as a JSON Schema "enum" array constraining valid values. */
+    String[] allowed_values() default {};
 }

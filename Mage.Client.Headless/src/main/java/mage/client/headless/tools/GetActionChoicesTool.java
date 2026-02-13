@@ -13,8 +13,8 @@ public class GetActionChoicesTool {
     @Tool(
         name = "get_action_choices",
         description = "Get available choices for the current pending action. Call before choose_action. "
-            + "With timeout_ms: blocks like pass_priority until a decision is needed, then returns choices in one call. "
-            + "Without timeout_ms: returns immediately (action_pending=false if nothing to do). "
+            + "With yield_until: blocks like pass_priority until a decision is needed, then returns choices in one call. "
+            + "Without yield_until: returns immediately (action_pending=false if nothing to do). "
             + "Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). "
             + "response_type: select (cards to play, attackers, blockers), boolean (yes/no), "
             + "index (target/ability), amount, pile, or multi_amount. "
@@ -35,14 +35,22 @@ public class GetActionChoicesTool {
             @Tool.Field(name = "max_amount", type = "integer", description = "Maximum allowed value"),
             @Tool.Field(name = "actions_passed", type = "integer", description = "Number of priority passes performed before the decision"),
             @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
-            @Tool.Field(name = "timeout", type = "boolean", description = "Whether the operation timed out")
+            @Tool.Field(name = "stop_reason", type = "string", description = "Why pass_priority returned (only when yield_until is set)")
         }
     )
     public static Map<String, Object> execute(
             BridgeCallbackHandler handler,
-            @Param(description = "Max milliseconds to wait for a decision. When set, auto-passes priority until a decision is needed (like pass_priority + get_action_choices in one call). When omitted, returns immediately.") Integer timeout_ms) {
-        if (timeout_ms != null) {
-            return handler.waitAndGetChoices(timeout_ms);
+            @Param(
+                description = "Yield mode: pass priority using XMage's server-side yield, then return choices. "
+                    + "Same values as pass_priority's yield_until. Omit to return immediately.",
+                allowed_values = {
+                    "end_of_turn", "next_turn", "next_turn_skip_stack",
+                    "next_main", "stack_resolved", "my_turn",
+                    "end_step_before_my_turn"
+                }
+            ) String yield_until) {
+        if (yield_until != null) {
+            return handler.waitAndGetChoices(yield_until);
         } else {
             return handler.getActionChoices();
         }

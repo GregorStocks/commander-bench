@@ -26,15 +26,45 @@ def test_summarize_pass_priority_action_pending():
     assert len(result) < 100
 
 
-def test_summarize_pass_priority_timeout():
-    content = json.dumps({"timeout": True})
-    assert _summarize_tool_result("pass_priority", content) == "timeout"
+def test_summarize_pass_priority_action_pending_with_stop_reason():
+    content = json.dumps(
+        {
+            "action_pending": True,
+            "action_type": "GAME_SELECT",
+            "actions_passed": 5,
+            "stop_reason": "playable_cards",
+        }
+    )
+    result = _summarize_tool_result("pass_priority", content)
+    assert "action_pending" in result
+    assert "GAME_SELECT" in result
+    assert "playable_cards" in result
 
 
 def test_summarize_pass_priority_passed():
+    content = json.dumps({"actions_passed": 1, "stop_reason": "passed"})
+    result = _summarize_tool_result("pass_priority", content)
+    assert "passed" in result
+
+
+def test_summarize_pass_priority_passed_no_stop_reason():
+    """Backwards compatibility: no stop_reason still works."""
     content = json.dumps({"actions_passed": 3})
     result = _summarize_tool_result("pass_priority", content)
     assert "passed 3" in result
+
+
+def test_summarize_pass_priority_no_action():
+    content = json.dumps({"action_pending": False, "actions_passed": 0, "stop_reason": "no_action"})
+    result = _summarize_tool_result("pass_priority", content)
+    assert "no_action" in result
+
+
+def test_summarize_pass_priority_yield_timeout():
+    content = json.dumps({"action_pending": False, "actions_passed": 12, "stop_reason": "yield_timeout"})
+    result = _summarize_tool_result("pass_priority", content)
+    assert "yield_timeout" in result
+    assert "12" in result
 
 
 def test_summarize_pass_priority_player_dead():
