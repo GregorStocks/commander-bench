@@ -64,7 +64,7 @@ public class CommanderPanel extends JPanel {
         cardArea.setBackground(new Color(0, 0, 0, 0));
         cardArea.setOpaque(false);
 
-        JLabel label = new JLabel("CMD");
+        var label = new JLabel("CMD");
         label.setFont(labelFont);
         label.setForeground(LABEL_COLOR);
         label.setPreferredSize(new Dimension(0, labelHeight));
@@ -80,7 +80,7 @@ public class CommanderPanel extends JPanel {
         // Fixed size — always visible, does not grow/shrink
         int panelWidth = cardWidth + 2 * margin;
         int panelHeight = labelHeight + cardHeight + 4;
-        Dimension size = new Dimension(panelWidth, panelHeight);
+        var size = new Dimension(panelWidth, panelHeight);
         setPreferredSize(size);
         setMinimumSize(size);
         setMaximumSize(size);
@@ -102,7 +102,7 @@ public class CommanderPanel extends JPanel {
         logger.info("CommanderPanel.loadCards called with " + (cardsView != null ? cardsView.size() : "null") + " cards");
 
         // Remove cards no longer in command zone
-        Set<UUID> toRemove = new HashSet<>();
+        var toRemove = new HashSet<UUID>();
         for (UUID id : cards.keySet()) {
             if (!cardsView.containsKey(id)) {
                 toRemove.add(id);
@@ -134,7 +134,7 @@ public class CommanderPanel extends JPanel {
     }
 
     private void addCard(CardView cardView) {
-        Dimension cardDimension = new Dimension(cardWidth, cardHeight);
+        var cardDimension = new Dimension(cardWidth, cardHeight);
         MageCard mageCard = Plugins.instance.getMageCard(
                 cardView,
                 bigCard,

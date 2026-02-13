@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -25,7 +24,7 @@ public class DefaultActionTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Success", json(
                 "success", true,
                 "action_type", "GAME_SELECT",

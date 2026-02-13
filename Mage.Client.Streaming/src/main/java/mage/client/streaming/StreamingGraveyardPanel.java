@@ -67,8 +67,8 @@ public class StreamingGraveyardPanel extends JPanel {
         cardArea.setBackground(new Color(0, 0, 0, 0));
         cardArea.setOpaque(false);
 
-        Font labelFont = new Font(Font.SANS_SERIF, Font.BOLD, Math.max(10, (int) (10 * cardWidth / 80.0)));
-        JLabel label = new JLabel("GY");
+        var labelFont = new Font(Font.SANS_SERIF, Font.BOLD, Math.max(10, (int) (10 * cardWidth / 80.0)));
+        var label = new JLabel("GY");
         label.setFont(labelFont);
         label.setForeground(LABEL_COLOR);
         label.setPreferredSize(new Dimension(0, labelHeight));
@@ -81,7 +81,7 @@ public class StreamingGraveyardPanel extends JPanel {
         add(label, BorderLayout.NORTH);
         add(cardArea, BorderLayout.CENTER);
 
-        Dimension size = new Dimension(panelWidth, panelHeight);
+        var size = new Dimension(panelWidth, panelHeight);
         setPreferredSize(size);
         setMinimumSize(size);
         setMaximumSize(size);
@@ -97,7 +97,7 @@ public class StreamingGraveyardPanel extends JPanel {
         this.gameId = gameId;
 
         // Remove cards no longer in graveyard
-        Set<UUID> toRemove = new HashSet<>();
+        var toRemove = new HashSet<UUID>();
         for (UUID id : cards.keySet()) {
             if (!cardsView.containsKey(id)) {
                 toRemove.add(id);
@@ -125,7 +125,7 @@ public class StreamingGraveyardPanel extends JPanel {
     }
 
     private void addCard(CardView cardView) {
-        Dimension cardDimension = new Dimension(cardWidth, cardHeight);
+        var cardDimension = new Dimension(cardWidth, cardHeight);
         MageCard mageCard = Plugins.instance.getMageCard(
                 cardView,
                 bigCard,
@@ -151,7 +151,7 @@ public class StreamingGraveyardPanel extends JPanel {
             return;
         }
 
-        List<MageCard> cardList = new ArrayList<>(cards.values());
+        var cardList = new ArrayList<>(cards.values());
         int n = cardList.size();
 
         // Dynamically compute stack offset so all cards fit in contentHeight

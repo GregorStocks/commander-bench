@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -30,7 +29,7 @@ public class GetGameLogTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Truncated log", json(
                 "log", "Turn 3 - Player1: Mountain entered the battlefield...",
                 "total_length", 5234,

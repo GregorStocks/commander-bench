@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +23,7 @@ public class GetMyDecklistTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Decklist loaded", json(
                 "cards", "4x Lightning Bolt\n4x Goblin Guide\n20x Mountain",
                 "sideboard", "2x Smash to Smithereens\n3x Eidolon of the Great Revel")));

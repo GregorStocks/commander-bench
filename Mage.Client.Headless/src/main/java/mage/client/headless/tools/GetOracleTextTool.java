@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -33,20 +32,20 @@ public class GetOracleTextTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Single card", json(
                 "success", true,
                 "name", "Lightning Bolt",
-                "rules", Arrays.asList("Deal 3 damage to any target."))),
+                "rules", List.of("Deal 3 damage to any target."))),
             example("Batch card_names lookup", json(
                 "success", true,
-                "cards", Arrays.asList(
-                    json("name", "Lightning Bolt", "rules", Arrays.asList("Deal 3 damage to any target.")),
-                    json("name", "Counterspell", "rules", Arrays.asList("Counter target spell."))))),
+                "cards", List.of(
+                    json("name", "Lightning Bolt", "rules", List.of("Deal 3 damage to any target.")),
+                    json("name", "Counterspell", "rules", List.of("Counter target spell."))))),
             example("Batch object_ids lookup", json(
                 "success", true,
-                "cards", Arrays.asList(
-                    json("object_id", "abc-123", "name", "Lightning Bolt", "rules", Arrays.asList("Deal 3 damage to any target.")),
+                "cards", List.of(
+                    json("object_id", "abc-123", "name", "Lightning Bolt", "rules", List.of("Deal 3 damage to any target.")),
                     json("object_id", "def-456", "error", "not found")))),
             example("Not found", json(
                 "success", false,

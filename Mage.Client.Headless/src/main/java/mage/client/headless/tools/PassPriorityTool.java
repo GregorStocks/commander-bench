@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -66,7 +65,7 @@ public class PassPriorityTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Playable cards found", json(
                 "action_pending", true,
                 "action_type", "GAME_SELECT",

@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +37,7 @@ public class GetGameStateTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Mid-game state", json(
                 "available", true,
                 "turn", 4,
@@ -46,17 +45,17 @@ public class GetGameStateTool {
                 "step", "PRECOMBAT_MAIN",
                 "active_player", "Player1",
                 "priority_player", "Player1",
-                "players", Arrays.asList(
+                "players", List.of(
                     json("name", "Player1",
                         "life", 18,
                         "library_size", 49,
                         "hand_size", 5,
                         "is_active", true,
                         "is_you", true,
-                        "hand", Arrays.asList(
+                        "hand", List.of(
                             json("name", "Lightning Bolt", "mana_cost", "{R}", "mana_value", 1, "playable", true),
                             json("name", "Mountain", "mana_value", 0, "is_land", true, "playable", true)),
-                        "battlefield", Arrays.asList(
+                        "battlefield", List.of(
                             json("name", "Mountain", "tapped", false),
                             json("name", "Goblin Guide", "tapped", false, "power", 2, "toughness", 2)),
                         "mana_pool", json("R", 0)),
@@ -66,7 +65,7 @@ public class GetGameStateTool {
                         "hand_size", 7,
                         "is_active", false,
                         "is_you", false,
-                        "battlefield", Arrays.asList(
+                        "battlefield", List.of(
                             json("name", "Island", "tapped", false)))),
                 "stack", Collections.emptyList())));
     }

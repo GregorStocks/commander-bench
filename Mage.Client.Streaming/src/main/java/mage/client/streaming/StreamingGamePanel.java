@@ -179,7 +179,7 @@ public class StreamingGamePanel extends GamePanel {
 
         try {
             // Player chat panel (top) - shows player messages, no input for spectators
-            ChatPanelBasic playerChatPanel = new ChatPanelBasic();
+            var playerChatPanel = new ChatPanelBasic();
             playerChatPanel.useExtendedView(ChatPanelBasic.VIEW_MODE.GAME);
             playerChatPanel.disableInput();
 
@@ -328,7 +328,7 @@ public class StreamingGamePanel extends GamePanel {
         pushOverlayState(gameView, true);
 
         if (gameEventWriter != null) {
-            JsonObject event = new JsonObject();
+            var event = new JsonObject();
             event.addProperty("message", message != null ? message : "");
             writeGameEvent("game_over", event);
             gameEventWriter.close();
@@ -341,7 +341,7 @@ public class StreamingGamePanel extends GamePanel {
 
         logger.info("Game ended, will auto-close in 10 seconds");
 
-        Timer exitTimer = new Timer(10000, e -> {
+        var exitTimer = new Timer(10000, e -> {
             logger.info("Auto-closing streaming spectator");
             System.exit(0);
         });
@@ -381,7 +381,7 @@ public class StreamingGamePanel extends GamePanel {
      * In streaming mode we want dead players' board state to remain fully visible.
      */
     private void restoreDeadPlayerPanelSizes() {
-        Set<Container> parentsToRevalidate = new HashSet<>();
+        var parentsToRevalidate = new HashSet<Container>();
         for (PlayAreaPanel playArea : getPlayers().values()) {
             Container parent = playArea.getParent();
             if (parent == null || !(parent.getLayout() instanceof GridBagLayout)) {
@@ -608,7 +608,7 @@ public class StreamingGamePanel extends GamePanel {
                 stackPanel.setVisible(true);
 
                 // Create wrapper: stack on top, chat/logs below
-                JPanel rightWrapper = new JPanel(new BorderLayout());
+                var rightWrapper = new JPanel(new BorderLayout());
                 rightWrapper.setOpaque(false);
                 rightWrapper.add(stackPanel, BorderLayout.NORTH);
                 rightWrapper.add(splitChatLogs, BorderLayout.CENTER);
@@ -654,7 +654,7 @@ public class StreamingGamePanel extends GamePanel {
                 return;
             }
 
-            List<MageCard> cardsToLayout = new ArrayList<>();
+            var cardsToLayout = new ArrayList<MageCard>();
             for (Component c : cardArea.getComponents()) {
                 if (c instanceof MageCard mc) {
                     cardsToLayout.add(mc);
@@ -801,7 +801,7 @@ public class StreamingGamePanel extends GamePanel {
 
                 MageDialog dialog = entry.getValue();
                 String dialogKey = entry.getKey();
-                Timer dismissTimer = new Timer(15000, e -> {
+                var dismissTimer = new Timer(15000, e -> {
                     dialog.hideDialog();
                     // Remove from parent's map so it doesn't accumulate
                     try {
@@ -934,10 +934,10 @@ public class StreamingGamePanel extends GamePanel {
             Map<UUID, MageCard> cardsMap = hand.getMageCardsForUpdate();
 
             // Compute diff
-            Set<UUID> toRemove = new HashSet<>(previousIds);
+            var toRemove = new HashSet<>(previousIds);
             toRemove.removeAll(currentIds);
 
-            Set<UUID> toAdd = new HashSet<>(currentIds);
+            var toAdd = new HashSet<>(currentIds);
             toAdd.removeAll(previousIds);
 
             boolean changed = !toRemove.isEmpty() || !toAdd.isEmpty();
@@ -1085,7 +1085,7 @@ public class StreamingGamePanel extends GamePanel {
      * Replicates Cards.layoutCards() logic.
      */
     private void layoutHandCards(JPanel cardArea, Zone zone) {
-        List<MageCard> cardsToLayout = new ArrayList<>();
+        var cardsToLayout = new ArrayList<MageCard>();
         for (Component component : cardArea.getComponents()) {
             if (component instanceof MageCard mc) {
                 cardsToLayout.add(mc);
@@ -1224,17 +1224,17 @@ public class StreamingGamePanel extends GamePanel {
                 int nextIndex = 1;
 
                 if (hasCommanders) {
-                    CommanderPanel commanderPanel = new CommanderPanel(zoneCardWidth);
+                    var commanderPanel = new CommanderPanel(zoneCardWidth);
                     commanderPanels.put(playerId, commanderPanel);
                     westPanel.add(commanderPanel, nextIndex++);
                 }
 
-                StreamingGraveyardPanel graveyardPanel = new StreamingGraveyardPanel(zoneCardWidth);
+                var graveyardPanel = new StreamingGraveyardPanel(zoneCardWidth);
                 streamingGraveyardPanels.put(playerId, graveyardPanel);
 
                 // Give exile more vertical space when commander panel is hidden
                 int exileHeightMultiplier = hasCommanders ? 2 : 3;
-                StreamingExilePanel exilePanel = new StreamingExilePanel(zoneCardWidth, exileHeightMultiplier);
+                var exilePanel = new StreamingExilePanel(zoneCardWidth, exileHeightMultiplier);
                 streamingExilePanels.put(playerId, exilePanel);
 
                 westPanel.add(graveyardPanel, nextIndex++);
@@ -1275,7 +1275,7 @@ public class StreamingGamePanel extends GamePanel {
             }
 
             // Filter commandList to only CommanderView instances
-            CardsView commanders = new CardsView();
+            var commanders = new CardsView();
             for (CommandObjectView obj : player.getCommandObjectList()) {
                 if (obj instanceof CommanderView cv) {
                     commanders.put(obj.getId(), cv);
@@ -1337,7 +1337,7 @@ public class StreamingGamePanel extends GamePanel {
             // Crop the art region and resize for avatar (scaled to window)
             BufferedImage artCrop = cropCardArt(cardImage);
             int avatarSize = computeAvatarSize(playArea);
-            Rectangle avatarRect = new Rectangle(avatarSize, avatarSize);
+            var avatarRect = new Rectangle(avatarSize, avatarSize);
             BufferedImage avatarImage = ImageHelper.getResizedImage(artCrop, avatarRect);
 
             // Update the HoverButton avatar via reflection
@@ -1538,14 +1538,14 @@ public class StreamingGamePanel extends GamePanel {
             JComponent panelBackground = (JComponent) bgField.get(playerPanel);
 
             if (panelBackground != null) {
-                Dimension newSize = new Dimension(panelWidth, panelHeight);
+                var newSize = new Dimension(panelWidth, panelHeight);
                 panelBackground.setPreferredSize(newSize);
                 panelBackground.setMaximumSize(newSize);
                 panelBackground.revalidate();
             }
 
             // Also resize the player panel itself
-            Dimension newSize = new Dimension(panelWidth, panelHeight + 5);
+            var newSize = new Dimension(panelWidth, panelHeight + 5);
             playerPanel.setPreferredSize(newSize);
             playerPanel.setMaximumSize(newSize);
             playerPanel.revalidate();
@@ -1717,7 +1717,7 @@ public class StreamingGamePanel extends GamePanel {
             return;
         }
         // Build a compact key for deduplication
-        StringBuilder keyBuilder = new StringBuilder();
+        var keyBuilder = new StringBuilder();
         keyBuilder.append(roundTracker.getGameRound()).append("|");
         keyBuilder.append(game.getPhase()).append("|");
         keyBuilder.append(game.getStep()).append("|");
@@ -1732,7 +1732,7 @@ public class StreamingGamePanel extends GamePanel {
         }
         lastSnapshotKey = key;
 
-        JsonObject event = new JsonObject();
+        var event = new JsonObject();
         event.addProperty("turn", roundTracker.getGameRound());
         event.addProperty("phase", game.getPhase() != null ? game.getPhase().name() : "");
         event.addProperty("step", game.getStep() != null ? game.getStep().name() : "");
@@ -1740,11 +1740,11 @@ public class StreamingGamePanel extends GamePanel {
         event.addProperty("priority_player", safe(game.getPriorityPlayerName()));
 
         // Build compact player state (without layout info)
-        JsonArray playersArray = new JsonArray();
+        var playersArray = new JsonArray();
         Map<String, Card> loadedCards = getLoadedCards();
         for (PlayerView player : game.getPlayers()) {
             UUID playerId = player.getPlayerId();
-            JsonObject playerJson = new JsonObject();
+            var playerJson = new JsonObject();
             playerJson.addProperty("name", safe(player.getName()));
             playerJson.addProperty("life", player.getLife());
             playerJson.addProperty("library_count", player.getLibraryCount());
@@ -1754,10 +1754,10 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.add("counters", countersToJson(player));
 
             // Battlefield - compact (name + tapped only)
-            JsonArray bfArray = new JsonArray();
+            var bfArray = new JsonArray();
             if (player.getBattlefield() != null) {
                 for (PermanentView perm : player.getBattlefield().values()) {
-                    JsonObject permJson = new JsonObject();
+                    var permJson = new JsonObject();
                     permJson.addProperty("name", safe(perm.getDisplayName()));
                     permJson.addProperty("tapped", perm.isTapped());
                     if (perm.isCreature()) {
@@ -1770,7 +1770,7 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.add("battlefield", bfArray);
 
             // Commanders
-            JsonArray cmdArray = new JsonArray();
+            var cmdArray = new JsonArray();
             if (player.getCommandObjectList() != null) {
                 for (CommandObjectView cmd : player.getCommandObjectList()) {
                     cmdArray.add(safe(cmd.getName()));
@@ -1779,7 +1779,7 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.add("commanders", cmdArray);
 
             // Graveyard (names only)
-            JsonArray gyArray = new JsonArray();
+            var gyArray = new JsonArray();
             if (player.getGraveyard() != null) {
                 for (CardView card : player.getGraveyard().values()) {
                     gyArray.add(safe(card.getDisplayName()));
@@ -1789,10 +1789,10 @@ public class StreamingGamePanel extends GamePanel {
 
             // Hand cards (spectator has permission to see all hands)
             CardsView handCards = getHandCardsForPlayer(player, game, loadedCards);
-            JsonArray handArray = new JsonArray();
+            var handArray = new JsonArray();
             if (handCards != null) {
                 for (CardView card : handCards.values()) {
-                    JsonObject cardJson = new JsonObject();
+                    var cardJson = new JsonObject();
                     cardJson.addProperty("name", safe(card.getDisplayName()));
                     cardJson.addProperty("mana_cost", safe(card.getManaCostStr()));
                     handArray.add(cardJson);
@@ -1805,10 +1805,10 @@ public class StreamingGamePanel extends GamePanel {
         event.add("players", playersArray);
 
         // Stack
-        JsonArray stackArray = new JsonArray();
+        var stackArray = new JsonArray();
         if (game.getStack() != null) {
             for (CardView card : game.getStack().values()) {
-                JsonObject stackJson = new JsonObject();
+                var stackJson = new JsonObject();
                 stackJson.addProperty("name", safe(card.getDisplayName()));
                 if (card.getId() != null) {
                     String owner = castOwners.get(card.getId().toString());
@@ -1836,7 +1836,7 @@ public class StreamingGamePanel extends GamePanel {
             }
         }
 
-        JsonObject event = new JsonObject();
+        var event = new JsonObject();
         if ("player_chat".equals(type)) {
             event.addProperty("from", username != null ? username : "");
         }
@@ -1844,7 +1844,7 @@ public class StreamingGamePanel extends GamePanel {
         writeGameEvent(type, event);
 
         // Also buffer for the overlay API so the live web UI can show events
-        JsonObject overlayEvent = new JsonObject();
+        var overlayEvent = new JsonObject();
         overlayEvent.addProperty("type", type);
         overlayEvent.addProperty("seq", gameEventSeq);
         overlayEvent.addProperty("message", message != null ? message : "");
@@ -1885,7 +1885,7 @@ public class StreamingGamePanel extends GamePanel {
             Path costFile = gameDirPath.resolve(username + "_cost.json");
             try {
                 if (Files.exists(costFile)) {
-                    String content = new String(Files.readAllBytes(costFile));
+                    var content = new String(Files.readAllBytes(costFile));
                     JsonObject data = JsonParser.parseString(content).getAsJsonObject();
                     double cost = data.get("cost_usd").getAsDouble();
                     playerCosts.put(username, cost);
@@ -1970,7 +1970,7 @@ public class StreamingGamePanel extends GamePanel {
     private String buildOverlayStateJson(GameView game) {
         OverlayLayoutSnapshot layout = buildOverlayLayoutSnapshot(game);
 
-        JsonObject root = new JsonObject();
+        var root = new JsonObject();
         root.addProperty("status", "live");
         root.addProperty("updatedAt", ZonedDateTime.now(LOG_TZ).format(LOG_TS_FMT));
         root.addProperty("gameId", streamingGameId != null ? streamingGameId.toString() : "");
@@ -1983,7 +1983,7 @@ public class StreamingGamePanel extends GamePanel {
         root.add("stack", stackToOverlayJson(game.getStack(), layout));
         root.add("layout", buildOverlayLayoutJson(layout));
         // Include accumulated game events for the live web UI
-        JsonArray eventsArray = new JsonArray();
+        var eventsArray = new JsonArray();
         synchronized (overlayEvents) {
             for (JsonObject e : overlayEvents) {
                 eventsArray.add(e);
@@ -1994,12 +1994,12 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray buildOverlayPlayers(GameView game, OverlayLayoutSnapshot layout) {
-        JsonArray playersArray = new JsonArray();
+        var playersArray = new JsonArray();
         Map<String, Card> loadedCards = getLoadedCards();
 
         for (PlayerView player : game.getPlayers()) {
             UUID playerId = player.getPlayerId();
-            JsonObject playerJson = new JsonObject();
+            var playerJson = new JsonObject();
             playerJson.addProperty("id", playerId.toString());
             playerJson.addProperty("name", safe(player.getName()));
             playerJson.addProperty("life", player.getLife());
@@ -2027,9 +2027,9 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray countersToJson(PlayerView player) {
-        JsonArray counters = new JsonArray();
+        var counters = new JsonArray();
         for (CounterView counter : player.getCounters()) {
-            JsonObject counterJson = new JsonObject();
+            var counterJson = new JsonObject();
             counterJson.addProperty("name", safe(counter.getName()));
             counterJson.addProperty("count", counter.getCount());
             counters.add(counterJson);
@@ -2038,8 +2038,8 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray battlefieldToJson(PlayerView player, OverlayLayoutSnapshot layout) {
-        JsonArray cards = new JsonArray();
-        List<PermanentView> permanents = new ArrayList<>(player.getBattlefield().values());
+        var cards = new JsonArray();
+        var permanents = new ArrayList<>(player.getBattlefield().values());
         permanents.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
         for (PermanentView permanent : permanents) {
             cards.add(cardToJson(permanent, "battlefield", player.getPlayerId(), layout));
@@ -2048,7 +2048,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray commandersToJson(PlayerView player, OverlayLayoutSnapshot layout) {
-        JsonArray commanders = new JsonArray();
+        var commanders = new JsonArray();
         for (CommandObjectView obj : player.getCommandObjectList()) {
             if (obj instanceof CommanderView cv) {
                 commanders.add(cardToJson(cv, "commanders", player.getPlayerId(), layout));
@@ -2058,12 +2058,12 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray cardsToJson(CardsView cardsView, String zone, UUID playerId, OverlayLayoutSnapshot layout) {
-        JsonArray cards = new JsonArray();
+        var cards = new JsonArray();
         if (cardsView == null || cardsView.isEmpty()) {
             return cards;
         }
 
-        List<CardView> sorted = new ArrayList<>(cardsView.values());
+        var sorted = new ArrayList<>(cardsView.values());
         sorted.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
         for (CardView card : sorted) {
             cards.add(cardToJson(card, zone, playerId, layout));
@@ -2072,14 +2072,14 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonArray stackToOverlayJson(CardsView stackView, OverlayLayoutSnapshot layout) {
-        JsonArray cards = new JsonArray();
+        var cards = new JsonArray();
         if (stackView == null || stackView.isEmpty()) {
             return cards;
         }
-        List<CardView> sorted = new ArrayList<>(stackView.values());
+        var sorted = new ArrayList<>(stackView.values());
         sorted.sort(Comparator.comparing(card -> safe(card.getDisplayName()).toLowerCase(Locale.ROOT)));
         for (CardView card : sorted) {
-            JsonObject cardJson = cardToJson(card, "stack", null, layout);
+            var cardJson = cardToJson(card, "stack", null, layout);
             if (card.getId() != null) {
                 String owner = castOwners.get(card.getId().toString());
                 if (owner != null) {
@@ -2092,7 +2092,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonObject cardToJson(CardView card, String zone, UUID playerId, OverlayLayoutSnapshot layout) {
-        JsonObject cardJson = new JsonObject();
+        var cardJson = new JsonObject();
         String displayName = safe(card.getDisplayName());
         String cardName = displayName.isEmpty() ? safe(card.getName()) : displayName;
 
@@ -2123,7 +2123,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private OverlayLayoutSnapshot buildOverlayLayoutSnapshot(GameView game) {
-        OverlayLayoutSnapshot snapshot = new OverlayLayoutSnapshot();
+        var snapshot = new OverlayLayoutSnapshot();
         snapshot.sourceWidth = Math.max(1, getWidth());
         snapshot.sourceHeight = Math.max(1, getHeight());
 
@@ -2235,7 +2235,7 @@ public class StreamingGamePanel extends GamePanel {
             if (component instanceof MageCard card) {
                 MageCardLocation cardLoc = card.getCardLocationOnScreen();
                 Point panelOrigin = this.getLocationOnScreen();
-                Rectangle rect = new Rectangle(
+                var rect = new Rectangle(
                         cardLoc.getCardX() - panelOrigin.x,
                         cardLoc.getCardY() - panelOrigin.y,
                         cardLoc.getCardWidth(),
@@ -2258,11 +2258,11 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private JsonObject buildOverlayLayoutJson(OverlayLayoutSnapshot layout) {
-        JsonObject layoutJson = new JsonObject();
+        var layoutJson = new JsonObject();
         layoutJson.addProperty("sourceWidth", layout.sourceWidth);
         layoutJson.addProperty("sourceHeight", layout.sourceHeight);
 
-        JsonArray playAreas = new JsonArray();
+        var playAreas = new JsonArray();
         for (Map.Entry<UUID, Rectangle> entry : layout.playAreaRects.entrySet()) {
             JsonObject area = rectangleToJson(entry.getValue());
             area.addProperty("playerId", entry.getKey().toString());
@@ -2273,7 +2273,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private static JsonObject rectangleToJson(Rectangle rect) {
-        JsonObject json = new JsonObject();
+        var json = new JsonObject();
         json.addProperty("x", rect.x);
         json.addProperty("y", rect.y);
         json.addProperty("width", rect.width);
@@ -2302,7 +2302,7 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     private static String formatTypeLine(CardView card) {
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder();
 
         if (card.getSuperTypes() != null && !card.getSuperTypes().isEmpty()) {
             for (Object superType : card.getSuperTypes()) {
@@ -2383,7 +2383,7 @@ public class StreamingGamePanel extends GamePanel {
         }
 
         this.recordingPath = outputPath;
-        FFmpegEncoder encoder = new FFmpegEncoder(outputPath);
+        var encoder = new FFmpegEncoder(outputPath);
         frameCaptureService = new FrameCaptureService(this, 30, encoder);
         frameCaptureService.start();
 
