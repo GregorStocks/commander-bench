@@ -8,6 +8,11 @@
   margin-bottom: 0.75rem;
 }
 
+/* 1v1: stack players vertically like XMage (opponent on top, you on bottom) */
+#players-grid.players-1v1 {
+  grid-template-columns: 1fr;
+}
+
 @media (max-width: 800px) {
   #players-grid {
     grid-template-columns: 1fr;
@@ -252,6 +257,71 @@
   text-align: center;
   padding: 4px;
   word-break: break-word;
+}
+
+/* Token card styled fallback */
+.card-thumb-fallback.token-fallback {
+  flex-direction: column;
+  gap: 2px;
+  background: linear-gradient(180deg, rgba(120, 80, 200, 0.4), rgba(44, 64, 72, 0.9));
+  border: 1px solid rgba(168, 130, 255, 0.3);
+}
+
+.token-label {
+  font-size: 0.4rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(200, 170, 255, 0.8);
+  font-weight: 700;
+}
+
+.token-name {
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  line-height: 1.2;
+}
+
+.token-pt {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #a8d9a5;
+  margin-top: auto;
+}
+
+/* Small thumbnails for hand/graveyard/exile */
+.card-thumb-sm {
+  width: 45px;
+}
+
+.cards-grid-sm {
+  gap: 4px;
+}
+
+/* Battlefield zone with land/nonland split */
+.battlefield-zone .land-row {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+/* Stacked land card */
+.land-stack {
+  position: relative;
+}
+
+.land-count-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #e0e0e0;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+  z-index: 1;
 }
 
 /* Section titles */
