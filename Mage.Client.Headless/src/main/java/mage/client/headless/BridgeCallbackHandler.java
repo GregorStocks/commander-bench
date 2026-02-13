@@ -200,7 +200,7 @@ public class BridgeCallbackHandler {
             return;
         }
         try (PrintWriter pw = new PrintWriter(new FileWriter(path, true))) {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.append("{\"ts\":\"").append(ZonedDateTime.now(LOG_TZ).format(TIME_FMT)).append("\"");
             sb.append(",\"method\":\"").append(method.name()).append("\"");
             if (summary != null && !summary.isEmpty()) {
@@ -218,7 +218,7 @@ public class BridgeCallbackHandler {
      * Escape a string for JSON embedding. Returns a quoted JSON string.
      */
     private static String escapeJsonString(String s) {
-        StringBuilder sb = new StringBuilder("\"");
+        var sb = new StringBuilder("\"");
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
@@ -248,7 +248,7 @@ public class BridgeCallbackHandler {
         if (gv == null) {
             return null;
         }
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder();
         sb.append("T").append(roundTracker.getGameRound());
         if (gv.getPhase() != null) sb.append(" ").append(gv.getPhase());
         sb.append(" | ");
@@ -399,7 +399,7 @@ public class BridgeCallbackHandler {
     }
 
     public Map<String, Object> executeDefaultAction() {
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         PendingAction action = pendingAction;
         if (action == null) {
             result.put("success", false);
@@ -501,7 +501,7 @@ public class BridgeCallbackHandler {
             }
             case GAME_GET_MULTI_AMOUNT -> {
                 GameClientMessage multiMsg = (GameClientMessage) data;
-                StringBuilder sb = new StringBuilder();
+                var sb = new StringBuilder();
                 if (multiMsg.getMessages() != null) {
                     for (int i = 0; i < multiMsg.getMessages().size(); i++) {
                         if (i > 0) sb.append(" ");
@@ -526,7 +526,7 @@ public class BridgeCallbackHandler {
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getActionChoices() {
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         PendingAction action = pendingAction;
         GameView gameView = lastGameView; // snapshot volatile to prevent TOCTOU race
 
@@ -546,7 +546,7 @@ public class BridgeCallbackHandler {
             boolean isMyTurn = client.getUsername().equals(gameView.getActivePlayerName());
             boolean isMainPhase = gameView.getPhase() != null && gameView.getPhase().isMain();
 
-            StringBuilder ctx = new StringBuilder();
+            var ctx = new StringBuilder();
             ctx.append("T").append(turn);
             if (gameView.getPhase() != null) {
                 ctx.append(" ").append(gameView.getPhase());
@@ -563,7 +563,7 @@ public class BridgeCallbackHandler {
             // Compact player summary: "You(40), Opp1(38), Opp2(40)"
             UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
             UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
-            StringBuilder playerSummary = new StringBuilder();
+            var playerSummary = new StringBuilder();
             for (PlayerView player : gameView.getPlayers()) {
                 if (playerSummary.length() > 0) playerSummary.append(", ");
                 playerSummary.append(player.getName());
@@ -582,7 +582,7 @@ public class BridgeCallbackHandler {
                 int total = pool.getRed() + pool.getGreen() + pool.getBlue()
                           + pool.getWhite() + pool.getBlack() + pool.getColorless();
                 if (total > 0) {
-                    Map<String, Integer> mana = new HashMap<>();
+                    var mana = new HashMap<String, Integer>();
                     if (pool.getRed() > 0) mana.put("R", pool.getRed());
                     if (pool.getGreen() > 0) mana.put("G", pool.getGreen());
                     if (pool.getBlue() > 0) mana.put("U", pool.getBlue());
@@ -625,9 +625,9 @@ public class BridgeCallbackHandler {
                 if (askMsg != null && askMsg.toLowerCase().contains("mulligan") && gameView != null) {
                     CardsView hand = gameView.getMyHand();
                     if (hand != null && !hand.isEmpty()) {
-                        List<Map<String, Object>> handCards = new ArrayList<>();
+                        var handCards = new ArrayList<Map<String, Object>>();
                         for (CardView card : hand.values()) {
-                            Map<String, Object> cardInfo = new HashMap<>();
+                            var cardInfo = new HashMap<String, Object>();
                             cardInfo.put("name", card.getDisplayName());
                             String manaCost = card.getManaCostStr();
                             if (manaCost != null && !manaCost.isEmpty()) {
@@ -659,8 +659,8 @@ public class BridgeCallbackHandler {
             case GAME_SELECT: {
                 // Check for playable cards in the current game view
                 PlayableObjectsList playable = gameView != null ? gameView.getCanPlayObjects() : null;
-                List<Map<String, Object>> choiceList = new ArrayList<>();
-                List<Object> indexToUuid = new ArrayList<>();
+                var choiceList = new ArrayList<Map<String, Object>>();
+                var indexToUuid = new ArrayList<Object>();
 
                 if (playable != null && !playable.isEmpty()) {
                     // Clear failed casts and loop counters on turn change
@@ -695,7 +695,7 @@ public class BridgeCallbackHandler {
                             continue;
                         }
 
-                        Map<String, Object> choiceEntry = new HashMap<>();
+                        var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
 
                         // Determine where this object lives (hand = cast, battlefield = activate)
@@ -714,8 +714,8 @@ public class BridgeCallbackHandler {
                             if (isOnBattlefield) {
                                 choiceEntry.put("action", "activate");
                                 // Filter out mana abilities
-                                Set<String> manaNameSet = new HashSet<>(stats.getAllManaAbilityNames());
-                                List<String> nonManaAbilities = new ArrayList<>();
+                                var manaNameSet = new HashSet<>(stats.getAllManaAbilityNames());
+                                var nonManaAbilities = new ArrayList<String>();
                                 for (String name : abilityNames) {
                                     if (!manaNameSet.contains(name)) {
                                         nonManaAbilities.add(name);
@@ -764,11 +764,11 @@ public class BridgeCallbackHandler {
                             result.put("combat_phase", "declare_attackers");
 
                             // Show which creatures are already attacking
-                            List<Map<String, Object>> alreadyAttacking = new ArrayList<>();
+                            var alreadyAttacking = new ArrayList<Map<String, Object>>();
                             if (gameView != null && gameView.getCombat() != null) {
                                 for (CombatGroupView group : gameView.getCombat()) {
                                     for (CardView attacker : group.getAttackers().values()) {
-                                        Map<String, Object> aInfo = new HashMap<>();
+                                        var aInfo = new HashMap<String, Object>();
                                         aInfo.put("name", safeDisplayName(attacker));
                                         if (attacker.getPower() != null) {
                                             aInfo.put("power", attacker.getPower());
@@ -787,7 +787,7 @@ public class BridgeCallbackHandler {
                                 PermanentView perm = findPermanentViewById(attackerId, gameView);
                                 if (perm == null) continue;
 
-                                Map<String, Object> choiceEntry = new HashMap<>();
+                                var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
                                 choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
@@ -802,7 +802,7 @@ public class BridgeCallbackHandler {
 
                             // Add "All attack" special option if available
                             if (options.containsKey("specialButton")) {
-                                Map<String, Object> allAttackEntry = new HashMap<>();
+                                var allAttackEntry = new HashMap<String, Object>();
                                 allAttackEntry.put("index", idx);
                                 allAttackEntry.put("name", "All attack");
                                 allAttackEntry.put("choice_type", "special");
@@ -816,11 +816,11 @@ public class BridgeCallbackHandler {
                             result.put("combat_phase", "declare_blockers");
 
                             // Show attacking creatures for context
-                            List<Map<String, Object>> incomingAttackers = new ArrayList<>();
+                            var incomingAttackers = new ArrayList<Map<String, Object>>();
                             if (gameView != null && gameView.getCombat() != null) {
                                 for (CombatGroupView group : gameView.getCombat()) {
                                     for (CardView attacker : group.getAttackers().values()) {
-                                        Map<String, Object> aInfo = new HashMap<>();
+                                        var aInfo = new HashMap<String, Object>();
                                         aInfo.put("name", attacker.getDisplayName());
                                         if (attacker.getPower() != null) {
                                             aInfo.put("power", attacker.getPower());
@@ -839,7 +839,7 @@ public class BridgeCallbackHandler {
                                 PermanentView perm = findPermanentViewById(blockerId, gameView);
                                 if (perm == null) continue;
 
-                                Map<String, Object> choiceEntry = new HashMap<>();
+                                var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
                                 choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
@@ -871,8 +871,8 @@ public class BridgeCallbackHandler {
                 // Auto-tap couldn't find a source — show available mana sources to the LLM
                 GameClientMessage manaMsg = (GameClientMessage) data;
                 PlayableObjectsList manaPlayable = gameView != null ? gameView.getCanPlayObjects() : null;
-                List<Map<String, Object>> manaChoiceList = new ArrayList<>();
-                List<Object> manaIndexToChoice = new ArrayList<>();
+                var manaChoiceList = new ArrayList<Map<String, Object>>();
+                var manaIndexToChoice = new ArrayList<Object>();
                 UUID payingForId = extractPayingForId(manaMsg.getMessage());
 
                 if (manaPlayable != null) {
@@ -897,7 +897,7 @@ public class BridgeCallbackHandler {
                         }
 
                         for (String manaAbilityText : manaAbilities) {
-                            Map<String, Object> choiceEntry = new HashMap<>();
+                            var choiceEntry = new HashMap<String, Object>();
                             choiceEntry.put("index", idx);
                             boolean isTap = manaAbilityText.contains("{T}");
                             choiceEntry.put("choice_type", isTap ? "tap_source" : "mana_source");
@@ -915,7 +915,7 @@ public class BridgeCallbackHandler {
                     int idx = manaChoiceList.size();
                     ManaPoolView manaPool = getMyManaPoolView(gameView);
                     for (ManaType manaType : poolChoices) {
-                        Map<String, Object> choiceEntry = new HashMap<>();
+                        var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
                         choiceEntry.put("choice_type", "pool_mana");
                         choiceEntry.put("name", prettyManaType(manaType));
@@ -945,8 +945,8 @@ public class BridgeCallbackHandler {
                 result.put("can_cancel", !required);
 
                 Set<UUID> targets = findValidTargets(msg);
-                List<Map<String, Object>> choiceList = new ArrayList<>();
-                List<Object> indexToUuid = new ArrayList<>();
+                var choiceList = new ArrayList<Map<String, Object>>();
+                var indexToUuid = new ArrayList<Object>();
 
                 if (targets != null) {
                     CardsView cardsView = msg.getCardsView1();
@@ -955,7 +955,7 @@ public class BridgeCallbackHandler {
                     UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
                     int idx = 0;
                     for (UUID targetId : targets) {
-                        Map<String, Object> choiceEntry = new HashMap<>();
+                        var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
                         buildTargetInfo(choiceEntry, targetId, cardsView, targetGameView, myPlayerId);
                         choiceList.add(choiceEntry);
@@ -990,13 +990,13 @@ public class BridgeCallbackHandler {
                 Map<UUID, String> choices = picker.getChoices();
                 result.put("response_type", "index");
 
-                List<Map<String, Object>> choiceList = new ArrayList<>();
-                List<Object> indexToUuid = new ArrayList<>();
+                var choiceList = new ArrayList<Map<String, Object>>();
+                var indexToUuid = new ArrayList<Object>();
 
                 if (choices != null) {
                     int idx = 0;
                     for (Map.Entry<UUID, String> entry : choices.entrySet()) {
-                        Map<String, Object> choiceEntry = new HashMap<>();
+                        var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
                         choiceEntry.put("description", entry.getValue());
                         choiceList.add(choiceEntry);
@@ -1015,8 +1015,8 @@ public class BridgeCallbackHandler {
                 Choice choice = msg.getChoice();
                 result.put("response_type", "index");
 
-                List<Map<String, Object>> choiceList = new ArrayList<>();
-                List<Object> indexToKey = new ArrayList<>();
+                var choiceList = new ArrayList<Map<String, Object>>();
+                var indexToKey = new ArrayList<Object>();
 
                 if (choice != null) {
                     if (choice.isKeyChoice()) {
@@ -1024,7 +1024,7 @@ public class BridgeCallbackHandler {
                         if (keyChoices != null) {
                             int idx = 0;
                             for (Map.Entry<String, String> entry : keyChoices.entrySet()) {
-                                Map<String, Object> choiceEntry = new HashMap<>();
+                                var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
                                 choiceEntry.put("description", entry.getValue());
                                 choiceList.add(choiceEntry);
@@ -1037,7 +1037,7 @@ public class BridgeCallbackHandler {
                         if (choices != null) {
                             int idx = 0;
                             for (String c : choices) {
-                                Map<String, Object> choiceEntry = new HashMap<>();
+                                var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
                                 choiceEntry.put("description", c);
                                 choiceList.add(choiceEntry);
@@ -1053,13 +1053,13 @@ public class BridgeCallbackHandler {
                 if (totalChoices >= 50 && deckList != null) {
                     Set<String> deckTypes = getDeckCreatureTypes();
                     if (!deckTypes.isEmpty()) {
-                        List<Map<String, Object>> filtered = new ArrayList<>();
-                        List<Object> filteredKeys = new ArrayList<>();
+                        var filtered = new ArrayList<Map<String, Object>>();
+                        var filteredKeys = new ArrayList<Object>();
                         int idx = 0;
                         for (int i = 0; i < choiceList.size(); i++) {
                             String desc = (String) choiceList.get(i).get("description");
                             if (deckTypes.contains(desc)) {
-                                Map<String, Object> entry = new HashMap<>();
+                                var entry = new HashMap<String, Object>();
                                 entry.put("index", idx);
                                 entry.put("description", desc);
                                 filtered.add(entry);
@@ -1086,8 +1086,8 @@ public class BridgeCallbackHandler {
                 GameClientMessage msg = (GameClientMessage) data;
                 result.put("response_type", "pile");
 
-                List<Map<String, Object>> pile1 = new ArrayList<>();
-                List<Map<String, Object>> pile2 = new ArrayList<>();
+                var pile1 = new ArrayList<Map<String, Object>>();
+                var pile2 = new ArrayList<Map<String, Object>>();
                 if (msg.getCardsView1() != null) {
                     for (CardView card : msg.getCardsView1().values()) {
                         pile1.add(buildCardInfoMap(card));
@@ -1119,10 +1119,10 @@ public class BridgeCallbackHandler {
                 result.put("total_min", msg.getMin());
                 result.put("total_max", msg.getMax());
 
-                List<Map<String, Object>> items = new ArrayList<>();
+                var items = new ArrayList<Map<String, Object>>();
                 if (msg.getMessages() != null) {
                     for (MultiAmountMessage mam : msg.getMessages()) {
-                        Map<String, Object> item = new HashMap<>();
+                        var item = new HashMap<String, Object>();
                         item.put("description", mam.message);
                         item.put("min", mam.min);
                         item.put("max", mam.max);
@@ -1223,7 +1223,7 @@ public class BridgeCallbackHandler {
      */
     public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile, String text, String manaPlanJson, Boolean autoTap) {
         interactionsThisTurn++;
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         PendingAction action = pendingAction;
 
         if (action == null) {
@@ -1590,7 +1590,7 @@ public class BridgeCallbackHandler {
                         return buildError(result, "missing_param",
                             "Array 'amounts' required for GAME_GET_MULTI_AMOUNT", true, action);
                     }
-                    StringBuilder sb = new StringBuilder();
+                    var sb = new StringBuilder();
                     for (int i = 0; i < amounts.length; i++) {
                         if (i > 0) sb.append(" ");
                         sb.append(amounts[i]);
@@ -1742,7 +1742,7 @@ public class BridgeCallbackHandler {
      * Consistent with the card representation in getGameState().
      */
     private Map<String, Object> buildCardInfoMap(CardView cv) {
-        Map<String, Object> info = new HashMap<>();
+        var info = new HashMap<String, Object>();
         info.put("name", safeDisplayName(cv));
         String manaCost = cv.getManaCostStr();
         if (manaCost != null && !manaCost.isEmpty()) {
@@ -1761,7 +1761,7 @@ public class BridgeCallbackHandler {
         if (displayName == null) {
             displayName = cv.getName() != null ? cv.getName() : "Unknown";
         }
-        StringBuilder sb = new StringBuilder(displayName);
+        var sb = new StringBuilder(displayName);
         if (cv instanceof PermanentView) {
             PermanentView pv = (PermanentView) cv;
             if (pv.isCreature() && cv.getPower() != null && cv.getToughness() != null) {
@@ -1796,7 +1796,7 @@ public class BridgeCallbackHandler {
     }
 
     public Map<String, Object> getGameLogChunk(int maxChars, Integer cursor) {
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         int totalLength = getGameLogLength();
         if (cursor != null) {
             int oldestOffset = getGameLogOldestOffset();
@@ -1914,14 +1914,14 @@ public class BridgeCallbackHandler {
         if (yieldUntil != null) {
             PlayerAction yieldAction = YIELD_ACTIONS.get(yieldUntil);
             if (yieldAction == null) {
-                Map<String, Object> result = new HashMap<>();
+                var result = new HashMap<String, Object>();
                 result.put("error", "Invalid yield_until value: " + yieldUntil
                     + ". Valid values: " + String.join(", ", YIELD_ACTIONS.keySet()));
                 return result;
             }
             UUID gameId = currentGameId;
             if (gameId == null) {
-                Map<String, Object> result = new HashMap<>();
+                var result = new HashMap<String, Object>();
                 result.put("error", "No active game for yield");
                 return result;
             }
@@ -2038,7 +2038,7 @@ public class BridgeCallbackHandler {
 
                 // Non-GAME_SELECT always needs LLM input — return immediately
                 if (method != ClientCallbackMethod.GAME_SELECT) {
-                    Map<String, Object> result = new HashMap<>();
+                    var result = new HashMap<String, Object>();
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
@@ -2050,7 +2050,7 @@ public class BridgeCallbackHandler {
                 // Combat selections (declare attackers/blockers) always need LLM input
                 String combatType = detectCombatSelect(action);
                 if (combatType != null) {
-                    Map<String, Object> result = new HashMap<>();
+                    var result = new HashMap<String, Object>();
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
@@ -2106,7 +2106,7 @@ public class BridgeCallbackHandler {
 
                 if (hasPlayableCards) {
                     // Playable cards available — return so LLM can decide
-                    Map<String, Object> result = new HashMap<>();
+                    var result = new HashMap<String, Object>();
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
@@ -2127,7 +2127,7 @@ public class BridgeCallbackHandler {
 
                 // Without yield: we passed once, return immediately
                 if (!yieldActive) {
-                    Map<String, Object> result = new HashMap<>();
+                    var result = new HashMap<String, Object>();
                     result.put("action_pending", false);
                     result.put("actions_passed", actionsPassed);
                     result.put("stop_reason", "passed");
@@ -2140,10 +2140,21 @@ public class BridgeCallbackHandler {
             // No pending action — wait for one
             // Without yield: if no action is pending, return immediately (nothing to pass)
             if (!yieldActive && action == null) {
-                Map<String, Object> result = new HashMap<>();
+                var result = new HashMap<String, Object>();
                 result.put("action_pending", false);
                 result.put("actions_passed", actionsPassed);
                 result.put("stop_reason", "no_action");
+                attachUnseenChat(result);
+                return result;
+            }
+
+            // Safety valve: don't wait forever in yield mode
+            long elapsed = System.currentTimeMillis() - startTime;
+            if (yieldActive && elapsed > YIELD_WAIT_TIMEOUT_MS) {
+                var result = new HashMap<String, Object>();
+                result.put("action_pending", false);
+                result.put("actions_passed", actionsPassed);
+                result.put("stop_reason", "yield_timeout");
                 attachUnseenChat(result);
                 return result;
             }
@@ -2185,7 +2196,7 @@ public class BridgeCallbackHandler {
         }
 
         // InterruptedException break
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         result.put("action_pending", false);
         result.put("actions_passed", actionsPassed);
         result.put("stop_reason", "interrupted");
@@ -2253,7 +2264,7 @@ public class BridgeCallbackHandler {
         }
         long currentCursor = updateGameStateCursor(fullState);
         if (cursor != null && cursor.longValue() == currentCursor) {
-            Map<String, Object> unchanged = new HashMap<>();
+            var unchanged = new HashMap<String, Object>();
             unchanged.put("available", true);
             unchanged.put("unchanged", true);
             unchanged.put("cursor", currentCursor);
@@ -2264,7 +2275,7 @@ public class BridgeCallbackHandler {
     }
 
     public Map<String, Object> getGameState() {
-        Map<String, Object> state = new HashMap<>();
+        var state = new HashMap<String, Object>();
         GameView gameView = lastGameView;
         if (gameView == null) {
             state.put("available", false);
@@ -2287,12 +2298,12 @@ public class BridgeCallbackHandler {
         state.put("priority_player", gameView.getPriorityPlayerName());
 
         // Players
-        List<Map<String, Object>> players = new ArrayList<>();
+        var players = new ArrayList<Map<String, Object>>();
         UUID gameId = currentGameId; // snapshot volatile to prevent TOCTOU race
         UUID myPlayerId = gameId != null ? activeGames.get(gameId) : null;
 
         for (PlayerView player : gameView.getPlayers()) {
-            Map<String, Object> playerInfo = new HashMap<>();
+            var playerInfo = new HashMap<String, Object>();
             playerInfo.put("name", player.getName());
             playerInfo.put("life", player.getLife());
             playerInfo.put("library_size", player.getLibraryCount());
@@ -2304,12 +2315,12 @@ public class BridgeCallbackHandler {
 
             // Hand cards (only for our player)
             if (isMe && gameView.getMyHand() != null) {
-                List<Map<String, Object>> handCards = new ArrayList<>();
+                var handCards = new ArrayList<Map<String, Object>>();
                 PlayableObjectsList playable = gameView.getCanPlayObjects();
 
                 for (Map.Entry<UUID, CardView> handEntry : gameView.getMyHand().entrySet()) {
                     CardView card = handEntry.getValue();
-                    Map<String, Object> cardInfo = new HashMap<>();
+                    var cardInfo = new HashMap<String, Object>();
                     cardInfo.put("name", safeDisplayName(card));
 
                     String manaCost = card.getManaCostStr();
@@ -2335,10 +2346,10 @@ public class BridgeCallbackHandler {
             }
 
             // Battlefield
-            List<Map<String, Object>> battlefield = new ArrayList<>();
+            var battlefield = new ArrayList<Map<String, Object>>();
             if (player.getBattlefield() != null) {
                 for (PermanentView perm : player.getBattlefield().values()) {
-                    Map<String, Object> permInfo = new HashMap<>();
+                    var permInfo = new HashMap<String, Object>();
                     permInfo.put("id", perm.getId().toString());
                     permInfo.put("name", safeDisplayName(perm));
                     permInfo.put("tapped", perm.isTapped());
@@ -2356,7 +2367,7 @@ public class BridgeCallbackHandler {
 
                     // Counters
                     if (perm.getCounters() != null && !perm.getCounters().isEmpty()) {
-                        Map<String, Integer> counters = new HashMap<>();
+                        var counters = new HashMap<String, Integer>();
                         for (CounterView counter : perm.getCounters()) {
                             counters.put(counter.getName(), counter.getCount());
                         }
@@ -2392,7 +2403,7 @@ public class BridgeCallbackHandler {
             }
 
             // Graveyard
-            List<String> graveyard = new ArrayList<>();
+            var graveyard = new ArrayList<String>();
             if (player.getGraveyard() != null) {
                 for (CardView card : player.getGraveyard().values()) {
                     graveyard.add(safeDisplayName(card));
@@ -2403,7 +2414,7 @@ public class BridgeCallbackHandler {
             }
 
             // Exile
-            List<String> exileCards = new ArrayList<>();
+            var exileCards = new ArrayList<String>();
             if (player.getExile() != null) {
                 for (CardView card : player.getExile().values()) {
                     exileCards.add(safeDisplayName(card));
@@ -2419,7 +2430,7 @@ public class BridgeCallbackHandler {
                 int total = pool.getRed() + pool.getGreen() + pool.getBlue()
                           + pool.getWhite() + pool.getBlack() + pool.getColorless();
                 if (total > 0) {
-                    Map<String, Integer> mana = new HashMap<>();
+                    var mana = new HashMap<String, Integer>();
                     if (pool.getRed() > 0) mana.put("R", pool.getRed());
                     if (pool.getGreen() > 0) mana.put("G", pool.getGreen());
                     if (pool.getBlue() > 0) mana.put("U", pool.getBlue());
@@ -2432,7 +2443,7 @@ public class BridgeCallbackHandler {
 
             // Player counters (poison, etc.)
             if (player.getCounters() != null && !player.getCounters().isEmpty()) {
-                Map<String, Integer> counters = new HashMap<>();
+                var counters = new HashMap<String, Integer>();
                 for (CounterView counter : player.getCounters()) {
                     counters.put(counter.getName(), counter.getCount());
                 }
@@ -2441,7 +2452,7 @@ public class BridgeCallbackHandler {
 
             // Commander info
             if (player.getCommandObjectList() != null && !player.getCommandObjectList().isEmpty()) {
-                List<String> commanders = new ArrayList<>();
+                var commanders = new ArrayList<String>();
                 for (CommandObjectView cmd : player.getCommandObjectList()) {
                     commanders.add(cmd.getName());
                 }
@@ -2453,10 +2464,10 @@ public class BridgeCallbackHandler {
         state.put("players", players);
 
         // Stack
-        List<Map<String, Object>> stack = new ArrayList<>();
+        var stack = new ArrayList<Map<String, Object>>();
         if (gameView.getStack() != null) {
             for (CardView card : gameView.getStack().values()) {
-                Map<String, Object> stackItem = new HashMap<>();
+                var stackItem = new HashMap<String, Object>();
                 stackItem.put("name", safeDisplayName(card));
                 stackItem.put("rules", card.getRules());
                 if (card.getTargets() != null && !card.getTargets().isEmpty()) {
@@ -2475,12 +2486,12 @@ public class BridgeCallbackHandler {
 
         // Combat
         if (gameView.getCombat() != null && !gameView.getCombat().isEmpty()) {
-            List<Map<String, Object>> combatGroups = new ArrayList<>();
+            var combatGroups = new ArrayList<Map<String, Object>>();
             for (CombatGroupView group : gameView.getCombat()) {
-                Map<String, Object> groupInfo = new HashMap<>();
-                List<Map<String, Object>> attackers = new ArrayList<>();
+                var groupInfo = new HashMap<String, Object>();
+                var attackers = new ArrayList<Map<String, Object>>();
                 for (CardView attacker : group.getAttackers().values()) {
-                    Map<String, Object> aInfo = new HashMap<>();
+                    var aInfo = new HashMap<String, Object>();
                     aInfo.put("name", safeDisplayName(attacker));
                     if (attacker.getPower() != null) {
                         aInfo.put("power", attacker.getPower());
@@ -2489,9 +2500,9 @@ public class BridgeCallbackHandler {
                     attackers.add(aInfo);
                 }
                 groupInfo.put("attackers", attackers);
-                List<Map<String, Object>> blockers = new ArrayList<>();
+                var blockers = new ArrayList<Map<String, Object>>();
                 for (CardView blocker : group.getBlockers().values()) {
-                    Map<String, Object> bInfo = new HashMap<>();
+                    var bInfo = new HashMap<String, Object>();
                     bInfo.put("name", safeDisplayName(blocker));
                     if (blocker.getPower() != null) {
                         bInfo.put("power", blocker.getPower());
@@ -2528,11 +2539,11 @@ public class BridgeCallbackHandler {
             return "null";
         }
         if (value instanceof Map<?, ?>) {
-            TreeMap<String, Object> sorted = new TreeMap<>();
+            var sorted = new TreeMap<String, Object>();
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) value).entrySet()) {
                 sorted.put(String.valueOf(entry.getKey()), entry.getValue());
             }
-            StringBuilder sb = new StringBuilder("{");
+            var sb = new StringBuilder("{");
             boolean first = true;
             for (Map.Entry<String, Object> entry : sorted.entrySet()) {
                 if (!first) sb.append(",");
@@ -2543,7 +2554,7 @@ public class BridgeCallbackHandler {
             return sb.toString();
         }
         if (value instanceof List<?>) {
-            StringBuilder sb = new StringBuilder("[");
+            var sb = new StringBuilder("[");
             boolean first = true;
             for (Object item : (List<?>) value) {
                 if (!first) sb.append(",");
@@ -2557,14 +2568,14 @@ public class BridgeCallbackHandler {
     }
 
     public Map<String, Object> getMyDecklist() {
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
         DeckCardLists deck = this.deckList;
         if (deck == null) {
             result.put("error", "No deck loaded");
             return result;
         }
 
-        StringBuilder cards = new StringBuilder();
+        var cards = new StringBuilder();
         for (DeckCardInfo card : deck.getCards()) {
             if (cards.length() > 0) cards.append("\n");
             cards.append(card.getAmount()).append("x ").append(card.getCardName());
@@ -2572,7 +2583,7 @@ public class BridgeCallbackHandler {
         result.put("cards", cards.toString());
 
         if (!deck.getSideboard().isEmpty()) {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             for (DeckCardInfo card : deck.getSideboard()) {
                 if (sb.length() > 0) sb.append("\n");
                 sb.append(card.getAmount()).append("x ").append(card.getCardName());
@@ -2588,7 +2599,7 @@ public class BridgeCallbackHandler {
      * Used to filter large GAME_CHOOSE_CHOICE lists (e.g. Herald's Horn).
      */
     private Set<String> getDeckCreatureTypes() {
-        Set<String> types = new HashSet<>();
+        var types = new HashSet<String>();
         DeckCardLists deck = this.deckList;
         if (deck == null) return types;
         for (DeckCardInfo card : deck.getCards()) {
@@ -2605,7 +2616,7 @@ public class BridgeCallbackHandler {
     }
 
     public Map<String, Object> getOracleText(String cardName, String objectId, String[] cardNames, String[] objectIds) {
-        Map<String, Object> result = new HashMap<>();
+        var result = new HashMap<String, Object>();
 
         boolean hasCardName = cardName != null && !cardName.isEmpty();
         boolean hasObjectId = objectId != null && !objectId.isEmpty();
@@ -2622,9 +2633,9 @@ public class BridgeCallbackHandler {
 
         // Batch lookup by object IDs
         if (hasObjectIds) {
-            List<Map<String, Object>> results = new ArrayList<>();
+            var results = new ArrayList<Map<String, Object>>();
             for (String oid : objectIds) {
-                Map<String, Object> entry = new HashMap<>();
+                var entry = new HashMap<String, Object>();
                 if (oid == null) {
                     entry.put("object_id", null);
                     entry.put("error", "null object_id");
@@ -2652,9 +2663,9 @@ public class BridgeCallbackHandler {
 
         // Batch lookup by card names
         if (hasCardNames) {
-            List<Map<String, Object>> results = new ArrayList<>();
+            var results = new ArrayList<Map<String, Object>>();
             for (String name : cardNames) {
-                Map<String, Object> entry = new HashMap<>();
+                var entry = new HashMap<String, Object>();
                 entry.put("name", name);
                 CardInfo cardInfo = CardRepository.instance.findCard(name);
                 if (cardInfo != null) {
@@ -3335,41 +3346,27 @@ public class BridgeCallbackHandler {
         if (manaPool == null) {
             return 0;
         }
-        switch (manaType) {
-            case WHITE:
-                return manaPool.getWhite();
-            case BLUE:
-                return manaPool.getBlue();
-            case BLACK:
-                return manaPool.getBlack();
-            case RED:
-                return manaPool.getRed();
-            case GREEN:
-                return manaPool.getGreen();
-            case COLORLESS:
-                return manaPool.getColorless();
-            default:
-                return 0;
-        }
+        return switch (manaType) {
+            case WHITE -> manaPool.getWhite();
+            case BLUE -> manaPool.getBlue();
+            case BLACK -> manaPool.getBlack();
+            case RED -> manaPool.getRed();
+            case GREEN -> manaPool.getGreen();
+            case COLORLESS -> manaPool.getColorless();
+            case GENERIC -> 0;
+        };
     }
 
     private String prettyManaType(ManaType manaType) {
-        switch (manaType) {
-            case WHITE:
-                return "White";
-            case BLUE:
-                return "Blue";
-            case BLACK:
-                return "Black";
-            case RED:
-                return "Red";
-            case GREEN:
-                return "Green";
-            case COLORLESS:
-                return "Colorless";
-            default:
-                return manaType.toString();
-        }
+        return switch (manaType) {
+            case WHITE -> "White";
+            case BLUE -> "Blue";
+            case BLACK -> "Black";
+            case RED -> "Red";
+            case GREEN -> "Green";
+            case COLORLESS -> "Colorless";
+            case GENERIC -> "Generic";
+        };
     }
 
     private void addPreferredPoolManaChoice(List<ManaType> orderedChoices, ManaPoolView manaPool, ManaType manaType) {
@@ -3393,7 +3390,7 @@ public class BridgeCallbackHandler {
 
         // Which colors does the payment need?
         Pattern[] colorPatterns = {REGEX_WHITE, REGEX_BLUE, REGEX_BLACK, REGEX_RED, REGEX_GREEN, REGEX_COLORLESS};
-        List<Pattern> needed = new ArrayList<>();
+        var needed = new ArrayList<Pattern>();
         for (Pattern p : colorPatterns) {
             if (p.matcher(prompt).find()) {
                 needed.add(p);
@@ -3472,7 +3469,7 @@ public class BridgeCallbackHandler {
             return new ArrayList<>();
         }
 
-        List<ManaType> orderedChoices = new ArrayList<>();
+        var orderedChoices = new ArrayList<ManaType>();
         boolean hasExplicitSymbols = addExplicitPoolChoices(orderedChoices, manaPool, promptText);
         if (hasExplicitSymbols) {
             // If explicit symbols are present (e.g. "{G}"), only offer matching pool mana types.
@@ -3495,7 +3492,7 @@ public class BridgeCallbackHandler {
      * Format: [{"tap": "uuid"}, {"pool": "RED"}, ...]
      */
     private CopyOnWriteArrayList<ManaPlanEntry> parseManaPlan(String json) {
-        CopyOnWriteArrayList<ManaPlanEntry> plan = new CopyOnWriteArrayList<>();
+        var plan = new CopyOnWriteArrayList<ManaPlanEntry>();
         // Minimal JSON array parsing — no dependency on external JSON library
         // Expected format: [{"tap":"uuid"},{"pool":"MANA_TYPE"}]
         json = json.trim();
@@ -3731,7 +3728,7 @@ public class BridgeCallbackHandler {
         GameClientMessage message = (GameClientMessage) callback.getData();
         int count = message.getMessages() != null ? message.getMessages().size() : 0;
 
-        StringBuilder sb = new StringBuilder();
+        var sb = new StringBuilder();
         if (message.getMessages() != null) {
             for (int i = 0; i < count; i++) {
                 if (i > 0) sb.append(" ");

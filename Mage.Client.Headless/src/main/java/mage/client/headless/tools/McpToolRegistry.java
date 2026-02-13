@@ -11,7 +11,6 @@ import mage.client.headless.BridgeCallbackHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,7 +41,7 @@ public class McpToolRegistry {
 
     /** Build a JSON object (LinkedHashMap) from alternating key-value pairs. */
     public static Map<String, Object> json(Object... kvs) {
-        Map<String, Object> map = new LinkedHashMap<>();
+        var map = new LinkedHashMap<String, Object>();
         for (int i = 0; i < kvs.length; i += 2) {
             map.put((String) kvs[i], kvs[i + 1]);
         }
@@ -51,7 +50,7 @@ public class McpToolRegistry {
 
     /** Build an example entry from a label and a value map (serialized to pretty JSON). */
     public static Map<String, Object> example(String label, Map<String, Object> value) {
-        Map<String, Object> ex = new HashMap<>();
+        var ex = new HashMap<String, Object>();
         ex.put("label", label);
         ex.put("value", PRETTY_GSON.toJson(value));
         return ex;
@@ -77,7 +76,7 @@ public class McpToolRegistry {
 
     /** Build the full tool definition list (for tools/list and JSON export). */
     public List<Map<String, Object>> getDefinitions() {
-        List<Map<String, Object>> defs = new ArrayList<>();
+        var defs = new ArrayList<Map<String, Object>>();
         for (ToolEntry entry : entries) {
             defs.add(buildDefinition(entry));
         }
@@ -92,7 +91,7 @@ public class McpToolRegistry {
             throw new RuntimeException("Unknown tool: " + name);
         }
         Parameter[] params = entry.method().getParameters();
-        Object[] args = new Object[params.length];
+        var args = new Object[params.length];
         for (int i = 0; i < params.length; i++) {
             Class<?> type = params[i].getType();
             if (BridgeCallbackHandler.class.isAssignableFrom(type)) {
@@ -117,7 +116,7 @@ public class McpToolRegistry {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> buildDefinition(ToolEntry entry) {
-        Map<String, Object> def = new HashMap<>();
+        var def = new HashMap<String, Object>();
         def.put("name", entry.annotation().name());
         def.put("description", entry.annotation().description());
         def.put("inputSchema", buildInputSchema(entry));
@@ -133,10 +132,10 @@ public class McpToolRegistry {
     }
 
     private static Map<String, Object> buildInputSchema(ToolEntry entry) {
-        Map<String, Object> schema = new HashMap<>();
+        var schema = new HashMap<String, Object>();
         schema.put("type", "object");
-        Map<String, Object> properties = new HashMap<>();
-        List<String> required = new ArrayList<>();
+        var properties = new HashMap<String, Object>();
+        var required = new ArrayList<String>();
 
         for (Parameter p : entry.method().getParameters()) {
             if (BridgeCallbackHandler.class.isAssignableFrom(p.getType())) continue;
@@ -144,11 +143,11 @@ public class McpToolRegistry {
             if (param == null) continue;
 
             String name = p.getName();
-            Map<String, Object> prop = new HashMap<>();
+            var prop = new HashMap<String, Object>();
             addJsonType(prop, p.getType());
             prop.put("description", param.description());
             if (param.allowed_values().length > 0) {
-                prop.put("enum", Arrays.asList(param.allowed_values()));
+                prop.put("enum", List.of(param.allowed_values()));
             }
             properties.put(name, prop);
 
@@ -176,12 +175,12 @@ public class McpToolRegistry {
             prop.put("type", "boolean");
         } else if (type == String[].class) {
             prop.put("type", "array");
-            Map<String, Object> items = new HashMap<>();
+            var items = new HashMap<String, Object>();
             items.put("type", "string");
             prop.put("items", items);
         } else if (type == int[].class) {
             prop.put("type", "array");
-            Map<String, Object> items = new HashMap<>();
+            var items = new HashMap<String, Object>();
             items.put("type", "integer");
             prop.put("items", items);
         } else {
@@ -190,15 +189,15 @@ public class McpToolRegistry {
     }
 
     private static Map<String, Object> buildOutputSchema(Tool.Field[] fields) {
-        Map<String, Object> schema = new HashMap<>();
+        var schema = new HashMap<String, Object>();
         schema.put("type", "object");
-        Map<String, Object> properties = new HashMap<>();
+        var properties = new HashMap<String, Object>();
         for (Tool.Field f : fields) {
-            Map<String, Object> prop = new HashMap<>();
+            var prop = new HashMap<String, Object>();
             String type = f.type();
             if (type.startsWith("array[") && type.endsWith("]")) {
                 prop.put("type", "array");
-                Map<String, Object> items = new HashMap<>();
+                var items = new HashMap<String, Object>();
                 items.put("type", type.substring(6, type.length() - 1));
                 prop.put("items", items);
             } else {
@@ -226,7 +225,7 @@ public class McpToolRegistry {
             return obj.get(key).getAsBoolean();
         } else if (type == String[].class) {
             JsonArray arr = obj.getAsJsonArray(key);
-            String[] result = new String[arr.size()];
+            var result = new String[arr.size()];
             for (int i = 0; i < arr.size(); i++) {
                 JsonElement elem = arr.get(i);
                 result[i] = elem.isJsonNull() ? null : elem.getAsString();
@@ -234,7 +233,7 @@ public class McpToolRegistry {
             return result;
         } else if (type == int[].class) {
             JsonArray arr = obj.getAsJsonArray(key);
-            int[] result = new int[arr.size()];
+            var result = new int[arr.size()];
             for (int i = 0; i < arr.size(); i++) {
                 result[i] = arr.get(i).isJsonNull() ? 0 : arr.get(i).getAsInt();
             }

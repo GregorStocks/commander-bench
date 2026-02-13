@@ -1,6 +1,5 @@
 package mage.client.headless.tools;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -69,7 +68,7 @@ public class GetActionChoicesTool {
     }
 
     public static List<Map<String, Object>> examples() {
-        return Arrays.asList(
+        return List.of(
             example("Select (play cards)", json(
                 "action_pending", true,
                 "action_type", "GAME_SELECT",
@@ -77,7 +76,7 @@ public class GetActionChoicesTool {
                 "response_type", "select",
                 "context", "T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN",
                 "players", "You(20), Opp(18)",
-                "choices", Arrays.asList(
+                "choices", List.of(
                     json("index", 0, "name", "Lightning Bolt", "action", "cast", "mana_cost", "{R}", "mana_value", 1),
                     json("index", 1, "name", "Mountain", "action", "land")),
                 "untapped_lands", 2)),
@@ -88,7 +87,7 @@ public class GetActionChoicesTool {
                 "response_type", "boolean",
                 "context", "T0 PREGAME",
                 "players", "You(20), Opp(20)",
-                "your_hand", Arrays.asList(
+                "your_hand", List.of(
                     json("name", "Mountain", "mana_value", 0, "is_land", true),
                     json("name", "Lightning Bolt", "mana_cost", "{R}", "mana_value", 1)),
                 "hand_size", 7,
