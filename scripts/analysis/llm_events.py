@@ -41,10 +41,19 @@ def main(gz_path: str) -> None:
         if tc.get("type") != "tool_call":
             continue
         result = str(tc.get("result", ""))
-        if any(
-            x in result.lower()
-            for x in ["error", "out of range", "required", "invalid", "failed"]
-        ):
+        is_failure = False
+        try:
+            result_obj = json.loads(result)
+            if isinstance(result_obj, dict) and result_obj.get("success") is False:
+                is_failure = True
+        except (json.JSONDecodeError, TypeError):
+            # Fallback for very old logs without JSON structure
+            if any(
+                x in result.lower()
+                for x in ["error", "out of range", "required", "invalid", "failed"]
+            ):
+                is_failure = True
+        if is_failure:
             fail_count += 1
             print(
                 f"  {tc.get('player', '?')} | {tc.get('tool', '?')} "
