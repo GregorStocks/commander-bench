@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from puppeteer.config import Config, PilotPlayer
+from puppeteer.deck_choice import resolve_choice_decks
 from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
@@ -883,6 +884,7 @@ def main() -> int:
             # Copy config into game directory for reference
             shutil.copy2(config.config_file, game_dir / "config.json")
 
+        resolve_choice_decks(config.pilot_players, project_root, config.deck_type)
         config.resolve_random_decks(project_root)
         _write_game_meta(game_dir, config, project_root)
 

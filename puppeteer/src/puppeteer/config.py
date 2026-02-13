@@ -431,6 +431,16 @@ class Config:
                     # Legacy: treat as potato for backwards compatibility
                     self.potato_players.append(PotatoPlayer(name=name, deck=deck))
 
+            # Validate: only pilot players can have deck="choice"
+            non_pilot_choice = [
+                p.name
+                for p in self.potato_players + self.staller_players + self.sleepwalker_players + self.cpu_players
+                if p.deck == "choice"
+            ]
+            assert not non_pilot_choice, (
+                f"deck='choice' requires a pilot player (has LLM), but found on non-pilot player(s): {non_pilot_choice}"
+            )
+
             # Second pass: resolve random presets/personalities and generate names
             _resolve_randoms(llm_players, personalities, presets_data, prompts, models_data, toolsets)
 
@@ -475,6 +485,19 @@ class Config:
 
     def resolve_random_decks(self, project_root: Path) -> None:
         """Replace any deck="random" with a randomly chosen .dck file for the configured format."""
+        # Fail fast if any player still has deck="choice" — caller must resolve those first
+        all_typed_players = (
+            self.potato_players
+            + self.staller_players
+            + self.sleepwalker_players
+            + self.pilot_players
+            + self.cpu_players
+        )
+        choice_names = [p.name for p in all_typed_players if p.deck == "choice"]
+        assert not choice_names, (
+            f"Unresolved deck='choice' for {choice_names} — call resolve_choice_decks() before resolve_random_decks()"
+        )
+
         all_players = (
             self.potato_players
             + self.staller_players
