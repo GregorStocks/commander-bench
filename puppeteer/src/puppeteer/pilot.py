@@ -26,6 +26,17 @@ from puppeteer.llm_cost import (
 )
 
 DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+
+# Exit code returned when the LLM permanently fails (404 model not found,
+# 402/403 credits exhausted).  The orchestrator checks for this to abort the
+# game early instead of wasting API tokens on the other player.
+PERMANENT_FAILURE_EXIT_CODE = 3
+
+
+class PermanentLLMFailure(Exception):
+    """Raised when the LLM is permanently unreachable (model not found, credits exhausted)."""
+
+
 MAX_TOKENS = 512
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
@@ -667,22 +678,22 @@ async def run_pilot_loop(
             if game_log:
                 game_log.emit("llm_error", error_type=type(e).__name__, error_message=error_str[:500])
 
-            # Permanent failures - fall back to auto-pass mode forever
+            # Permanent failures - abort immediately to avoid wasting
+            # API tokens on the other player(s).
             if "402" in error_str or "403" in error_str or "404" in error_str:
                 reason = "Credits exhausted" if ("402" in error_str or "403" in error_str) else "Model not found"
-                _log_error(game_dir, username, f"[pilot] {reason}, switching to auto-pass mode")
+                _log_error(game_dir, username, f"[pilot] {reason}, aborting")
                 if game_log:
-                    game_log.emit("auto_pilot_mode", reason=reason)
+                    game_log.emit("permanent_llm_failure", reason=reason)
                 try:
                     await execute_tool(
                         session,
                         "send_chat_message",
-                        {"message": f"{reason}... going on autopilot. GG!"},
+                        {"message": f"{reason}... aborting game. GG!"},
                     )
                 except Exception:
                     pass
-                await auto_pass_loop(session, game_dir, username, "pilot")
-                return
+                raise PermanentLLMFailure(reason) from None
 
             # Transient error - keep actions flowing while waiting to retry
             try:
@@ -895,6 +906,9 @@ def main() -> int:
         )
     except KeyboardInterrupt:
         pass
+    except PermanentLLMFailure as e:
+        _log(f"[pilot] Permanent LLM failure: {e}")
+        return PERMANENT_FAILURE_EXIT_CODE
 
     return 0
 
