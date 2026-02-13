@@ -3,7 +3,10 @@ package mage.client.streaming;
 import mage.MageException;
 import mage.client.MageFrame;
 import mage.client.MagePane;
+import mage.client.SessionHandler;
 import mage.client.game.GamePane;
+import mage.client.preference.MagePreferences;
+import mage.remote.Connection;
 import org.apache.log4j.Logger;
 
 import javax.swing.*;
@@ -11,6 +14,7 @@ import java.awt.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.net.SocketException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
@@ -22,6 +26,8 @@ import java.util.UUID;
 public class StreamingMageFrame extends MageFrame {
 
     private static final Logger LOGGER = Logger.getLogger(StreamingMageFrame.class);
+    private static final int MAX_RECONNECT_ATTEMPTS = 5;
+    private static final int[] RECONNECT_BACKOFF_MS = {2000, 4000, 8000, 16000, 30000};
     private static final String GIT_BRANCH = getGitBranch();
     private static final String STREAMING_TITLE_PREFIX = "[STREAMING] " +
             (GIT_BRANCH != null ? "[" + GIT_BRANCH + "] " : "");
@@ -84,6 +90,60 @@ public class StreamingMageFrame extends MageFrame {
         } else {
             super.setTitle(title);
         }
+    }
+
+    /**
+     * Auto-reconnect instead of showing a dialog.
+     */
+    @Override
+    public void disconnected(boolean askToReconnect, boolean keepMySessionActive) {
+        LOGGER.info("Disconnected (askToReconnect=" + askToReconnect + ", keepSession=" + keepMySessionActive + ")");
+
+        SessionHandler.disconnect(false, keepMySessionActive);
+
+        if (!askToReconnect) {
+            return;
+        }
+
+        Thread reconnectThread = new Thread(() -> {
+            for (int i = 0; i < MAX_RECONNECT_ATTEMPTS; i++) {
+                int backoffMs = RECONNECT_BACKOFF_MS[i];
+                LOGGER.info("Reconnect attempt " + (i + 1) + "/" + MAX_RECONNECT_ATTEMPTS + " in " + backoffMs + "ms...");
+                try {
+                    Thread.sleep(backoffMs);
+                } catch (InterruptedException e) {
+                    LOGGER.info("Interrupted during reconnect backoff");
+                    return;
+                }
+
+                Connection connection = buildConnectionFromPreferences();
+                if (MageFrame.connect(connection)) {
+                    LOGGER.info("Reconnected successfully on attempt " + (i + 1));
+                    SwingUtilities.invokeLater(this::prepareAndShowServerLobby);
+                    return;
+                }
+                LOGGER.warn("Reconnect attempt " + (i + 1) + " failed: " + SessionHandler.getLastConnectError());
+            }
+            LOGGER.error("All " + MAX_RECONNECT_ATTEMPTS + " reconnect attempts failed — giving up");
+        }, "StreamingReconnect");
+        reconnectThread.setDaemon(true);
+        reconnectThread.start();
+    }
+
+    private static Connection buildConnectionFromPreferences() {
+        Connection connection = new Connection();
+        connection.setUsername(MagePreferences.getLastServerUser());
+        connection.setPassword(MagePreferences.getLastServerPassword());
+        connection.setHost(MagePreferences.getLastServerAddress());
+        connection.setPort(MagePreferences.getLastServerPort());
+        String allMAC = "";
+        try {
+            allMAC = Connection.getMAC();
+        } catch (SocketException ignored) {
+        }
+        connection.setUserIdStr(System.getProperty("user.name") + ":" + System.getProperty("os.name") + ":" + MagePreferences.getUserNames() + ":" + allMAC);
+        connection.setProxyType(Connection.ProxyType.NONE);
+        return connection;
     }
 
     /**
