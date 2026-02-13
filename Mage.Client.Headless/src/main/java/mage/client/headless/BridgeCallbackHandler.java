@@ -6,6 +6,7 @@ import mage.cards.repository.CardInfo;
 import mage.cards.repository.CardRepository;
 import mage.choices.Choice;
 import mage.constants.ManaType;
+import mage.constants.PhaseStep;
 import mage.constants.PlayerAction;
 import mage.constants.SubType;
 import mage.constants.SubTypeSet;
@@ -1871,23 +1872,45 @@ public class BridgeCallbackHandler {
         "end_step_before_my_turn", PlayerAction.PASS_PRIORITY_UNTIL_END_STEP_BEFORE_MY_NEXT_TURN
     );
 
-    /** Max time to wait for a callback in yield mode before giving up (safety valve). */
-    private static final long YIELD_WAIT_TIMEOUT_MS = 120_000;
+    // Mapping from yield_until_step parameter values to PhaseStep enum constants.
+    // Only steps where players normally receive priority are exposed.
+    private static final Map<String, PhaseStep> STEP_PHASES = Map.of(
+        "upkeep", PhaseStep.UPKEEP,
+        "draw", PhaseStep.DRAW,
+        "precombat_main", PhaseStep.PRECOMBAT_MAIN,
+        "begin_combat", PhaseStep.BEGIN_COMBAT,
+        "declare_attackers", PhaseStep.DECLARE_ATTACKERS,
+        "declare_blockers", PhaseStep.DECLARE_BLOCKERS,
+        "end_combat", PhaseStep.END_COMBAT,
+        "postcombat_main", PhaseStep.POSTCOMBAT_MAIN,
+        "end_turn", PhaseStep.END_TURN
+    );
 
     /**
      * Pass priority. Without yield_until: passes once and returns. With yield_until:
      * sets XMage's native server-side yield flag, then waits for a meaningful callback.
+     * With yield_until_step: client-side yield that auto-passes until the target step
+     * is reached (within the current turn). Still stops for combat and non-priority actions.
      *
      * Both modes auto-handle mechanical callbacks (GAME_PLAY_MANA auto-cancel,
      * optional GAME_TARGET with no legal targets). Returns stop_reason indicating
      * why the call returned.
      */
-    public Map<String, Object> passPriority(String yieldUntil) {
+    public Map<String, Object> passPriority(String yieldUntil, String yieldUntilStep) {
         interactionsThisTurn++;
         int actionsPassed = 0;
 
-        // Validate and activate yield if requested
+        // Mutual exclusivity check
+        if (yieldUntil != null && yieldUntilStep != null) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("error", "yield_until and yield_until_step are mutually exclusive");
+            return result;
+        }
+
+        // Validate and activate server-side yield if requested
         boolean yieldActive = false;
+        PhaseStep targetStep = null;
+        int yieldStartTurn = lastTurnNumber;
         if (yieldUntil != null) {
             PlayerAction yieldAction = YIELD_ACTIONS.get(yieldUntil);
             if (yieldAction == null) {
@@ -1903,6 +1926,19 @@ public class BridgeCallbackHandler {
                 return result;
             }
             session.sendPlayerAction(yieldAction, gameId, null);
+            yieldActive = true;
+        }
+
+        // Validate and activate client-side step yield if requested
+        if (yieldUntilStep != null) {
+            targetStep = STEP_PHASES.get(yieldUntilStep);
+            if (targetStep == null) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("error", "Invalid yield_until_step value: " + yieldUntilStep
+                    + ". Valid values: " + String.join(", ", STEP_PHASES.keySet()));
+                return result;
+            }
+            // Client-side yield: do NOT sendPlayerAction. Just set yieldActive.
             yieldActive = true;
         }
 
@@ -1934,6 +1970,20 @@ public class BridgeCallbackHandler {
                             manaPlan = null;
                         }
                     }
+                }
+
+                // Step-specific yield: turn boundary — target step wasn't reached this turn
+                if (targetStep != null && lastTurnNumber != yieldStartTurn) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("action_pending", true);
+                    result.put("action_type", method.name());
+                    result.put("actions_passed", actionsPassed);
+                    if (lastGameView != null && lastGameView.getStep() != null) {
+                        result.put("current_step", lastGameView.getStep().toString());
+                    }
+                    result.put("stop_reason", "step_not_reached");
+                    attachUnseenChat(result);
+                    return result;
                 }
 
                 // Generic loop detection: too many interactions this turn — auto-pass everything
@@ -2010,6 +2060,31 @@ public class BridgeCallbackHandler {
                     return result;
                 }
 
+                // Step-specific yield: check if we've reached the target step
+                if (targetStep != null) {
+                    GameView gv = lastGameView;
+                    if (gv != null && gv.getStep() == targetStep) {
+                        // Reached the target step — return to LLM
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("action_pending", true);
+                        result.put("action_type", method.name());
+                        result.put("actions_passed", actionsPassed);
+                        result.put("current_step", gv.getStep().toString());
+                        result.put("stop_reason", "reached_step");
+                        attachUnseenChat(result);
+                        return result;
+                    }
+                    // Not at target step: auto-pass (skip playable-cards check)
+                    synchronized (actionLock) {
+                        if (pendingAction == action) {
+                            pendingAction = null;
+                        }
+                    }
+                    session.sendPlayerBoolean(action.gameId(), false);
+                    actionsPassed++;
+                    continue;
+                }
+
                 // Check if there are playable cards (non-mana-only, excluding failed casts)
                 PlayableObjectsList playable = lastGameView != null ? lastGameView.getCanPlayObjects() : null;
                 boolean hasPlayableCards = false;
@@ -2073,17 +2148,6 @@ public class BridgeCallbackHandler {
                 return result;
             }
 
-            // Safety valve: don't wait forever in yield mode
-            long elapsed = System.currentTimeMillis() - startTime;
-            if (yieldActive && elapsed > YIELD_WAIT_TIMEOUT_MS) {
-                Map<String, Object> result = new HashMap<>();
-                result.put("action_pending", false);
-                result.put("actions_passed", actionsPassed);
-                result.put("stop_reason", "yield_timeout");
-                attachUnseenChat(result);
-                return result;
-            }
-
             synchronized (actionLock) {
                 try {
                     actionLock.wait(200);
@@ -2133,8 +2197,8 @@ public class BridgeCallbackHandler {
      * Combined helper for models: wait using pass_priority, then return full choices.
      * This reduces one round trip compared to pass_priority + get_action_choices.
      */
-    public Map<String, Object> waitAndGetChoices(String yieldUntil) {
-        Map<String, Object> waitResult = passPriority(yieldUntil);
+    public Map<String, Object> waitAndGetChoices(String yieldUntil, String yieldUntilStep) {
+        Map<String, Object> waitResult = passPriority(yieldUntil, yieldUntilStep);
         if (!Boolean.TRUE.equals(waitResult.get("action_pending"))) {
             return waitResult;
         }

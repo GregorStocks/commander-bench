@@ -60,11 +60,34 @@ def test_summarize_pass_priority_no_action():
     assert "no_action" in result
 
 
-def test_summarize_pass_priority_yield_timeout():
-    content = json.dumps({"action_pending": False, "actions_passed": 12, "stop_reason": "yield_timeout"})
+def test_summarize_pass_priority_reached_step():
+    content = json.dumps(
+        {
+            "action_pending": True,
+            "action_type": "GAME_SELECT",
+            "actions_passed": 15,
+            "current_step": "Declare Attackers",
+            "stop_reason": "reached_step",
+        }
+    )
     result = _summarize_tool_result("pass_priority", content)
-    assert "yield_timeout" in result
-    assert "12" in result
+    assert "reached_step" in result
+    assert "GAME_SELECT" in result
+
+
+def test_summarize_pass_priority_step_not_reached():
+    content = json.dumps(
+        {
+            "action_pending": True,
+            "action_type": "GAME_SELECT",
+            "actions_passed": 6,
+            "current_step": "Upkeep",
+            "stop_reason": "step_not_reached",
+        }
+    )
+    result = _summarize_tool_result("pass_priority", content)
+    assert "step_not_reached" in result
+    assert "GAME_SELECT" in result
 
 
 def test_summarize_pass_priority_player_dead():
