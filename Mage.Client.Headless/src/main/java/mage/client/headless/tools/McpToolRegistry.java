@@ -34,7 +34,7 @@ public class McpToolRegistry {
         for (Class<?> cls : toolClasses) {
             ToolEntry entry = scan(cls);
             entries.add(entry);
-            byName.put(entry.annotation.name(), entry);
+            byName.put(entry.annotation().name(), entry);
         }
     }
 
@@ -91,7 +91,7 @@ public class McpToolRegistry {
         if (entry == null) {
             throw new RuntimeException("Unknown tool: " + name);
         }
-        Parameter[] params = entry.method.getParameters();
+        Parameter[] params = entry.method().getParameters();
         Object[] args = new Object[params.length];
         for (int i = 0; i < params.length; i++) {
             Class<?> type = params[i].getType();
@@ -103,10 +103,10 @@ public class McpToolRegistry {
             }
         }
         try {
-            return (Map<String, Object>) entry.method.invoke(null, args);
+            return (Map<String, Object>) entry.method().invoke(null, args);
         } catch (java.lang.reflect.InvocationTargetException e) {
             Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof RuntimeException re) throw re;
             throw new RuntimeException(cause);
         } catch (Exception e) {
             throw new RuntimeException("Failed to invoke tool " + name, e);
@@ -118,15 +118,15 @@ public class McpToolRegistry {
     @SuppressWarnings("unchecked")
     private static Map<String, Object> buildDefinition(ToolEntry entry) {
         Map<String, Object> def = new HashMap<>();
-        def.put("name", entry.annotation.name());
-        def.put("description", entry.annotation.description());
+        def.put("name", entry.annotation().name());
+        def.put("description", entry.annotation().description());
         def.put("inputSchema", buildInputSchema(entry));
-        def.put("outputSchema", buildOutputSchema(entry.annotation.output()));
-        if (entry.examplesMethod != null) {
+        def.put("outputSchema", buildOutputSchema(entry.annotation().output()));
+        if (entry.examplesMethod() != null) {
             try {
-                def.put("examples", (List<Map<String, Object>>) entry.examplesMethod.invoke(null));
+                def.put("examples", (List<Map<String, Object>>) entry.examplesMethod().invoke(null));
             } catch (Exception e) {
-                throw new RuntimeException("Failed to invoke examples() on " + entry.method.getDeclaringClass().getName(), e);
+                throw new RuntimeException("Failed to invoke examples() on " + entry.method().getDeclaringClass().getName(), e);
             }
         }
         return def;
@@ -138,7 +138,7 @@ public class McpToolRegistry {
         Map<String, Object> properties = new HashMap<>();
         List<String> required = new ArrayList<>();
 
-        for (Parameter p : entry.method.getParameters()) {
+        for (Parameter p : entry.method().getParameters()) {
             if (BridgeCallbackHandler.class.isAssignableFrom(p.getType())) continue;
             Param param = p.getAnnotation(Param.class);
             if (param == null) continue;
@@ -240,15 +240,5 @@ public class McpToolRegistry {
         throw new RuntimeException("Unsupported parameter type: " + type.getName());
     }
 
-    private static class ToolEntry {
-        final Tool annotation;
-        final Method method;
-        final Method examplesMethod;
-
-        ToolEntry(Tool annotation, Method method, Method examplesMethod) {
-            this.annotation = annotation;
-            this.method = method;
-            this.examplesMethod = examplesMethod;
-        }
-    }
+    private record ToolEntry(Tool annotation, Method method, Method examplesMethod) {}
 }

@@ -535,8 +535,7 @@ public class StreamingGamePanel extends GamePanel {
             helperAreaField.setAccessible(true);
             JPanel helperArea = (JPanel) helperAreaField.get(this);
 
-            if (helperArea != null && helperArea.getLayout() instanceof BorderLayout) {
-                BorderLayout layout = (BorderLayout) helperArea.getLayout();
+            if (helperArea != null && helperArea.getLayout() instanceof BorderLayout layout) {
                 // Find and hide the SOUTH component (pnlCommandsRoot)
                 Component southComponent = layout.getLayoutComponent(BorderLayout.SOUTH);
                 if (southComponent != null) {
@@ -657,8 +656,8 @@ public class StreamingGamePanel extends GamePanel {
 
             List<MageCard> cardsToLayout = new ArrayList<>();
             for (Component c : cardArea.getComponents()) {
-                if (c instanceof MageCard) {
-                    cardsToLayout.add((MageCard) c);
+                if (c instanceof MageCard mc) {
+                    cardsToLayout.add(mc);
                 }
             }
 
@@ -1088,8 +1087,8 @@ public class StreamingGamePanel extends GamePanel {
     private void layoutHandCards(JPanel cardArea, Zone zone) {
         List<MageCard> cardsToLayout = new ArrayList<>();
         for (Component component : cardArea.getComponents()) {
-            if (component instanceof MageCard) {
-                cardsToLayout.add((MageCard) component);
+            if (component instanceof MageCard mc) {
+                cardsToLayout.add(mc);
             }
         }
 
@@ -1278,8 +1277,8 @@ public class StreamingGamePanel extends GamePanel {
             // Filter commandList to only CommanderView instances
             CardsView commanders = new CardsView();
             for (CommandObjectView obj : player.getCommandObjectList()) {
-                if (obj instanceof CommanderView) {
-                    commanders.put(obj.getId(), (CommanderView) obj);
+                if (obj instanceof CommanderView cv) {
+                    commanders.put(obj.getId(), cv);
                 }
             }
 
@@ -1310,8 +1309,8 @@ public class StreamingGamePanel extends GamePanel {
             // Find the first CommanderView for this player
             CommanderView commander = null;
             for (CommandObjectView obj : player.getCommandObjectList()) {
-                if (obj instanceof CommanderView) {
-                    commander = (CommanderView) obj;
+                if (obj instanceof CommanderView cv) {
+                    commander = cv;
                     break;
                 }
             }
@@ -1611,16 +1610,15 @@ public class StreamingGamePanel extends GamePanel {
                 Field field = PlayerPanelExt.class.getDeclaredField(fieldName);
                 field.setAccessible(true);
                 Object value = field.get(playerPanel);
-                if (value instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) value;
+                if (value instanceof Map<?, ?> map) {
                     for (Object key : map.keySet()) {
-                        if (key instanceof Component) {
-                            ((Component) key).setVisible(visible);
+                        if (key instanceof Component comp) {
+                            comp.setVisible(visible);
                         }
                     }
                     for (Object val : map.values()) {
-                        if (val instanceof Component) {
-                            ((Component) val).setVisible(visible);
+                        if (val instanceof Component comp) {
+                            comp.setVisible(visible);
                         }
                     }
                 }
@@ -2052,8 +2050,8 @@ public class StreamingGamePanel extends GamePanel {
     private JsonArray commandersToJson(PlayerView player, OverlayLayoutSnapshot layout) {
         JsonArray commanders = new JsonArray();
         for (CommandObjectView obj : player.getCommandObjectList()) {
-            if (obj instanceof CommanderView) {
-                commanders.add(cardToJson((CommanderView) obj, "commanders", player.getPlayerId(), layout));
+            if (obj instanceof CommanderView cv) {
+                commanders.add(cardToJson(cv, "commanders", player.getPlayerId(), layout));
             }
         }
         return commanders;
@@ -2112,8 +2110,8 @@ public class StreamingGamePanel extends GamePanel {
         cardJson.addProperty("expansionSetCode", safe(card.getExpansionSetCode()));
         cardJson.addProperty("cardNumber", safe(card.getCardNumber()));
         cardJson.addProperty("imageUrl", buildCardImageUrl(card));
-        cardJson.addProperty("tapped", card instanceof PermanentView && ((PermanentView) card).isTapped());
-        cardJson.addProperty("damage", card instanceof PermanentView ? ((PermanentView) card).getDamage() : 0);
+        cardJson.addProperty("tapped", card instanceof PermanentView pv && pv.isTapped());
+        cardJson.addProperty("damage", card instanceof PermanentView pv2 ? pv2.getDamage() : 0);
         if (!cardId.isEmpty()) {
             Rectangle rect = layout.cardRectsByKey.get(layoutCardKey(playerId, zone, card.getId()));
             if (rect != null) {
@@ -2234,8 +2232,7 @@ public class StreamingGamePanel extends GamePanel {
             // bounds. Use getCardLocationOnScreen() which returns the actual visual
             // card rectangle (accounting for outer/draw space), then convert from
             // screen coordinates to this panel's coordinate space.
-            if (component instanceof MageCard) {
-                MageCard card = (MageCard) component;
+            if (component instanceof MageCard card) {
                 MageCardLocation cardLoc = card.getCardLocationOnScreen();
                 Point panelOrigin = this.getLocationOnScreen();
                 Rectangle rect = new Rectangle(

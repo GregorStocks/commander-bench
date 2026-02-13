@@ -218,17 +218,18 @@ public class BridgeCallbackHandler {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
-                case '"': sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default:
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
                     if (c < 0x20) {
                         sb.append(String.format("\\u%04x", (int) c));
                     } else {
                         sb.append(c);
                     }
+                }
             }
         }
         sb.append("\"");
@@ -378,11 +379,11 @@ public class BridgeCallbackHandler {
             + " (age=" + age + "ms, type=" + lastResponseType + ")");
 
         switch (lastResponseType) {
-            case UUID:      session.sendPlayerUUID(gameId, (java.util.UUID) lastResponseValue); break;
-            case BOOLEAN:   session.sendPlayerBoolean(gameId, (Boolean) lastResponseValue); break;
-            case STRING:    session.sendPlayerString(gameId, (String) lastResponseValue); break;
-            case INTEGER:   session.sendPlayerInteger(gameId, (Integer) lastResponseValue); break;
-            case MANA_TYPE: session.sendPlayerManaType(gameId, lastResponseManaPlayerId, (ManaType) lastResponseValue); break;
+            case UUID      -> session.sendPlayerUUID(gameId, (java.util.UUID) lastResponseValue);
+            case BOOLEAN   -> session.sendPlayerBoolean(gameId, (Boolean) lastResponseValue);
+            case STRING    -> session.sendPlayerString(gameId, (String) lastResponseValue);
+            case INTEGER   -> session.sendPlayerInteger(gameId, (Integer) lastResponseValue);
+            case MANA_TYPE -> session.sendPlayerManaType(gameId, lastResponseManaPlayerId, (ManaType) lastResponseValue);
         }
         return true;
     }
@@ -410,28 +411,24 @@ public class BridgeCallbackHandler {
         }
 
         // Execute the default response based on action type
-        UUID gameId = action.getGameId();
-        ClientCallbackMethod method = action.getMethod();
-        Object data = action.getData();
+        UUID gameId = action.gameId();
+        ClientCallbackMethod method = action.method();
+        Object data = action.data();
 
         result.put("success", true);
         result.put("action_type", method.name());
 
         switch (method) {
-            case GAME_ASK:
-            case GAME_SELECT:
+            case GAME_ASK, GAME_SELECT -> {
                 session.sendPlayerBoolean(gameId, false);
                 result.put("action_taken", "passed_priority");
-                break;
-
-            case GAME_PLAY_MANA:
-            case GAME_PLAY_XMANA:
+            }
+            case GAME_PLAY_MANA, GAME_PLAY_XMANA -> {
                 // Auto-tap failed; default action is to cancel the spell
                 session.sendPlayerBoolean(gameId, false);
                 result.put("action_taken", "cancelled_mana");
-                break;
-
-            case GAME_TARGET:
+            }
+            case GAME_TARGET -> {
                 GameClientMessage targetMsg = (GameClientMessage) data;
                 boolean required = targetMsg.isFlag();
                 // Try to find valid targets from multiple sources
@@ -444,9 +441,8 @@ public class BridgeCallbackHandler {
                     session.sendPlayerBoolean(gameId, false);
                     result.put("action_taken", "cancelled");
                 }
-                break;
-
-            case GAME_CHOOSE_ABILITY:
+            }
+            case GAME_CHOOSE_ABILITY -> {
                 AbilityPickerView picker = (AbilityPickerView) data;
                 Map<UUID, String> abilityChoices = picker.getChoices();
                 if (abilityChoices != null && !abilityChoices.isEmpty()) {
@@ -457,9 +453,8 @@ public class BridgeCallbackHandler {
                     session.sendPlayerUUID(gameId, null);
                     result.put("action_taken", "no_abilities");
                 }
-                break;
-
-            case GAME_CHOOSE_CHOICE:
+            }
+            case GAME_CHOOSE_CHOICE -> {
                 GameClientMessage choiceMsg = (GameClientMessage) data;
                 Choice choice = choiceMsg.getChoice();
                 if (choice != null) {
@@ -488,22 +483,19 @@ public class BridgeCallbackHandler {
                     session.sendPlayerString(gameId, null);
                     result.put("action_taken", "null_choice");
                 }
-                break;
-
-            case GAME_CHOOSE_PILE:
+            }
+            case GAME_CHOOSE_PILE -> {
                 session.sendPlayerBoolean(gameId, true);
                 result.put("action_taken", "selected_pile_1");
-                break;
-
-            case GAME_GET_AMOUNT:
+            }
+            case GAME_GET_AMOUNT -> {
                 GameClientMessage amountMsg = (GameClientMessage) data;
                 int min = amountMsg.getMin();
                 session.sendPlayerInteger(gameId, min);
                 result.put("action_taken", "selected_min_amount");
                 result.put("amount", min);
-                break;
-
-            case GAME_GET_MULTI_AMOUNT:
+            }
+            case GAME_GET_MULTI_AMOUNT -> {
                 GameClientMessage multiMsg = (GameClientMessage) data;
                 StringBuilder sb = new StringBuilder();
                 if (multiMsg.getMessages() != null) {
@@ -514,11 +506,11 @@ public class BridgeCallbackHandler {
                 }
                 session.sendPlayerString(gameId, sb.toString());
                 result.put("action_taken", "selected_default_multi_amount");
-                break;
-
-            default:
+            }
+            default -> {
                 result.put("success", false);
                 result.put("error", "Unknown action type: " + method);
+            }
         }
 
         return result;
@@ -541,8 +533,8 @@ public class BridgeCallbackHandler {
         }
 
         result.put("action_pending", true);
-        result.put("action_type", action.getMethod().name());
-        result.put("message", action.getMessage());
+        result.put("action_type", action.method().name());
+        result.put("message", action.message());
 
         // Add compact phase context and player summary
         if (gameView != null) {
@@ -616,8 +608,8 @@ public class BridgeCallbackHandler {
             }
         }
 
-        ClientCallbackMethod method = action.getMethod();
-        Object data = action.getData();
+        ClientCallbackMethod method = action.method();
+        Object data = action.data();
 
         switch (method) {
             case GAME_ASK: {
@@ -625,7 +617,7 @@ public class BridgeCallbackHandler {
                 lastChoices = null;
 
                 // For mulligan decisions, include hand contents so LLM can evaluate
-                String askMsg = action.getMessage();
+                String askMsg = action.message();
                 if (askMsg != null && askMsg.toLowerCase().contains("mulligan") && gameView != null) {
                     CardsView hand = gameView.getMyHand();
                     if (hand != null && !hand.isEmpty()) {
@@ -1180,7 +1172,7 @@ public class BridgeCallbackHandler {
     private void logChoiceOutOfRangeDiagnostic(ClientCallbackMethod method, Integer index, List<Object> choices) {
         long ageMs = lastChoicesGeneratedAtMs == 0 ? -1 : System.currentTimeMillis() - lastChoicesGeneratedAtMs;
         PendingAction nowPending = pendingAction;
-        String nowPendingType = nowPending == null ? "none" : nowPending.getMethod().name();
+        String nowPendingType = nowPending == null ? "none" : nowPending.method().name();
         logger.warn("[" + client.getUsername() + "] choose_action out-of-range diagnostic: "
                 + "method=" + method.name()
                 + ", index=" + index
@@ -1241,7 +1233,7 @@ public class BridgeCallbackHandler {
         // Loop detection: model has made too many interactions this turn — auto-handle
         if (interactionsThisTurn > maxInteractionsPerTurn) {
             logger.warn("[" + client.getUsername() + "] Loop detected (" + interactionsThisTurn
-                + " interactions this turn), auto-handling " + action.getMethod().name());
+                + " interactions this turn), auto-handling " + action.method().name());
             executeDefaultAction();
             result.put("success", true);
             result.put("action_taken", "auto_passed_loop_detected");
@@ -1257,9 +1249,9 @@ public class BridgeCallbackHandler {
             }
         }
 
-        UUID gameId = action.getGameId();
-        ClientCallbackMethod method = action.getMethod();
-        Object data = action.getData();
+        UUID gameId = action.gameId();
+        ClientCallbackMethod method = action.method();
+        Object data = action.data();
 
         // Auto-populate choices if the model skipped get_action_choices.
         // Some models send all params with defaults (e.g. index=0, answer=false);
@@ -1390,7 +1382,7 @@ public class BridgeCallbackHandler {
                         }
                         if (cancel) {
                             // Mark spell as failed to prevent infinite retry loop
-                            UUID payingForId = extractPayingForId(action.getMessage());
+                            UUID payingForId = extractPayingForId(action.message());
                             if (payingForId != null) {
                                 failedManaCasts.add(payingForId);
                             }
@@ -1785,7 +1777,7 @@ public class BridgeCallbackHandler {
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             PendingAction action = pendingAction;
             if (action != null) {
-                ClientCallbackMethod method = action.getMethod();
+                ClientCallbackMethod method = action.method();
 
                 // Update game view and reset loop counter on turn change.
                 // This MUST run before the loop detection check below, otherwise
@@ -1793,8 +1785,8 @@ public class BridgeCallbackHandler {
                 // counter never resets, permanently disabling the player.
                 // Check any callback carrying GameView, not just GAME_SELECT —
                 // a new turn can start with upkeep triggers (GAME_TARGET, GAME_ASK, etc.).
-                if (action.getData() instanceof GameClientMessage) {
-                    GameView gv = ((GameClientMessage) action.getData()).getGameView();
+                if (action.data() instanceof GameClientMessage) {
+                    GameView gv = ((GameClientMessage) action.data()).getGameView();
                     if (gv != null) {
                         lastGameView = gv;
                         int turn = gv.getTurn();
@@ -1820,7 +1812,7 @@ public class BridgeCallbackHandler {
 
                 // GAME_PLAY_MANA: auto-tapper couldn't handle it, cancel the spell
                 if (method == ClientCallbackMethod.GAME_PLAY_MANA || method == ClientCallbackMethod.GAME_PLAY_XMANA) {
-                    UUID payingForId = extractPayingForId(action.getMessage());
+                    UUID payingForId = extractPayingForId(action.message());
                     if (payingForId != null) {
                         failedManaCasts.add(payingForId);
                     }
@@ -1835,14 +1827,14 @@ public class BridgeCallbackHandler {
                             unseenChat.remove(0);
                         }
                     }
-                    session.sendPlayerBoolean(action.getGameId(), false);
+                    session.sendPlayerBoolean(action.gameId(), false);
                     actionsPassed++;
                     continue;
                 }
 
                 // Optional GAME_TARGET with no valid targets: auto-cancel
                 if (method == ClientCallbackMethod.GAME_TARGET) {
-                    GameClientMessage targetMsg = (GameClientMessage) action.getData();
+                    GameClientMessage targetMsg = (GameClientMessage) action.data();
                     boolean required = targetMsg.isFlag();
                     if (!required) {
                         Set<UUID> targets = findValidTargets(targetMsg);
@@ -1852,7 +1844,7 @@ public class BridgeCallbackHandler {
                                     pendingAction = null;
                                 }
                             }
-                            session.sendPlayerBoolean(action.getGameId(), false);
+                            session.sendPlayerBoolean(action.gameId(), false);
                             actionsPassed++;
                             continue;
                         }
@@ -1917,7 +1909,7 @@ public class BridgeCallbackHandler {
                         pendingAction = null;
                     }
                 }
-                session.sendPlayerBoolean(action.getGameId(), false);
+                session.sendPlayerBoolean(action.gameId(), false);
                 actionsPassed++;
             }
 
@@ -2538,10 +2530,10 @@ public class BridgeCallbackHandler {
      * Returns "attackers", "blockers", or null.
      */
     private String detectCombatSelect(PendingAction action) {
-        if (action == null || action.getMethod() != ClientCallbackMethod.GAME_SELECT) {
+        if (action == null || action.method() != ClientCallbackMethod.GAME_SELECT) {
             return null;
         }
-        Object data = action.getData();
+        Object data = action.data();
         if (data instanceof GameClientMessage) {
             Map<String, Serializable> options = ((GameClientMessage) data).getOptions();
             if (options != null) {
