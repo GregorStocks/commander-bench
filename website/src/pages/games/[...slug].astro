@@ -46,7 +46,9 @@ const { slug } = Astro.params;
           <select id="turn-select" title="Jump to turn"></select>
           <button id="btn-next-turn" title="Next turn (])">T&gt;</button>
         </div>
-        <input type="range" id="slider" min="0" max="0" value="0" />
+        <div id="slider-container">
+          <input type="range" id="slider" min="0" max="0" value="0" />
+        </div>
         <input type="number" id="snapshot-jump" min="1" max="1" value="1" title="Jump to snapshot #" />
         <div id="snapshot-counter"></div>
       </div>
@@ -147,6 +149,12 @@ const { slug } = Astro.params;
     text-align: right;
   }
 
+  #blunder-summary {
+    font-size: 0.8rem;
+    color: #f97316;
+    font-weight: 600;
+  }
+
   /* Transport */
   #transport {
     display: flex;
@@ -221,9 +229,14 @@ const { slug } = Astro.params;
     cursor: pointer;
   }
 
-  #slider {
+  #slider-container {
     flex: 1;
     min-width: 100px;
+    position: relative;
+  }
+
+  #slider {
+    width: 100%;
     accent-color: #e94560;
   }
 
@@ -587,6 +600,64 @@ const { slug } = Astro.params;
       return div;
     }
 
+    function renderAnnotation(ann) {
+      var div = document.createElement("div");
+      div.className = "annotation-block severity-" + ann.severity;
+
+      var header = document.createElement("div");
+      header.className = "annotation-header";
+      var badge = document.createElement("span");
+      badge.className = "annotation-badge severity-" + ann.severity;
+      badge.textContent = ann.severity + " blunder";
+      header.appendChild(badge);
+      var catEl = document.createElement("span");
+      catEl.className = "annotation-category";
+      catEl.textContent = ann.category.replace(/_/g, " ");
+      header.appendChild(catEl);
+      div.appendChild(header);
+
+      var desc = document.createElement("div");
+      desc.className = "annotation-description";
+      desc.textContent = ann.description;
+      div.appendChild(desc);
+
+      var details = document.createElement("details");
+      details.className = "annotation-details";
+      var summary = document.createElement("summary");
+      summary.textContent = "Analysis";
+      details.appendChild(summary);
+      var content = document.createElement("div");
+      content.innerHTML =
+        '<div class="annotation-field"><strong>Action taken:</strong> ' + escapeHtml(ann.actionTaken) + '</div>' +
+        '<div class="annotation-field"><strong>Better line:</strong> ' + escapeHtml(ann.betterLine) + '</div>' +
+        '<div class="annotation-field"><strong>Why the LLM erred:</strong> ' + escapeHtml(ann.llmReasoning) + '</div>';
+      details.appendChild(content);
+      div.appendChild(details);
+
+      return div;
+    }
+
+    function renderAnnotationMarkers(annotations, totalSnapshots) {
+      var container = document.getElementById("slider-container");
+      var existing = container.querySelector(".annotation-markers");
+      if (existing) existing.remove();
+
+      if (!annotations || annotations.length === 0) return;
+
+      var markers = document.createElement("div");
+      markers.className = "annotation-markers";
+      annotations.forEach(function (ann) {
+        var dot = document.createElement("div");
+        dot.className = "annotation-marker severity-" + ann.severity;
+        var pct = totalSnapshots > 1 ? (ann.snapshotIndex / (totalSnapshots - 1)) * 100 : 50;
+        dot.style.left = pct + "%";
+        dot.title = ann.player + " (" + ann.severity + "): " + ann.description.substring(0, 80);
+        dot.addEventListener("click", function () { goTo(ann.snapshotIndex); });
+        markers.appendChild(dot);
+      });
+      container.appendChild(markers);
+    }
+
     function renderSnapshot(index) {
       var snap = game.snapshots[index];
       if (!snap) return;
@@ -666,6 +737,15 @@ const { slug } = Astro.params;
         relevantLlm.forEach(function (e) {
           var el = renderLlmEvent(e);
           if (el) actionList.appendChild(el);
+        });
+      }
+
+      // Render annotations for this snapshot
+      if (game.annotations) {
+        game.annotations.forEach(function (ann) {
+          if (ann.snapshotIndex === index) {
+            actionList.appendChild(renderAnnotation(ann));
+          }
         });
       }
 
@@ -800,6 +880,23 @@ const { slug } = Astro.params;
           var ytUrl = document.getElementById("youtube-url");
           ytUrl.href = game.youtubeUrl;
           ytLink.classList.remove("hidden");
+        }
+
+        // Blunder summary in header
+        if (game.annotations && game.annotations.length > 0) {
+          var counts = { minor: 0, moderate: 0, major: 0 };
+          game.annotations.forEach(function (a) { counts[a.severity] = (counts[a.severity] || 0) + 1; });
+          var summaryEl = document.createElement("div");
+          summaryEl.id = "blunder-summary";
+          var parts = [];
+          if (counts.major > 0) parts.push(counts.major + " major");
+          if (counts.moderate > 0) parts.push(counts.moderate + " moderate");
+          if (counts.minor > 0) parts.push(counts.minor + " minor");
+          summaryEl.textContent = parts.join(", ") + " blunder" + (game.annotations.length !== 1 ? "s" : "");
+          document.getElementById("game-header").appendChild(summaryEl);
+
+          // Render timeline markers
+          renderAnnotationMarkers(game.annotations, game.snapshots.length);
         }
 
         // Set up transport

@@ -44,6 +44,16 @@ if (fs.existsSync(gamesDir)) {
       deckType: data.deckType || '',
     };
     if (data.youtubeUrl) entry.youtubeUrl = data.youtubeUrl;
+    const annotations = data.annotations || [];
+    if (annotations.length > 0) {
+      entry.blunderCount = annotations.length;
+      const severities: Record<string, number> = { minor: 0, moderate: 0, major: 0 };
+      for (const a of annotations) {
+        const sev = (a as Record<string, unknown>).severity as string;
+        if (sev in severities) severities[sev]++;
+      }
+      entry.blunderSeverities = severities;
+    }
     games.push(entry);
   }
 }
@@ -336,6 +346,30 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     font-variant-numeric: tabular-nums;
   }
 
+  .blunder-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  .blunder-badge.severity-minor {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+  }
+
+  .blunder-badge.severity-moderate {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+  }
+
+  .blunder-badge.severity-major {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+
   @media (max-width: 500px) {
     .game-players {
       grid-template-columns: 1fr;
@@ -541,6 +575,16 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       winnerEl.textContent = "No winner";
     }
     header.appendChild(winnerEl);
+
+    if (game.blunderCount) {
+      var blunderEl = document.createElement("span");
+      blunderEl.className = "blunder-badge";
+      var sev = game.blunderSeverities || {};
+      var maxSev = sev.major > 0 ? "major" : sev.moderate > 0 ? "moderate" : "minor";
+      blunderEl.classList.add("severity-" + maxSev);
+      blunderEl.textContent = game.blunderCount + " blunder" + (game.blunderCount !== 1 ? "s" : "");
+      header.appendChild(blunderEl);
+    }
 
     a.appendChild(header);
 

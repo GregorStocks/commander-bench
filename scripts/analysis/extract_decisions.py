@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Extract LLM decision points from a .json.gz game export.
+
+For each meaningful decision (get_action_choices -> llm_response -> choose_action),
+outputs the game state, available choices, what was chosen, LLM reasoning, and
+what happened next. Designed to give Claude Code structured data for blunder analysis.
+"""
+
+import gzip
+import json
+import sys
+
+
+def _summarize_snapshot(snap: dict) -> dict:
+    """Summarize a snapshot for decision context."""
+    return {
+        "turn": snap.get("turn"),
+        "phase": snap.get("phase"),
+        "step": snap.get("step"),
+        "active_player": snap.get("active_player"),
+        "priority_player": snap.get("priority_player"),
+        "players": [
+            {
+                "name": p["name"],
+                "life": p.get("life"),
+                "hand_count": p.get("hand_count", len(p.get("hand", []))),
+                "battlefield": [c.get("name", "?") for c in p.get("battlefield", [])],
+                "graveyard_count": len(p.get("graveyard", [])),
+                "commanders": [
+                    c.get("name", "?") if isinstance(c, dict) else c
+                    for c in p.get("commanders", [])
+                ],
+            }
+            for p in snap.get("players", [])
+        ],
+        "stack": [
+            item.get("name", "?") if isinstance(item, dict) else str(item)
+            for item in snap.get("stack", [])
+        ],
+    }
+
+
+def _find_snapshot_index(snapshots: list[dict], ts: str) -> int:
+    """Find the index of the nearest snapshot at or before the given timestamp."""
+    best = 0
+    for i, snap in enumerate(snapshots):
+        snap_ts = snap.get("ts", "")
+        if snap_ts <= ts:
+            best = i
+        else:
+            break
+    return best
+
+
+def _parse_choices_result(result_str: str) -> dict:
+    """Parse the result of a get_action_choices tool call."""
+    try:
+        return json.loads(result_str)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _parse_action_result(result_str: str) -> dict:
+    """Parse the result of a choose_action tool call."""
+    try:
+        return json.loads(result_str)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def extract_decisions(gz_path: str) -> list[dict]:
+    """Extract decision points from a game gz file."""
+    with gzip.open(gz_path, "rt") as f:
+        data = json.load(f)
+
+    snapshots = data.get("snapshots", [])
+    actions = data.get("actions", [])
+    llm_events = data.get("llmEvents", [])
+
+    # Collect get_action_choices events with their indices
+    choices_events: list[tuple[int, dict]] = []
+    for i, event in enumerate(llm_events):
+        if (
+            event.get("type") == "tool_call"
+            and event.get("tool") == "get_action_choices"
+        ):
+            choices_events.append((i, event))
+
+    decisions: list[dict] = []
+
+    for ce_idx, (event_idx, choices_event) in enumerate(choices_events):
+        choices_result = _parse_choices_result(choices_event.get("result", ""))
+        if not choices_result.get("action_pending", True):
+            continue
+
+        choices_ts = choices_event.get("ts", "")
+        player = choices_event.get("player", "")
+
+        # Parse available choices
+        available_choices = choices_result.get("choices", [])
+        choice_count = len(available_choices)
+        response_type = choices_result.get("response_type", "")
+        action_type = choices_result.get("action_type", "")
+        message = choices_result.get("message", "")
+
+        # Look forward for the next llm_response and choose_action from same player
+        reasoning = ""
+        chosen_index = None
+        chosen_args: dict = {}
+        action_result: dict = {}
+        action_ts = ""
+
+        for j in range(event_idx + 1, min(event_idx + 20, len(llm_events))):
+            ev = llm_events[j]
+            if ev.get("player") != player:
+                continue
+
+            if ev.get("type") == "llm_response" and not reasoning:
+                reasoning = ev.get("reasoning", "")
+
+            if ev.get("type") == "tool_call" and ev.get("tool") == "choose_action":
+                chosen_args = ev.get("args", {})
+                if "index" in chosen_args:
+                    chosen_index = chosen_args["index"]
+                elif "answer" in chosen_args:
+                    chosen_index = chosen_args["answer"]
+                elif "amount" in chosen_args:
+                    chosen_index = chosen_args["amount"]
+                action_result = _parse_action_result(ev.get("result", ""))
+                action_ts = ev.get("ts", "")
+                break
+
+            # If we hit another get_action_choices, stop
+            if ev.get("type") == "tool_call" and ev.get("tool") == "get_action_choices":
+                break
+
+        # Find nearest snapshot
+        snap_idx = _find_snapshot_index(snapshots, choices_ts)
+        game_state = _summarize_snapshot(snapshots[snap_idx]) if snapshots else {}
+
+        # Collect subsequent game actions (between this decision and next)
+        next_choices_ts = ""
+        if ce_idx + 1 < len(choices_events):
+            next_choices_ts = choices_events[ce_idx + 1][1].get("ts", "")
+
+        subsequent: list[str] = []
+        if action_ts:
+            for a in actions:
+                a_ts = a.get("ts", "")
+                if a_ts <= (action_ts or choices_ts):
+                    continue
+                if next_choices_ts and a_ts > next_choices_ts:
+                    break
+                subsequent.append(a.get("message", ""))
+                if len(subsequent) >= 5:
+                    break
+
+        decisions.append(
+            {
+                "decision_index": len(decisions),
+                "snapshot_index": snap_idx,
+                "player": player,
+                "turn": game_state.get("turn"),
+                "phase": game_state.get("phase"),
+                "message": message,
+                "action_type": action_type,
+                "response_type": response_type,
+                "choices": available_choices,
+                "choice_count": choice_count,
+                "chosen": chosen_index,
+                "chosen_args": chosen_args,
+                "action_result": action_result,
+                "reasoning": reasoning,
+                "is_forced": choice_count <= 1,
+                "game_state": game_state,
+                "subsequent_actions": subsequent,
+            }
+        )
+
+    return decisions
+
+
+def main(gz_path: str) -> None:
+    decisions = extract_decisions(gz_path)
+    json.dump(decisions, sys.stdout, indent=2)
+    print()
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <game.json.gz>", file=sys.stderr)
+        sys.exit(1)
+    main(sys.argv[1])
