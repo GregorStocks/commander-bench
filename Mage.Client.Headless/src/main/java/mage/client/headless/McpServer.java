@@ -13,7 +13,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,41 +119,26 @@ public class McpServer {
     }
 
     private Object handleRequest(String method, JsonObject params) {
-        switch (method) {
-            case "initialize":
-                return handleInitialize(params);
-            case "tools/list":
-                return handleToolsList(params);
-            case "tools/call":
-                return handleToolsCall(params);
-            default:
-                throw new RuntimeException("Unknown method: " + method);
-        }
+        return switch (method) {
+            case "initialize" -> handleInitialize(params);
+            case "tools/list" -> handleToolsList(params);
+            case "tools/call" -> handleToolsCall(params);
+            default -> throw new RuntimeException("Unknown method: " + method);
+        };
     }
 
     private Map<String, Object> handleInitialize(JsonObject params) {
         initialized = true;
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("protocolVersion", PROTOCOL_VERSION);
-
-        Map<String, Object> capabilities = new HashMap<>();
-        capabilities.put("tools", new HashMap<>()); // Empty object indicates tools capability
-        result.put("capabilities", capabilities);
-
-        Map<String, Object> serverInfo = new HashMap<>();
-        serverInfo.put("name", SERVER_NAME);
-        serverInfo.put("version", SERVER_VERSION);
-        result.put("serverInfo", serverInfo);
-
         logger.info("MCP initialized with protocol version " + PROTOCOL_VERSION);
-        return result;
+        return Map.of(
+                "protocolVersion", PROTOCOL_VERSION,
+                "capabilities", Map.of("tools", Map.of()),
+                "serverInfo", Map.of("name", SERVER_NAME, "version", SERVER_VERSION)
+        );
     }
 
     private Map<String, Object> handleToolsList(JsonObject params) {
-        Map<String, Object> result = new HashMap<>();
-        result.put("tools", registry.getDefinitions());
-        return result;
+        return Map.of("tools", registry.getDefinitions());
     }
 
     private Map<String, Object> handleToolsCall(JsonObject params) {
@@ -168,17 +152,11 @@ public class McpServer {
         Map<String, Object> toolResult = registry.call(toolName, arguments, callbackHandler);
 
         // Format as MCP tool result
-        Map<String, Object> result = new HashMap<>();
-        List<Map<String, Object>> content = new ArrayList<>();
-        Map<String, Object> textContent = new HashMap<>();
-        textContent.put("type", "text");
-        textContent.put("text", gson.toJson(toolResult));
-        content.add(textContent);
-        result.put("content", content);
-        result.put("structuredContent", toolResult);
-        result.put("isError", false);
-
-        return result;
+        return Map.of(
+                "content", List.of(Map.of("type", "text", "text", gson.toJson(toolResult))),
+                "structuredContent", toolResult,
+                "isError", false
+        );
     }
 
     private void sendResponse(JsonElement id, Object result, Object error) {
@@ -200,10 +178,7 @@ public class McpServer {
     }
 
     private void sendError(JsonElement id, int code, String message) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("code", code);
-        error.put("message", message);
-        sendResponse(id, null, error);
+        sendResponse(id, null, Map.of("code", code, "message", message));
     }
 
     /**
