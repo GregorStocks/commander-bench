@@ -83,6 +83,23 @@ def derive_display_name(model_id: str) -> str:
     return slug.replace("-", " ").title()
 
 
+def _player_key(player: dict) -> str:
+    """Build aggregation key: 'model_id::effort' or just 'model_id'."""
+    model_id = player.get("model", "")
+    effort = player.get("reasoningEffort") or player.get("reasoning_effort")
+    if effort:
+        return f"{model_id}::{effort}"
+    return model_id
+
+
+def _split_key(key: str) -> tuple[str, str | None]:
+    """Split aggregation key into (model_id, reasoning_effort)."""
+    if "::" in key:
+        model_id, effort = key.split("::", 1)
+        return model_id, effort
+    return key, None
+
+
 def load_model_registry(models_json: Path) -> dict[str, str]:
     """Load model ID -> display name mapping from models.json."""
     if not models_json.exists():
@@ -177,35 +194,35 @@ def compute_ratings(
         if len(pilots) < 2:
             # Need at least 2 pilots for rating; record snapshot with no change
             for p in pilots:
-                mid = p["model"]
-                if mid not in ratings:
-                    ratings[mid] = model.rating(name=mid)
+                key = _player_key(p)
+                if key not in ratings:
+                    ratings[key] = model.rating(name=key)
             if pilots:
-                mid = pilots[0]["model"]
-                display = _display_rating(ratings[mid].ordinal())
+                key = _player_key(pilots[0])
+                display = _display_rating(ratings[key].ordinal())
                 per_game.append(
                     {
                         "id": game.get("id", ""),
-                        "players": [{"model": mid, "ratingBefore": display, "ratingAfter": display}],
+                        "players": [{"key": key, "ratingBefore": display, "ratingAfter": display}],
                     }
                 )
             continue
 
         # Ensure all pilots have a rating
         for p in pilots:
-            mid = p["model"]
-            if mid not in ratings:
-                ratings[mid] = model.rating(name=mid)
+            key = _player_key(p)
+            if key not in ratings:
+                ratings[key] = model.rating(name=key)
 
         # Record before ratings
-        before = {p["model"]: _display_rating(ratings[p["model"]].ordinal()) for p in pilots}
+        pilot_keys = [_player_key(p) for p in pilots]
+        before = {key: _display_rating(ratings[key].ordinal()) for key in pilot_keys}
 
         # Get placements
         placements = extract_placements(game, games_dir)
 
         # Build teams (each player is a 1-person team) and ranks
-        pilot_models = [p["model"] for p in pilots]
-        teams = [[ratings[mid]] for mid in pilot_models]
+        teams = [[ratings[key]] for key in pilot_keys]
 
         has_placements = any(p["name"] in placements for p in pilots)
         if has_placements:
@@ -221,21 +238,21 @@ def compute_ratings(
             updated = teams
 
         # Update ratings
-        for i, mid in enumerate(pilot_models):
-            ratings[mid] = updated[i][0]
+        for i, key in enumerate(pilot_keys):
+            ratings[key] = updated[i][0]
 
         # Record after ratings
-        after = {mid: _display_rating(ratings[mid].ordinal()) for mid in pilot_models}
+        after = {key: _display_rating(ratings[key].ordinal()) for key in pilot_keys}
         per_game.append(
             {
                 "id": game.get("id", ""),
                 "players": [
                     {
-                        "model": mid,
-                        "ratingBefore": before[mid],
-                        "ratingAfter": after[mid],
+                        "key": key,
+                        "ratingBefore": before[key],
+                        "ratingAfter": after[key],
                     }
-                    for mid in pilot_models
+                    for key in pilot_keys
                 ],
             }
         )
@@ -268,56 +285,62 @@ def generate_leaderboard(
     for game_entry in per_game:
         game_id = game_entry["id"]
         ratings_by_game[game_id] = {
-            p["model"]: {"before": p["ratingBefore"], "after": p["ratingAfter"]} for p in game_entry["players"]
+            p["key"]: {"before": p["ratingBefore"], "after": p["ratingAfter"]} for p in game_entry["players"]
         }
 
-    # Aggregate per-model stats
+    # Aggregate per-player-key stats (model_id::effort or just model_id)
     stats: dict[str, dict[str, float]] = {}
     for game in scored_games:
         for p in game.get("players", []):
             if p.get("type") != "pilot" or not p.get("model"):
                 continue
-            model_id = p["model"]
-            if model_id not in stats:
-                stats[model_id] = {
+            key = _player_key(p)
+            if key not in stats:
+                stats[key] = {
                     "games_played": 0,
                     "wins": 0,
                     "total_cost": 0.0,
                     "total_tool_calls_ok": 0,
                     "total_tool_calls_failed": 0,
                 }
-            stats[model_id]["games_played"] += 1
+            stats[key]["games_played"] += 1
             if game.get("winner") == p["name"]:
-                stats[model_id]["wins"] += 1
-            stats[model_id]["total_cost"] += p.get("totalCostUsd", 0.0)
-            stats[model_id]["total_tool_calls_ok"] += p.get("toolCallsOk", 0)
-            stats[model_id]["total_tool_calls_failed"] += p.get("toolCallsFailed", 0)
+                stats[key]["wins"] += 1
+            stats[key]["total_cost"] += p.get("totalCostUsd", 0.0)
+            stats[key]["total_tool_calls_ok"] += p.get("toolCallsOk", 0)
+            stats[key]["total_tool_calls_failed"] += p.get("toolCallsFailed", 0)
 
     # Build models list
     models: list[dict[str, str | int | float]] = []
-    for model_id, s in stats.items():
+    for key, s in stats.items():
+        model_id, effort = _split_key(key)
         games_played = int(s["games_played"])
         wins = int(s["wins"])
         win_rate = wins / games_played
         avg_cost = s["total_cost"] / games_played
         provider_slug = model_id.split("/", 1)[0]
-        rating = final_ratings.get(model_id, _RATING_BASE)
+        rating = final_ratings.get(key, _RATING_BASE)
+
+        display_name = model_registry.get(model_id) or derive_display_name(model_id)
+        if effort:
+            display_name = f"{display_name} ({effort})"
 
         avg_tool_calls_ok = s["total_tool_calls_ok"] / games_played
         avg_tool_calls_failed = s["total_tool_calls_failed"] / games_played
-        models.append(
-            {
-                "modelId": model_id,
-                "modelName": model_registry.get(model_id) or derive_display_name(model_id),
-                "provider": capitalize_provider(provider_slug),
-                "rating": rating,
-                "gamesPlayed": games_played,
-                "winRate": round(win_rate, 4),
-                "avgApiCost": round(avg_cost, 2),
-                "avgToolCallsOk": round(avg_tool_calls_ok, 1),
-                "avgToolCallsFailed": round(avg_tool_calls_failed, 1),
-            }
-        )
+        entry: dict[str, str | int | float] = {
+            "modelId": model_id,
+            "modelName": display_name,
+            "provider": capitalize_provider(provider_slug),
+            "rating": rating,
+            "gamesPlayed": games_played,
+            "winRate": round(win_rate, 4),
+            "avgApiCost": round(avg_cost, 2),
+            "avgToolCallsOk": round(avg_tool_calls_ok, 1),
+            "avgToolCallsFailed": round(avg_tool_calls_failed, 1),
+        }
+        if effort:
+            entry["reasoningEffort"] = effort
+        models.append(entry)
 
     # Sort by rating desc, then games_played desc
     models.sort(key=lambda m: (-m["rating"], -m["gamesPlayed"]))  # type: ignore[operator]

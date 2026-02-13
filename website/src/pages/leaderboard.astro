@@ -108,6 +108,7 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
               <tr
                 data-model-name={m.modelName.toLowerCase()}
                 data-model-id={m.modelId}
+                data-reasoning-effort={m.reasoningEffort || ''}
                 data-provider={m.provider}
                 data-rating={m.rating}
                 data-games-played={m.gamesPlayed}
@@ -156,9 +157,11 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
     table!.querySelectorAll('tr[data-model-id]').forEach((row) => {
       const el = row as HTMLElement;
       const modelId = el.dataset.modelId!;
+      const effort = el.dataset.reasoningEffort;
       const link = el.querySelector('a.games-link') as HTMLAnchorElement | null;
       if (!link) return;
       const params = new URLSearchParams({ model: modelId });
+      if (effort) params.set('effort', effort);
       if (activeFormat !== 'combined') params.set('format', activeFormat);
       link.href = '/games?' + params.toString();
     });
