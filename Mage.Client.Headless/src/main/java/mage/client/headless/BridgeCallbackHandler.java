@@ -2748,7 +2748,8 @@ public class BridgeCallbackHandler {
 
                     if (mcpMode && choices != null && !choices.isEmpty()) {
                         if (manaPlan != null) {
-                            // Plan mode: auto-select single ability, defer multi to LLM
+                            // Plan mode: auto-select single ability, cancel on multi-ability.
+                            // LLMs should avoid multi-ability lands in mana plans, or fill pool first.
                             if (choices.size() == 1) {
                                 UUID selected = choices.keySet().iterator().next();
                                 logger.info("[" + client.getUsername() + "] Mana plan: auto-selecting sole ability: \""
@@ -2756,9 +2757,9 @@ public class BridgeCallbackHandler {
                                 session.sendPlayerUUID(objectId, selected);
                                 trackSentResponse(objectId, ResponseType.UUID, selected, null);
                             } else {
-                                logger.info("[" + client.getUsername() + "] Mana plan: multi-ability choice, deferring to LLM: \""
-                                        + picker.getMessage() + "\"");
-                                storePendingAction(objectId, method, callback);
+                                logger.warn("[" + client.getUsername() + "] Mana plan: multi-ability choice for \""
+                                        + picker.getMessage() + "\", cancelling spell");
+                                cancelSpellFromBadManaPlan(objectId, null, picker.getMessage());
                             }
                         } else {
                             // Auto-tap mode: use naive heuristic
@@ -3388,6 +3389,24 @@ public class BridgeCallbackHandler {
         return plan;
     }
 
+    /**
+     * Cancel a spell because the mana plan was incorrect (entry failed or plan exhausted).
+     * Marks the spell as failed, clears the plan, and notifies the LLM.
+     */
+    private boolean cancelSpellFromBadManaPlan(UUID gameId, UUID payingForId, String msg) {
+        if (payingForId != null) {
+            failedManaCasts.add(payingForId);
+        }
+        manaPlan = null;
+        if (mcpMode) {
+            synchronized (unseenChat) {
+                unseenChat.add("[System] Spell cancelled — mana plan was incorrect or incomplete.");
+            }
+        }
+        session.sendPlayerBoolean(gameId, false);
+        return true;
+    }
+
     private UUID getManaPoolPlayerId(UUID gameId, GameView gameView) {
         if (gameView != null) {
             PlayerView myPlayer = gameView.getMyPlayer();
@@ -3416,7 +3435,9 @@ public class BridgeCallbackHandler {
         lastManaPaymentPrompt = msg;
         UUID payingForId = extractPayingForId(msg);
 
-        // Consume explicit mana plan if active
+        // Consume explicit mana plan if active.
+        // If any entry fails or the plan is exhausted, cancel the spell — the LLM
+        // must either pass a CORRECT plan, fill the pool in advance, or use auto_tap.
         CopyOnWriteArrayList<ManaPlanEntry> plan = manaPlan;
         if (plan != null && !plan.isEmpty()) {
             ManaPlanEntry entry = plan.remove(0);  // consume first entry
@@ -3433,9 +3454,9 @@ public class BridgeCallbackHandler {
                         return true;
                     }
                 }
-                // ID not found/not available — fall through to LLM
-                logger.warn("[" + client.getUsername() + "] Mana plan: tap target " + entry.value() + " not available, deferring to LLM");
-                return false;
+                // ID not found/not available — cancel spell
+                logger.warn("[" + client.getUsername() + "] Mana plan: tap target " + entry.value() + " not available, cancelling spell");
+                return cancelSpellFromBadManaPlan(gameId, payingForId, msg);
             }
 
             if ("pool".equals(entry.type())) {
@@ -3446,19 +3467,19 @@ public class BridgeCallbackHandler {
                     session.sendPlayerManaType(gameId, manaPlayerId, manaType);
                     return true;
                 }
-                logger.warn("[" + client.getUsername() + "] Mana plan: pool entry failed (no player ID), deferring to LLM");
-                return false;
+                logger.warn("[" + client.getUsername() + "] Mana plan: pool entry failed (no player ID), cancelling spell");
+                return cancelSpellFromBadManaPlan(gameId, payingForId, msg);
             }
 
-            // Unknown entry type — fall through to LLM
-            logger.warn("[" + client.getUsername() + "] Mana plan: unknown entry type '" + entry.type() + "', deferring to LLM");
-            return false;
+            // Unknown entry type — cancel spell
+            logger.warn("[" + client.getUsername() + "] Mana plan: unknown entry type '" + entry.type() + "', cancelling spell");
+            return cancelSpellFromBadManaPlan(gameId, payingForId, msg);
         }
 
-        // No plan active or plan exhausted — if plan was set but empty, defer to LLM for remaining pips
+        // Plan exists but is exhausted — cancel spell (plan was incomplete)
         if (plan != null) {
-            // Plan exists but is empty — all entries consumed
-            return false;
+            logger.warn("[" + client.getUsername() + "] Mana plan: exhausted with pips remaining, cancelling spell");
+            return cancelSpellFromBadManaPlan(gameId, payingForId, msg);
         }
 
         // Find a mana source from canPlayObjects and tap it

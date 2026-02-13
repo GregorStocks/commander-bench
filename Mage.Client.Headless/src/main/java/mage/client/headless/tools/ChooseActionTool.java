@@ -47,7 +47,10 @@ public class ChooseActionTool {
                 + "(valid types: WHITE, BLUE, BLACK, RED, GREEN, COLORLESS). "
                 + "Consumed in order as mana payment callbacks arrive. "
                 + "Example: [{\"tap\": \"a1b2-...\"}, {\"tap\": \"c3d4-...\"}]. "
-                + "For multi-ability permanents (filter lands, dual lands), you'll be asked to choose the ability. "
+                + "The plan must be COMPLETE — if any entry fails (wrong ID, unavailable permanent) "
+                + "or the plan runs out before all mana is paid, the spell is cancelled. "
+                + "Avoid multi-ability permanents (filter lands, dual lands) — they cancel the spell. "
+                + "For X spells, include entries for both the X pips and the regular cost. "
                 + "Mutually exclusive with auto_tap.") String mana_plan,
             @Param(description = "Set true to use the automatic mana tapper. "
                 + "WARNING: The autotapper is not smart — it taps the first available source with no color "

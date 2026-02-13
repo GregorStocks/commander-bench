@@ -545,7 +545,7 @@
           "type": "integer"
         },
         "mana_plan": {
-          "description": "JSON array of mana sources to tap when casting a spell. Each entry: {\"tap\": \"permanent-id\"} to tap a permanent, or {\"pool\": \"RED\"} to spend mana from pool (valid types: WHITE, BLUE, BLACK, RED, GREEN, COLORLESS). Consumed in order as mana payment callbacks arrive. Example: [{\"tap\": \"a1b2-...\"}, {\"tap\": \"c3d4-...\"}]. For multi-ability permanents (filter lands, dual lands), you'll be asked to choose the ability. Mutually exclusive with auto_tap.",
+          "description": "JSON array of mana sources to tap when casting a spell. Each entry: {\"tap\": \"permanent-id\"} to tap a permanent, or {\"pool\": \"RED\"} to spend mana from pool (valid types: WHITE, BLUE, BLACK, RED, GREEN, COLORLESS). Consumed in order as mana payment callbacks arrive. Example: [{\"tap\": \"a1b2-...\"}, {\"tap\": \"c3d4-...\"}]. The plan must be COMPLETE — if any entry fails (wrong ID, unavailable permanent) or the plan runs out before all mana is paid, the spell is cancelled. Avoid multi-ability permanents (filter lands, dual lands) — they cancel the spell. For X spells, include entries for both the X pips and the regular cost. Mutually exclusive with auto_tap.",
           "type": "string"
         },
         "text": {
