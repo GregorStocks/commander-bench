@@ -2148,17 +2148,6 @@ public class BridgeCallbackHandler {
                 return result;
             }
 
-            // Safety valve: don't wait forever in yield mode
-            long elapsed = System.currentTimeMillis() - startTime;
-            if (yieldActive && elapsed > YIELD_WAIT_TIMEOUT_MS) {
-                var result = new HashMap<String, Object>();
-                result.put("action_pending", false);
-                result.put("actions_passed", actionsPassed);
-                result.put("stop_reason", "yield_timeout");
-                attachUnseenChat(result);
-                return result;
-            }
-
             synchronized (actionLock) {
                 try {
                     actionLock.wait(200);
