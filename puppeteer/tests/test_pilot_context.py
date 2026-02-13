@@ -77,16 +77,35 @@ def test_summarize_get_action_choices():
             "action_type": "GAME_SELECT",
             "response_type": "select",
             "choices": [
-                {"description": "Mountain"},
-                {"description": "Lightning Bolt [Cast]"},
-                {"description": "Goblin Guide [Cast]"},
+                {"name": "Mountain", "action": "land"},
+                {"name": "Lightning Bolt", "action": "cast", "mana_cost": "{R}", "mana_value": 1},
+                {"name": "Goblin Guide", "action": "cast", "mana_cost": "{R}", "mana_value": 1},
             ],
         }
     )
     result = _summarize_tool_result("get_action_choices", content)
     assert "GAME_SELECT" in result
     assert "3 choices" in result
+    assert "Mountain" in result
     assert len(result) <= TOOL_RESULT_MAX_CHARS
+
+
+def test_summarize_get_action_choices_old_format():
+    """Old persisted logs use 'description' instead of 'name' — summarizer handles both."""
+    content = json.dumps(
+        {
+            "action_type": "GAME_SELECT",
+            "response_type": "select",
+            "choices": [
+                {"description": "Mountain [Land]"},
+                {"description": "Lightning Bolt {R} [Cast]"},
+            ],
+        }
+    )
+    result = _summarize_tool_result("get_action_choices", content)
+    assert "GAME_SELECT" in result
+    assert "2 choices" in result
+    assert "Mountain" in result
 
 
 def test_summarize_get_game_state():

@@ -101,7 +101,7 @@ def _summarize_tool_result(tool_name: str, content: str) -> str:
             parts.append(resp_type)
         choices = data.get("choices", [])
         if choices:
-            names = [c.get("description", "?")[:30] for c in choices[:3]]
+            names = [c.get("name", c.get("description", "?"))[:30] for c in choices[:3]]
             parts.append(f"{len(choices)} choices: {', '.join(names)}")
         msg = data.get("message", "")
         if msg and not choices:

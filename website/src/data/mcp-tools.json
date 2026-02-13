@@ -419,7 +419,7 @@
           }
         },
         "choices": {
-          "description": "Available choices with name, type, index, and type-specific fields",
+          "description": "Structured choices with index, name, and type-specific fields (action/mana_cost/power/toughness for cards; choice_type for combat/mana; target_type/controller/tapped for targets)",
           "type": "array",
           "items": {
             "type": "object"
@@ -437,7 +437,7 @@
     "examples": [
       {
         "label": "Select (play cards)",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"response_type\": \"select\",\n  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n  \"players\": \"You(20), Opp(18)\",\n  \"choices\": [\n    {\n      \"name\": \"Lightning Bolt\",\n      \"type\": \"card\",\n      \"mana_cost\": \"{R}\",\n      \"mana_value\": 1,\n      \"playable_abilities\": [\n        \"Cast Lightning Bolt\"\n      ],\n      \"index\": 0\n    },\n    {\n      \"name\": \"Mountain\",\n      \"type\": \"card\",\n      \"playable_abilities\": [\n        \"Play Mountain\"\n      ],\n      \"index\": 1\n    }\n  ],\n  \"untapped_lands\": 2\n}"
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"response_type\": \"select\",\n  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n  \"players\": \"You(20), Opp(18)\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"name\": \"Lightning Bolt\",\n      \"action\": \"cast\",\n      \"mana_cost\": \"{R}\",\n      \"mana_value\": 1\n    },\n    {\n      \"index\": 1,\n      \"name\": \"Mountain\",\n      \"action\": \"land\"\n    }\n  ],\n  \"untapped_lands\": 2\n}"
       },
       {
         "label": "Boolean (mulligan)",
