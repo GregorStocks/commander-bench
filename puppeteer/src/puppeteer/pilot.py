@@ -321,6 +321,55 @@ async def execute_tool(session: ClientSession, name: str, arguments: dict) -> st
         return json.dumps({"error": str(e)})
 
 
+async def _prefetch_first_action(session: ClientSession) -> str:
+    """Wait for the first game decision and return a descriptive initial message.
+
+    Calls pass_priority() until a decision arrives (e.g. mulligan, choose
+    play/draw), then fetches the action choices and builds a message that
+    tells the LLM exactly what it needs to decide — avoiding the confusing
+    "call pass_priority to begin" prompt.
+    """
+    # Wait for the first pending action (mulligan, play/draw choice, etc.)
+    for _ in range(60):  # up to ~60s
+        result_text = await execute_tool(session, "pass_priority", {})
+        try:
+            result = json.loads(result_text)
+        except (json.JSONDecodeError, TypeError):
+            await asyncio.sleep(1)
+            continue
+        if result.get("game_over"):
+            return "The game is over."
+        if result.get("action_pending"):
+            break
+        await asyncio.sleep(1)
+    else:
+        # Timed out waiting — fall back to generic prompt
+        return "The game is starting. Call get_action_choices to see your first decision."
+
+    # Fetch the actual choices
+    choices_text = await execute_tool(session, "get_action_choices", {})
+    try:
+        choices = json.loads(choices_text)
+    except (json.JSONDecodeError, TypeError):
+        return "The game is starting. Call get_action_choices to see your first decision."
+
+    action_type = choices.get("action_type", "")
+    message = choices.get("message", "")
+
+    if "Mulligan" in message or "mulligan" in message.lower():
+        return (
+            f"The game is starting. Your first decision: {message}\n"
+            f"Call get_action_choices to see your hand, then choose_action to decide."
+        )
+    elif action_type:
+        return (
+            f"The game is starting. Your first decision ({action_type}): {message}\n"
+            f"Call get_action_choices to see your options, then choose_action to decide."
+        )
+    else:
+        return "The game is starting. Call get_action_choices to see your first decision."
+
+
 async def run_pilot_loop(
     session: ClientSession,
     client: AsyncOpenAI,
@@ -335,8 +384,11 @@ async def run_pilot_loop(
     reasoning_effort: str = "",
 ) -> None:
     """Run the LLM-driven game-playing loop."""
+    # Pre-fetch the first decision so the LLM knows what it's deciding
+    # instead of blindly calling pass_priority with confusing yield params.
+    initial_message = await _prefetch_first_action(session)
     history: list[dict] = [
-        {"role": "user", "content": "The game is starting. Call pass_priority to begin."},
+        {"role": "user", "content": initial_message},
     ]
     state_summary = ""
     saved_strategy = ""  # persistent notes from save_strategy tool
@@ -513,7 +565,9 @@ async def run_pilot_loop(
                         action_type = result_data.get("action_type", "")
                         msg = result_data.get("message", "")
                         choices = result_data.get("choices", [])
-                        if choices:
+                        if result_data.get("error"):
+                            turn_had_actionable_opportunity = True
+                        elif choices:
                             _log(f"[pilot] Choices for {action_type}: {len(choices)} options")
                             turn_had_actionable_opportunity = True
                         else:
@@ -534,6 +588,8 @@ async def run_pilot_loop(
                                 await auto_pass_loop(session, game_dir, username, "pilot")
                                 return
                             if result_data.get("action_pending"):
+                                turn_had_actionable_opportunity = True
+                            if result_data.get("error"):
                                 turn_had_actionable_opportunity = True
                         except (json.JSONDecodeError, TypeError):
                             pass

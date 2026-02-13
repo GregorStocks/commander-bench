@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from puppeteer.pilot import PermanentLLMFailure, mcp_tools_to_openai, run_pilot_loop
+from puppeteer.pilot import (
+    PermanentLLMFailure,
+    _prefetch_first_action,
+    mcp_tools_to_openai,
+    run_pilot_loop,
+)
 
 
 def _make_session() -> MagicMock:
@@ -142,3 +147,68 @@ def test_mcp_tools_to_openai_custom_filter():
     names = {t["function"]["name"] for t in result}
     assert names == {"pass_priority", "get_game_state"}
     assert "choose_action" not in names
+
+
+# --- _prefetch_first_action tests ---
+
+
+def _mock_tool_result(text: str) -> MagicMock:
+    result = MagicMock()
+    result.content = [MagicMock(text=text)]
+    return result
+
+
+@pytest.mark.asyncio
+async def test_prefetch_mulligan():
+    """Pre-fetch should detect mulligan and build a descriptive message."""
+    session = MagicMock()
+    call_count = 0
+
+    async def fake_call_tool(name, args):
+        nonlocal call_count
+        call_count += 1
+        if name == "pass_priority":
+            return _mock_tool_result('{"action_pending": true, "action_type": "GAME_ASK"}')
+        if name == "get_action_choices":
+            return _mock_tool_result(
+                '{"action_type": "GAME_ASK", "message": "Mulligan down to 6 cards?", "choices": []}'
+            )
+        raise AssertionError(f"Unexpected tool: {name}")
+
+    session.call_tool = AsyncMock(side_effect=fake_call_tool)
+    msg = await _prefetch_first_action(session)
+    assert "Mulligan" in msg
+    assert "get_action_choices" in msg
+
+
+@pytest.mark.asyncio
+async def test_prefetch_waits_for_action():
+    """Pre-fetch should poll pass_priority until action_pending is true."""
+    session = MagicMock()
+    calls = []
+
+    async def fake_call_tool(name, args):
+        calls.append(name)
+        if name == "pass_priority":
+            if len([c for c in calls if c == "pass_priority"]) < 3:
+                return _mock_tool_result('{"action_pending": false}')
+            return _mock_tool_result('{"action_pending": true, "action_type": "GAME_ASK"}')
+        if name == "get_action_choices":
+            return _mock_tool_result('{"action_type": "GAME_ASK", "message": "Choose play or draw"}')
+        raise AssertionError(f"Unexpected tool: {name}")
+
+    session.call_tool = AsyncMock(side_effect=fake_call_tool)
+    with patch("puppeteer.pilot.asyncio.sleep", new_callable=AsyncMock):
+        msg = await _prefetch_first_action(session)
+    assert "GAME_ASK" in msg
+    # Should have polled pass_priority multiple times
+    assert calls.count("pass_priority") == 3
+
+
+@pytest.mark.asyncio
+async def test_prefetch_game_over():
+    """If pass_priority returns game_over, return a game-over message."""
+    session = MagicMock()
+    session.call_tool = AsyncMock(return_value=_mock_tool_result('{"game_over": true}'))
+    msg = await _prefetch_first_action(session)
+    assert "over" in msg.lower()
