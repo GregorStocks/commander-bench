@@ -205,7 +205,7 @@ def upload_to_youtube(game_dir: Path) -> str | None:
             "categoryId": "20",  # Gaming
         },
         "status": {
-            "privacyStatus": "unlisted",
+            "privacyStatus": "public",
             "selfDeclaredMadeForKids": False,
         },
     }
