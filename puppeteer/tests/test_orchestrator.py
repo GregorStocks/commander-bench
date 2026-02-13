@@ -4,7 +4,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from puppeteer.config import Config, PilotPlayer
 from puppeteer.orchestrator import (
@@ -12,6 +12,7 @@ from puppeteer.orchestrator import (
     _git,
     _missing_llm_api_keys,
     _print_game_summary,
+    _wait_with_pilot_monitoring,
     _write_error_log,
 )
 
@@ -283,3 +284,54 @@ def test_git_returns_empty_on_failure():
     with patch("puppeteer.orchestrator.subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "git")):
         result = _git("rev-parse HEAD", Path("/fake"))
     assert result == ""
+
+
+# --- _wait_with_pilot_monitoring tests ---
+
+
+def _mock_proc(poll_returns: list[int | None]) -> MagicMock:
+    """Create a mock Popen that returns successive values from poll_returns."""
+    proc = MagicMock()
+    proc.poll = MagicMock(side_effect=poll_returns)
+    return proc
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_pilot_monitoring_spectator_exits_normally(mock_sleep):
+    """When spectator exits first, should return its exit code."""
+    spectator = _mock_proc([None, None, 0])
+    pilot = _mock_proc([None, None, None])
+    pm = MagicMock()
+
+    rc = _wait_with_pilot_monitoring(spectator, [("alice", pilot)], pm)
+
+    assert rc == 0
+    pm.cleanup.assert_not_called()
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_pilot_monitoring_pilot_fails(mock_sleep):
+    """When a pilot exits with non-zero, should abort and return -1."""
+    spectator = _mock_proc([None, None])
+    pilot = _mock_proc([None, 3])
+    pm = MagicMock()
+
+    rc = _wait_with_pilot_monitoring(spectator, [("alice", pilot)], pm)
+
+    assert rc == -1
+    pm.cleanup.assert_called_once()
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_pilot_monitoring_pilot_exits_zero_ignored(mock_sleep):
+    """A pilot exiting with code 0 should not trigger abort."""
+    # Spectator: None, None, None, 0
+    spectator = _mock_proc([None, None, None, 0])
+    # Pilot: None, 0, 0, 0 (exits normally on second poll)
+    pilot = _mock_proc([None, 0, 0, 0])
+    pm = MagicMock()
+
+    rc = _wait_with_pilot_monitoring(spectator, [("alice", pilot)], pm)
+
+    assert rc == 0
+    pm.cleanup.assert_not_called()

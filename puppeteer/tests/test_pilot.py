@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from puppeteer.pilot import mcp_tools_to_openai, run_pilot_loop
+from puppeteer.pilot import PermanentLLMFailure, mcp_tools_to_openai, run_pilot_loop
 
 
 def _make_session() -> MagicMock:
@@ -24,12 +24,12 @@ def _make_client(error: Exception) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_403_triggers_auto_pass():
-    """A 403 error (key quota exceeded) should switch to auto-pass mode."""
+async def test_403_raises_permanent_failure():
+    """A 403 error (key quota exceeded) should raise PermanentLLMFailure."""
     session = _make_session()
     client = _make_client(Exception("Error code: 403 - Forbidden"))
 
-    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock) as mock_auto_pass:
+    with pytest.raises(PermanentLLMFailure, match="Credits exhausted"):
         await run_pilot_loop(
             session=session,
             client=client,
@@ -38,16 +38,15 @@ async def test_403_triggers_auto_pass():
             tools=[],
             username="test-player",
         )
-        mock_auto_pass.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_402_triggers_auto_pass():
-    """A 402 error (credits exhausted) should switch to auto-pass mode."""
+async def test_402_raises_permanent_failure():
+    """A 402 error (credits exhausted) should raise PermanentLLMFailure."""
     session = _make_session()
     client = _make_client(Exception("Error code: 402 - Payment Required"))
 
-    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock) as mock_auto_pass:
+    with pytest.raises(PermanentLLMFailure, match="Credits exhausted"):
         await run_pilot_loop(
             session=session,
             client=client,
@@ -56,16 +55,15 @@ async def test_402_triggers_auto_pass():
             tools=[],
             username="test-player",
         )
-        mock_auto_pass.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_404_triggers_auto_pass():
-    """A 404 error (model not found) should switch to auto-pass mode."""
+async def test_404_raises_permanent_failure():
+    """A 404 error (model not found) should raise PermanentLLMFailure."""
     session = _make_session()
     client = _make_client(Exception("Error code: 404 - Not Found"))
 
-    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock) as mock_auto_pass:
+    with pytest.raises(PermanentLLMFailure, match="Model not found"):
         await run_pilot_loop(
             session=session,
             client=client,
@@ -74,7 +72,6 @@ async def test_404_triggers_auto_pass():
             tools=[],
             username="test-player",
         )
-        mock_auto_pass.assert_called_once()
 
 
 @pytest.mark.asyncio

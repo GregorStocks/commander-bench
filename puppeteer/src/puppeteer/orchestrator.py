@@ -85,6 +85,37 @@ def bring_to_foreground_macos() -> None:
     )
 
 
+def _wait_with_pilot_monitoring(
+    spectator_proc: subprocess.Popen,
+    pilot_procs: list[tuple[str, subprocess.Popen]],
+    pm: ProcessManager,
+    poll_interval: float = 2.0,
+) -> int:
+    """Wait for the spectator to exit, but abort if any pilot dies with an error.
+
+    Polls the spectator and all pilot processes every *poll_interval* seconds.
+    If a pilot exits with a non-zero return code (e.g. PERMANENT_FAILURE_EXIT_CODE
+    for model-not-found), kills everything and returns early.
+
+    Returns the spectator's exit code, or -1 if we killed it due to a pilot failure.
+    """
+    while True:
+        # Check spectator first
+        spectator_rc = spectator_proc.poll()
+        if spectator_rc is not None:
+            return spectator_rc
+
+        # Check all pilot processes
+        for name, proc in pilot_procs:
+            rc = proc.poll()
+            if rc is not None and rc != 0:
+                print(f"\nPilot '{name}' exited with code {rc} — aborting game.")
+                pm.cleanup()
+                return -1
+
+        time.sleep(poll_interval)
+
+
 def _ensure_game_over_event(game_dir: Path, spectator_exit_code: int = -1) -> None:
     """Append a game_over event to game_events.jsonl if one is missing.
 
@@ -912,6 +943,7 @@ def main() -> int:
         # Bring the GUI window to the foreground on macOS
         bring_to_foreground_macos()
 
+        pilot_procs: list[tuple[str, subprocess.Popen]] = []
         if headless_count > 0:
             # Wait for spectator to create the table before starting headless
             # clients.  The spectator logs a distinctive line once the table is
@@ -934,7 +966,8 @@ def main() -> int:
             for player in config.pilot_players:
                 log_path = game_dir / f"{player.name}_pilot.log"
                 print(f"Pilot ({player.name}) log: {log_path}")
-                start_pilot_client(pm, project_root, config, player, log_path, game_dir=game_dir)
+                proc = start_pilot_client(pm, project_root, config, player, log_path, game_dir=game_dir)
+                pilot_procs.append((player.name, proc))
 
             # Start potato clients (pure Java, auto-responds)
             for player in config.potato_players:
@@ -963,8 +996,11 @@ def main() -> int:
                 overlay_reservation.release()
                 overlay_reservation = None
 
-        # Wait for spectator client to exit
-        spectator_rc = spectator_proc.wait()
+        # Wait for spectator client to exit, but abort if a pilot fails permanently
+        if pilot_procs:
+            spectator_rc = _wait_with_pilot_monitoring(spectator_proc, pilot_procs, pm)
+        else:
+            spectator_rc = spectator_proc.wait()
 
         # Ensure a game_over event exists in game_events.jsonl.
         # When the game ends via time limit or window close, XMage may not
