@@ -1713,8 +1713,14 @@ public class TablesPanel extends javax.swing.JPanel {
             DeckCardLists testDeck = DeckImporter.importDeckFromFile(testDeckFile, false);
 
             int numPlayers = config.getPlayers().size();
-            int botCount = config.getBotCount();
-            List<DeckCardLists> aiDecks = pickAiPuppeteerDecks(botCount);
+            // Only auto-pick decks for bots that don't already have a resolved deck path
+            int botsNeedingDecks = 0;
+            for (AiPuppeteerConfig.PlayerConfig p : config.getPlayers()) {
+                if (p.isBot() && (p.deck == null || p.deck.isEmpty())) {
+                    botsNeedingDecks++;
+                }
+            }
+            List<DeckCardLists> aiDecks = pickAiPuppeteerDecks(botsNeedingDecks);
 
             String gameTypeStr = config.getGameType() != null ? config.getGameType() : "Commander Free For All";
             String deckTypeStr = config.getDeckType() != null ? config.getDeckType() : "Variant Magic - Freeform Commander";
