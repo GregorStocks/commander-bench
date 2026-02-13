@@ -49,6 +49,13 @@ def test_summarize_choose_action_success():
     assert "Lightning Bolt" in result
 
 
+def test_summarize_choose_action_with_mana_plan():
+    content = json.dumps({"success": True, "action_taken": "selected_2", "mana_plan_set": True, "mana_plan_size": 3})
+    result = _summarize_tool_result("choose_action", content)
+    assert result.startswith("OK:")
+    assert "mana_plan: 3 entries" in result
+
+
 def test_summarize_choose_action_failure():
     content = json.dumps({"success": False, "error": "no pending action"})
     result = _summarize_tool_result("choose_action", content)

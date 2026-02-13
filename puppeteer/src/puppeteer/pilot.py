@@ -91,7 +91,10 @@ def _summarize_tool_result(tool_name: str, content: str) -> str:
 
     if tool_name == "choose_action":
         if data.get("success"):
-            return f"OK: {data.get('action_taken', '?')}"
+            summary = f"OK: {data.get('action_taken', '?')}"
+            if data.get("mana_plan_set"):
+                summary += f" (mana_plan: {data.get('mana_plan_size', '?')} entries)"
+            return summary
         return f"FAIL: {data.get('error', '?')[:100]}"
 
     if tool_name == "get_action_choices":
