@@ -121,6 +121,12 @@ website: leaderboard
 export-game:
 	python3 scripts/export_game.py $(GAME)
 
+# Generate AI commentary for a completed game
+# Usage: make commentary GAME=game_20260211_212018
+.PHONY: commentary
+commentary:
+	uv run --project puppeteer python scripts/commentary.py $(GAME)
+
 # Upload a game recording to YouTube
 # Usage: make upload-youtube GAME=game_20260208_220934
 .PHONY: upload-youtube

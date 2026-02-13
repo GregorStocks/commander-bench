@@ -750,6 +750,22 @@
   line-height: 1.5;
 }
 
+/* Commentary */
+#commentary-section {
+  padding: 0.75rem 1rem;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+#commentary-text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #d0d0e0;
+  white-space: pre-wrap;
+}
+
 .hidden {
   display: none !important;
 }

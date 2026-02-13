@@ -61,6 +61,12 @@ const { slug } = Astro.params;
             <div class="section-title">Stack</div>
             <div id="stack-cards" class="cards-row"></div>
           </div>
+
+          <!-- Commentary -->
+          <div id="commentary-section" class="hidden">
+            <div class="section-title">Commentary</div>
+            <div id="commentary-text"></div>
+          </div>
         </div>
 
         <div id="game-right">
@@ -662,6 +668,37 @@ const { slug } = Astro.params;
             break;
           }
         }
+      }
+
+      // Commentary
+      var commentarySection = document.getElementById("commentary-section");
+      var commentaryText = document.getElementById("commentary-text");
+      if (game.commentary && game.commentary.length > 0) {
+        commentarySection.classList.remove("hidden");
+        var currentTurnNum = snap.turn;
+        var entry = null;
+
+        // Show conclusion at the very end
+        if (index === game.snapshots.length - 1) {
+          for (var ci = 0; ci < game.commentary.length; ci++) {
+            if (game.commentary[ci].turn === -1) {
+              entry = game.commentary[ci];
+              break;
+            }
+          }
+        }
+
+        // Find commentary for current turn (or most recent turn with commentary)
+        if (!entry) {
+          for (var ci = game.commentary.length - 1; ci >= 0; ci--) {
+            if (game.commentary[ci].turn >= 0 && game.commentary[ci].turn <= currentTurnNum) {
+              entry = game.commentary[ci];
+              break;
+            }
+          }
+        }
+
+        commentaryText.textContent = entry ? entry.text : "";
       }
 
     }

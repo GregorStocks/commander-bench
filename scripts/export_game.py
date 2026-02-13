@@ -376,6 +376,12 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
     if meta.get("youtube_url"):
         output["youtubeUrl"] = meta["youtube_url"]
 
+    # Include commentary if available
+    commentary_path = game_dir / "commentary.json"
+    if commentary_path.exists():
+        commentary = json.loads(commentary_path.read_text())
+        output["commentary"] = commentary.get("entries", [])
+
     website_games_dir.mkdir(parents=True, exist_ok=True)
     output_path = website_games_dir / f"{game_id}.json.gz"
     output_path.write_bytes(gzip.compress(json.dumps(output).encode()))
