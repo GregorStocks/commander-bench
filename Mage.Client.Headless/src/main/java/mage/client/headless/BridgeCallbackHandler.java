@@ -2412,18 +2412,49 @@ public class BridgeCallbackHandler {
         return types;
     }
 
-    public Map<String, Object> getOracleText(String cardName, String objectId, String[] cardNames) {
+    public Map<String, Object> getOracleText(String cardName, String objectId, String[] cardNames, String[] objectIds) {
         Map<String, Object> result = new HashMap<>();
 
         boolean hasCardName = cardName != null && !cardName.isEmpty();
         boolean hasObjectId = objectId != null && !objectId.isEmpty();
         boolean hasCardNames = cardNames != null && cardNames.length > 0;
+        boolean hasObjectIds = objectIds != null && objectIds.length > 0;
 
         // Validate: exactly one parameter type should be provided
-        int providedCount = (hasCardName ? 1 : 0) + (hasObjectId ? 1 : 0) + (hasCardNames ? 1 : 0);
+        int providedCount = (hasCardName ? 1 : 0) + (hasObjectId ? 1 : 0) + (hasCardNames ? 1 : 0) + (hasObjectIds ? 1 : 0);
         if (providedCount != 1) {
             result.put("success", false);
-            result.put("error", "Provide exactly one of: card_name, object_id, or card_names");
+            result.put("error", "Provide exactly one of: card_name, object_id, card_names, or object_ids");
+            return result;
+        }
+
+        // Batch lookup by object IDs
+        if (hasObjectIds) {
+            List<Map<String, Object>> results = new ArrayList<>();
+            for (String oid : objectIds) {
+                Map<String, Object> entry = new HashMap<>();
+                if (oid == null) {
+                    entry.put("object_id", null);
+                    entry.put("error", "null object_id");
+                } else {
+                    entry.put("object_id", oid);
+                    try {
+                        UUID uuid = UUID.fromString(oid);
+                        CardView cardView = findCardViewById(uuid);
+                        if (cardView != null) {
+                            entry.put("name", cardView.getDisplayName());
+                            entry.put("rules", cardView.getRules());
+                        } else {
+                            entry.put("error", "not found");
+                        }
+                    } catch (IllegalArgumentException e) {
+                        entry.put("error", "invalid UUID format");
+                    }
+                }
+                results.add(entry);
+            }
+            result.put("success", true);
+            result.put("cards", results);
             return result;
         }
 
