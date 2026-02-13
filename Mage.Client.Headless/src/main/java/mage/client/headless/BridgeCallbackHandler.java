@@ -94,6 +94,7 @@ public class BridgeCallbackHandler {
     private volatile int actionsProcessed = 0;
     private static final int STALLER_WARMUP_ACTIONS = 20;
     private volatile boolean keepAliveAfterGame = false;
+    private volatile boolean gameEverStarted = false;
     private volatile PendingAction pendingAction = null;
     private final Object actionLock = new Object(); // For wait_for_action blocking
     private final StringBuilder gameLog = new StringBuilder();
@@ -314,6 +315,7 @@ public class BridgeCallbackHandler {
         gameChatIds.clear();
         pendingAction = null;
         currentGameId = null;
+        gameEverStarted = false;
         lastGameView = null;
         lastChoices = null;
         actionsProcessed = 0;
@@ -1850,7 +1852,7 @@ public class BridgeCallbackHandler {
         if (playerDead) {
             result.put("player_dead", true);
         }
-        if (activeGames.isEmpty()) {
+        if (activeGames.isEmpty() && gameEverStarted) {
             result.put("game_over", true);
         }
         synchronized (unseenChat) {
@@ -3108,6 +3110,7 @@ public class BridgeCallbackHandler {
         UUID playerId = message.getPlayerId();
         activeGames.put(gameId, playerId);
         currentGameId = gameId;
+        gameEverStarted = true;
 
         // Join the game session (creates GameSessionPlayer on server)
         if (!session.joinGame(gameId)) {
