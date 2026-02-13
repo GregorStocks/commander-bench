@@ -1,8 +1,13 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class PassPriorityTool {
     @Tool(
@@ -20,14 +25,6 @@ public class PassPriorityTool {
             @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
             @Tool.Field(name = "player_dead", type = "boolean", description = "Whether you died during priority passing"),
             @Tool.Field(name = "timeout", type = "boolean", description = "Whether the operation timed out")
-        },
-        examples = {
-            @Tool.Example(label = "Playable cards found",
-                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 3,\n  \"has_playable_cards\": true\n}"),
-            @Tool.Example(label = "Combat phase",
-                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\"\n}"),
-            @Tool.Example(label = "Timeout",
-                value = "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -35,5 +32,24 @@ public class PassPriorityTool {
             @Param(description = "Max milliseconds to wait (default 30000)") Integer timeout_ms) {
         int timeout = timeout_ms != null ? timeout_ms : 30000;
         return handler.passPriority(timeout);
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Playable cards found", json(
+                "action_pending", true,
+                "action_type", "GAME_SELECT",
+                "actions_passed", 3,
+                "has_playable_cards", true)),
+            example("Combat phase", json(
+                "action_pending", true,
+                "action_type", "GAME_SELECT",
+                "actions_passed", 5,
+                "has_playable_cards", false,
+                "combat_phase", "declare_attackers")),
+            example("Timeout", json(
+                "action_pending", false,
+                "actions_passed", 12,
+                "timeout", true)));
     }
 }

@@ -1,8 +1,13 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class GetActionChoicesTool {
     @Tool(
@@ -31,28 +36,6 @@ public class GetActionChoicesTool {
             @Tool.Field(name = "actions_passed", type = "integer", description = "Number of priority passes performed before the decision"),
             @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
             @Tool.Field(name = "timeout", type = "boolean", description = "Whether the operation timed out")
-        },
-        examples = {
-            @Tool.Example(label = "Select (play cards)",
-                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n"
-                    + "  \"message\": \"Select card to play or pass priority\",\n"
-                    + "  \"response_type\": \"select\",\n"
-                    + "  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n"
-                    + "  \"players\": \"You(20), Opp(18)\",\n"
-                    + "  \"choices\": [\n"
-                    + "    { \"name\": \"Lightning Bolt\", \"type\": \"card\", \"mana_cost\": \"{R}\", \"mana_value\": 1, \"playable_abilities\": [\"Cast Lightning Bolt\"], \"index\": 0 },\n"
-                    + "    { \"name\": \"Mountain\", \"type\": \"card\", \"playable_abilities\": [\"Play Mountain\"], \"index\": 1 }\n"
-                    + "  ],\n  \"untapped_lands\": 2\n}"),
-            @Tool.Example(label = "Boolean (mulligan)",
-                value = "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_ASK\",\n"
-                    + "  \"message\": \"Mulligan hand?\",\n"
-                    + "  \"response_type\": \"boolean\",\n"
-                    + "  \"context\": \"T0 PREGAME\",\n"
-                    + "  \"players\": \"You(20), Opp(20)\",\n"
-                    + "  \"your_hand\": [\n"
-                    + "    { \"name\": \"Mountain\", \"mana_value\": 0, \"is_land\": true },\n"
-                    + "    { \"name\": \"Lightning Bolt\", \"mana_cost\": \"{R}\", \"mana_value\": 1 }\n"
-                    + "  ],\n  \"hand_size\": 7,\n  \"land_count\": 3\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -63,5 +46,34 @@ public class GetActionChoicesTool {
         } else {
             return handler.getActionChoices();
         }
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Select (play cards)", json(
+                "action_pending", true,
+                "action_type", "GAME_SELECT",
+                "message", "Select card to play or pass priority",
+                "response_type", "select",
+                "context", "T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN",
+                "players", "You(20), Opp(18)",
+                "choices", Arrays.asList(
+                    json("name", "Lightning Bolt", "type", "card", "mana_cost", "{R}", "mana_value", 1,
+                        "playable_abilities", Arrays.asList("Cast Lightning Bolt"), "index", 0),
+                    json("name", "Mountain", "type", "card",
+                        "playable_abilities", Arrays.asList("Play Mountain"), "index", 1)),
+                "untapped_lands", 2)),
+            example("Boolean (mulligan)", json(
+                "action_pending", true,
+                "action_type", "GAME_ASK",
+                "message", "Mulligan hand?",
+                "response_type", "boolean",
+                "context", "T0 PREGAME",
+                "players", "You(20), Opp(20)",
+                "your_hand", Arrays.asList(
+                    json("name", "Mountain", "mana_value", 0, "is_land", true),
+                    json("name", "Lightning Bolt", "mana_cost", "{R}", "mana_value", 1)),
+                "hand_size", 7,
+                "land_count", 3)));
     }
 }

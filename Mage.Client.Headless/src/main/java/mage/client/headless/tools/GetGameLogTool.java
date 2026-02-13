@@ -1,8 +1,13 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class GetGameLogTool {
     @Tool(
@@ -14,12 +19,6 @@ public class GetGameLogTool {
             @Tool.Field(name = "truncated", type = "boolean", description = "Whether older content was omitted"),
             @Tool.Field(name = "cursor", type = "integer", description = "Cursor to pass to the next get_game_log call"),
             @Tool.Field(name = "cursor_reset", type = "boolean", description = "Whether requested cursor was too old and had to be reset to oldest retained log offset")
-        },
-        examples = {
-            @Tool.Example(label = "Truncated log",
-                value = "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\",\n  \"total_length\": 5234,\n  \"truncated\": true,\n  \"cursor\": 5234\n}"),
-            @Tool.Example(label = "Cursor delta",
-                value = "{\n  \"log\": \"Player2 casts Swords to Plowshares targeting Goblin Guide.\",\n  \"total_length\": 5301,\n  \"truncated\": false,\n  \"cursor\": 5301\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -28,5 +27,19 @@ public class GetGameLogTool {
             @Param(description = "Cursor offset from previous get_game_log call. Returns new log text since this offset.") Integer cursor) {
         int mc = max_chars != null ? max_chars : 0;
         return handler.getGameLogChunk(mc, cursor);
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Truncated log", json(
+                "log", "Turn 3 - Player1: Mountain entered the battlefield...",
+                "total_length", 5234,
+                "truncated", true,
+                "cursor", 5234)),
+            example("Cursor delta", json(
+                "log", "Player2 casts Swords to Plowshares targeting Goblin Guide.",
+                "total_length", 5301,
+                "truncated", false,
+                "cursor", 5301)));
     }
 }

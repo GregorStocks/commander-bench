@@ -1,0 +1,10 @@
+{
+  "title": "Upgrade from Java 8 to a modern Java version",
+  "description": "The project targets Java 8 (java.version=1.8 in pom.xml). Upgrading to Java 17+ (current LTS) would unlock significant improvements across the codebase.\n\nConcrete wins discovered during the MCP refactor:\n\n1. **Text blocks (Java 15+)** — Annotation string values with embedded JSON require heavy escaping: `\"success\": true,\\n  \\\"action_type\\\"`. Text blocks (triple-quoted strings) eliminate this entirely. Relevant in all @Tool.Field descriptions and anywhere multi-line strings appear.\n\n2. **List.of() / Map.of() (Java 9+)** — The codebase uses `new ArrayList<>()` + `.add()` and `new HashMap<>()` + `.put()` everywhere. Immutable factory methods are shorter and safer. Heavily used in McpToolRegistry, BridgeCallbackHandler, and all tool result construction.\n\n3. **var (Java 10+)** — Reduces `Map<String, Object> result = new HashMap<>()` to `var result = new HashMap<String, Object>()`. Minor but reduces visual noise throughout.\n\n4. **Records (Java 16+)** — PendingAction, RoundTracker, and various internal data carriers could be records instead of full classes with manual constructors/fields.\n\n5. **Switch expressions (Java 14+)** — McpServer.handleRequest() and similar switch blocks could use arrow syntax.\n\n6. **Pattern matching instanceof (Java 16+)** — Eliminates cast-after-instanceof patterns.\n\nRecommendation: audit Mage.Client.Headless and Mage.Client.Streaming (code we own) for more places that would benefit. The upstream XMage code stays on whatever it needs, but our modules can target a higher version independently if we split the compiler config.\n\nSource: pom.xml (root, line 15: <java.version>1.8</java.version>), all files in Mage.Client.Headless/ and Mage.Client.Streaming/.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": ["headless-client", "streaming-client", "build"],
+  "created_at": "2026-02-12T18:50:09.000000-08:00",
+  "updated_at": "2026-02-12T18:50:09.000000-08:00"
+}
