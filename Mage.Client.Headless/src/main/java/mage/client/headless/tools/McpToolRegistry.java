@@ -147,6 +147,9 @@ public class McpToolRegistry {
             Map<String, Object> prop = new HashMap<>();
             addJsonType(prop, p.getType());
             prop.put("description", param.description());
+            if (param.allowed_values().length > 0) {
+                prop.put("enum", Arrays.asList(param.allowed_values()));
+            }
             properties.put(name, prop);
 
             if (param.required()) {

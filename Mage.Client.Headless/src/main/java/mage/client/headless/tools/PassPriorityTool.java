@@ -12,10 +12,11 @@ import static mage.client.headless.tools.McpToolRegistry.json;
 public class PassPriorityTool {
     @Tool(
         name = "pass_priority",
-        description = "Auto-pass priority until you need to make a decision: playable cards, combat "
-            + "(declare attackers/blockers), or non-priority actions. "
-            + "Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. "
-            + "On timeout: action_pending=false, timeout=true.",
+        description = "Pass priority. Without yield_until: passes once and returns. "
+            + "With yield_until: uses XMage's server-side yield system to efficiently skip ahead "
+            + "(like F4-F11 in the GUI). Auto-handles mechanical callbacks (mana payment failures, "
+            + "optional targets with no legal targets). "
+            + "Returns stop_reason indicating why the call returned.",
         output = {
             @Tool.Field(name = "action_pending", type = "boolean", description = "Whether a decision-requiring action was found"),
             @Tool.Field(name = "action_type", type = "string", description = "XMage callback method name"),
@@ -24,14 +25,28 @@ public class PassPriorityTool {
             @Tool.Field(name = "combat_phase", type = "string", description = "\"declare_attackers\" or \"declare_blockers\""),
             @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
             @Tool.Field(name = "player_dead", type = "boolean", description = "Whether you died during priority passing"),
-            @Tool.Field(name = "timeout", type = "boolean", description = "Whether the operation timed out")
+            @Tool.Field(name = "stop_reason", type = "string",
+                description = "Why the call returned: playable_cards, combat, non_priority_action, "
+                    + "passed (single pass, no yield), no_action (nothing pending), "
+                    + "yield_timeout (safety timeout in yield mode)")
         }
     )
     public static Map<String, Object> execute(
             BridgeCallbackHandler handler,
-            @Param(description = "Max milliseconds to wait (default 30000)") Integer timeout_ms) {
-        int timeout = timeout_ms != null ? timeout_ms : 30000;
-        return handler.passPriority(timeout);
+            @Param(
+                description = "Yield mode: skip ahead using XMage's server-side yield. "
+                    + "end_of_turn=F5, next_turn=F4 (stop on stack), "
+                    + "next_turn_skip_stack=F6, next_main=F7, "
+                    + "stack_resolved=F10, my_turn=F9, "
+                    + "end_step_before_my_turn=F11. "
+                    + "Omit to pass once and return.",
+                allowed_values = {
+                    "end_of_turn", "next_turn", "next_turn_skip_stack",
+                    "next_main", "stack_resolved", "my_turn",
+                    "end_step_before_my_turn"
+                }
+            ) String yield_until) {
+        return handler.passPriority(yield_until);
     }
 
     public static List<Map<String, Object>> examples() {
@@ -40,16 +55,24 @@ public class PassPriorityTool {
                 "action_pending", true,
                 "action_type", "GAME_SELECT",
                 "actions_passed", 3,
-                "has_playable_cards", true)),
+                "has_playable_cards", true,
+                "stop_reason", "playable_cards")),
             example("Combat phase", json(
                 "action_pending", true,
                 "action_type", "GAME_SELECT",
                 "actions_passed", 5,
                 "has_playable_cards", false,
-                "combat_phase", "declare_attackers")),
-            example("Timeout", json(
+                "combat_phase", "declare_attackers",
+                "stop_reason", "combat")),
+            example("Single pass (no yield)", json(
                 "action_pending", false,
-                "actions_passed", 12,
-                "timeout", true)));
+                "actions_passed", 1,
+                "stop_reason", "passed")),
+            example("Yield until next turn", json(
+                "action_pending", true,
+                "action_type", "GAME_SELECT",
+                "actions_passed", 8,
+                "has_playable_cards", true,
+                "stop_reason", "playable_cards")));
     }
 }

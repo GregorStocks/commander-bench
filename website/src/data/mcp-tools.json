@@ -144,16 +144,16 @@
           "description": "XMage callback method name",
           "type": "string"
         },
+        "stop_reason": {
+          "description": "Why the call returned: playable_cards, combat, non_priority_action, passed (single pass, no yield), no_action (nothing pending), yield_timeout (safety timeout in yield mode)",
+          "type": "string"
+        },
         "recent_chat": {
           "description": "Chat messages received since last check",
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        "timeout": {
-          "description": "Whether the operation timed out",
-          "type": "boolean"
         },
         "action_pending": {
           "description": "Whether a decision-requiring action was found",
@@ -168,29 +168,42 @@
     "examples": [
       {
         "label": "Playable cards found",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 3,\n  \"has_playable_cards\": true\n}"
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 3,\n  \"has_playable_cards\": true,\n  \"stop_reason\": \"playable_cards\"\n}"
       },
       {
         "label": "Combat phase",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\"\n}"
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\",\n  \"stop_reason\": \"combat\"\n}"
       },
       {
-        "label": "Timeout",
-        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 12,\n  \"timeout\": true\n}"
+        "label": "Single pass (no yield)",
+        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 1,\n  \"stop_reason\": \"passed\"\n}"
+      },
+      {
+        "label": "Yield until next turn",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 8,\n  \"has_playable_cards\": true,\n  \"stop_reason\": \"playable_cards\"\n}"
       }
     ],
     "inputSchema": {
       "additionalProperties": false,
       "type": "object",
       "properties": {
-        "timeout_ms": {
-          "description": "Max milliseconds to wait (default 30000)",
-          "type": "integer"
+        "yield_until": {
+          "description": "Yield mode: skip ahead using XMage's server-side yield. end_of_turn=F5, next_turn=F4 (stop on stack), next_turn_skip_stack=F6, next_main=F7, stack_resolved=F10, my_turn=F9, end_step_before_my_turn=F11. Omit to pass once and return.",
+          "type": "string",
+          "enum": [
+            "end_of_turn",
+            "next_turn",
+            "next_turn_skip_stack",
+            "next_main",
+            "stack_resolved",
+            "my_turn",
+            "end_step_before_my_turn"
+          ]
         }
       }
     },
     "name": "pass_priority",
-    "description": "Auto-pass priority until you need to make a decision: playable cards, combat (declare attackers/blockers), or non-priority actions. Returns action_pending, action_type, actions_passed, has_playable_cards, combat_phase. On timeout: action_pending=false, timeout=true."
+    "description": "Pass priority. Without yield_until: passes once and returns. With yield_until: uses XMage's server-side yield system to efficiently skip ahead (like F4-F11 in the GUI). Auto-handles mechanical callbacks (mana payment failures, optional targets with no legal targets). Returns stop_reason indicating why the call returned."
   },
   {
     "outputSchema": {
@@ -379,6 +392,10 @@
           "description": "How to respond: \"select\", \"boolean\", \"index\", \"amount\", \"pile\", or \"multi_amount\"",
           "type": "string"
         },
+        "stop_reason": {
+          "description": "Why pass_priority returned (only when yield_until is set)",
+          "type": "string"
+        },
         "untapped_lands": {
           "description": "Number of untapped lands",
           "type": "integer"
@@ -390,10 +407,6 @@
         "mana_pool": {
           "description": "Current mana pool {R, G, U, W, B, C}",
           "type": "object"
-        },
-        "timeout": {
-          "description": "Whether the operation timed out",
-          "type": "boolean"
         },
         "action_pending": {
           "description": "Whether an action is pending (false if nothing to do)",
@@ -448,14 +461,23 @@
       "additionalProperties": false,
       "type": "object",
       "properties": {
-        "timeout_ms": {
-          "description": "Max milliseconds to wait for a decision. When set, auto-passes priority until a decision is needed (like pass_priority + get_action_choices in one call). When omitted, returns immediately.",
-          "type": "integer"
+        "yield_until": {
+          "description": "Yield mode: pass priority using XMage's server-side yield, then return choices. Same values as pass_priority's yield_until. Omit to return immediately.",
+          "type": "string",
+          "enum": [
+            "end_of_turn",
+            "next_turn",
+            "next_turn_skip_stack",
+            "next_main",
+            "stack_resolved",
+            "my_turn",
+            "end_step_before_my_turn"
+          ]
         }
       }
     },
     "name": "get_action_choices",
-    "description": "Get available choices for the current pending action. Call before choose_action. With timeout_ms: blocks like pass_priority until a decision is needed, then returns choices in one call. Without timeout_ms: returns immediately (action_pending=false if nothing to do). Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
+    "description": "Get available choices for the current pending action. Call before choose_action. With yield_until: blocks like pass_priority until a decision is needed, then returns choices in one call. Without yield_until: returns immediately (action_pending=false if nothing to do). Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
   },
   {
     "outputSchema": {

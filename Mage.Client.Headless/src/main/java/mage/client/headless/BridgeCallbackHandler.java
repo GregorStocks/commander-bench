@@ -1860,17 +1860,55 @@ public class BridgeCallbackHandler {
         }
     }
 
+    // Mapping from yield_until parameter values to XMage PlayerAction constants.
+    private static final Map<String, PlayerAction> YIELD_ACTIONS = Map.of(
+        "end_of_turn", PlayerAction.PASS_PRIORITY_UNTIL_TURN_END_STEP,
+        "next_turn", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN,
+        "next_turn_skip_stack", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN_SKIP_STACK,
+        "next_main", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_MAIN_PHASE,
+        "stack_resolved", PlayerAction.PASS_PRIORITY_UNTIL_STACK_RESOLVED,
+        "my_turn", PlayerAction.PASS_PRIORITY_UNTIL_MY_NEXT_TURN,
+        "end_step_before_my_turn", PlayerAction.PASS_PRIORITY_UNTIL_END_STEP_BEFORE_MY_NEXT_TURN
+    );
+
+    /** Max time to wait for a callback in yield mode before giving up (safety valve). */
+    private static final long YIELD_WAIT_TIMEOUT_MS = 120_000;
+
     /**
-     * Auto-pass empty GAME_SELECT priorities (no playable cards) and return
-     * when a meaningful decision is needed: playable cards available, or
-     * any non-GAME_SELECT action (mulligan, target, blocker, etc.).
+     * Pass priority. Without yield_until: passes once and returns. With yield_until:
+     * sets XMage's native server-side yield flag, then waits for a meaningful callback.
+     *
+     * Both modes auto-handle mechanical callbacks (GAME_PLAY_MANA auto-cancel,
+     * optional GAME_TARGET with no legal targets). Returns stop_reason indicating
+     * why the call returned.
      */
-    public Map<String, Object> passPriority(int timeoutMs) {
+    public Map<String, Object> passPriority(String yieldUntil) {
         interactionsThisTurn++;
-        long startTime = System.currentTimeMillis();
         int actionsPassed = 0;
 
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
+        // Validate and activate yield if requested
+        boolean yieldActive = false;
+        if (yieldUntil != null) {
+            PlayerAction yieldAction = YIELD_ACTIONS.get(yieldUntil);
+            if (yieldAction == null) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("error", "Invalid yield_until value: " + yieldUntil
+                    + ". Valid values: " + String.join(", ", YIELD_ACTIONS.keySet()));
+                return result;
+            }
+            UUID gameId = currentGameId;
+            if (gameId == null) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("error", "No active game for yield");
+                return result;
+            }
+            session.sendPlayerAction(yieldAction, gameId, null);
+            yieldActive = true;
+        }
+
+        long startTime = System.currentTimeMillis();
+
+        while (true) {
             PendingAction action = pendingAction;
             if (action != null) {
                 ClientCallbackMethod method = action.method();
@@ -1954,6 +1992,7 @@ public class BridgeCallbackHandler {
                     result.put("action_pending", true);
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
+                    result.put("stop_reason", "non_priority_action");
                     attachUnseenChat(result);
                     return result;
                 }
@@ -1966,6 +2005,7 @@ public class BridgeCallbackHandler {
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
                     result.put("combat_phase", combatType);
+                    result.put("stop_reason", "combat");
                     attachUnseenChat(result);
                     return result;
                 }
@@ -1996,6 +2036,7 @@ public class BridgeCallbackHandler {
                     result.put("action_type", method.name());
                     result.put("actions_passed", actionsPassed);
                     result.put("has_playable_cards", true);
+                    result.put("stop_reason", "playable_cards");
                     attachUnseenChat(result);
                     return result;
                 }
@@ -2008,55 +2049,82 @@ public class BridgeCallbackHandler {
                 }
                 session.sendPlayerBoolean(action.gameId(), false);
                 actionsPassed++;
+
+                // Without yield: we passed once, return immediately
+                if (!yieldActive) {
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("action_pending", false);
+                    result.put("actions_passed", actionsPassed);
+                    result.put("stop_reason", "passed");
+                    attachUnseenChat(result);
+                    return result;
+                }
+                // With yield: continue waiting for the server to send us a real callback
             }
 
-            // Wait for next action
-            long remaining = timeoutMs - (System.currentTimeMillis() - startTime);
-            if (remaining <= 0) break;
+            // No pending action — wait for one
+            // Without yield: if no action is pending, return immediately (nothing to pass)
+            if (!yieldActive && action == null) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("action_pending", false);
+                result.put("actions_passed", actionsPassed);
+                result.put("stop_reason", "no_action");
+                attachUnseenChat(result);
+                return result;
+            }
+
+            // Safety valve: don't wait forever in yield mode
+            long elapsed = System.currentTimeMillis() - startTime;
+            if (yieldActive && elapsed > YIELD_WAIT_TIMEOUT_MS) {
+                Map<String, Object> result = new HashMap<>();
+                result.put("action_pending", false);
+                result.put("actions_passed", actionsPassed);
+                result.put("stop_reason", "yield_timeout");
+                attachUnseenChat(result);
+                return result;
+            }
+
             synchronized (actionLock) {
                 try {
-                    actionLock.wait(Math.min(remaining, 200));
+                    actionLock.wait(200);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 }
             }
 
-            // Lost response retry: if we sent a response but haven't received
-            // a new callback for >25s, the server may have discarded our response
-            // due to a race in HumanPlayer.waitResponseOpen() (blocked by slow
-            // event dispatch to a disconnected player). Retry once and give it
-            // a fresh timeout window to take effect.
-            if (retryLastResponseIfLost()) {
-                startTime = System.currentTimeMillis();
-            }
-
-            // Lost callback recovery: no pending action, no tracked response,
-            // but transport is alive (CHATMESSAGE still flowing) — server may
-            // have sent a callback we never received. Send a speculative pass
-            // to nudge the server out of waitForResponse().
-            if (pendingAction == null && lastResponseSentAt == 0) {
-                long now = System.currentTimeMillis();
-                long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
-                boolean transportAlive = lastCallbackReceivedAt > startTime;
-                UUID gameId = currentGameId;
-                if (idleTime > STALL_NUDGE_MS && transportAlive && gameId != null
-                        && activeGames.containsKey(gameId)
-                        && now - lastStallNudgeAt > STALL_NUDGE_MS) {
-                    lastStallNudgeAt = now;
-                    logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
-                            + "no actionable callback for " + idleTime + "ms, sending speculative pass");
-                    session.sendPlayerBoolean(gameId, false);
+            // Stall recovery — only in yield mode (where we expect long waits).
+            // Without yield, we return immediately above, so these never run.
+            if (yieldActive) {
+                // Lost response retry
+                if (retryLastResponseIfLost()) {
                     startTime = System.currentTimeMillis();
+                }
+
+                // Lost callback recovery
+                if (pendingAction == null && lastResponseSentAt == 0) {
+                    long now = System.currentTimeMillis();
+                    long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
+                    boolean transportAlive = lastCallbackReceivedAt > startTime;
+                    UUID gameId = currentGameId;
+                    if (idleTime > STALL_NUDGE_MS && transportAlive && gameId != null
+                            && activeGames.containsKey(gameId)
+                            && now - lastStallNudgeAt > STALL_NUDGE_MS) {
+                        lastStallNudgeAt = now;
+                        logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
+                                + "no actionable callback for " + idleTime + "ms, sending speculative pass");
+                        session.sendPlayerBoolean(gameId, false);
+                        startTime = System.currentTimeMillis();
+                    }
                 }
             }
         }
 
-        // Timeout
+        // InterruptedException break
         Map<String, Object> result = new HashMap<>();
         result.put("action_pending", false);
         result.put("actions_passed", actionsPassed);
-        result.put("timeout", true);
+        result.put("stop_reason", "interrupted");
         attachUnseenChat(result);
         return result;
     }
@@ -2065,8 +2133,8 @@ public class BridgeCallbackHandler {
      * Combined helper for models: wait using pass_priority, then return full choices.
      * This reduces one round trip compared to pass_priority + get_action_choices.
      */
-    public Map<String, Object> waitAndGetChoices(int timeoutMs) {
-        Map<String, Object> waitResult = passPriority(timeoutMs);
+    public Map<String, Object> waitAndGetChoices(String yieldUntil) {
+        Map<String, Object> waitResult = passPriority(yieldUntil);
         if (!Boolean.TRUE.equals(waitResult.get("action_pending"))) {
             return waitResult;
         }
@@ -2095,6 +2163,9 @@ public class BridgeCallbackHandler {
         }
         if (waitResult.containsKey("combat_phase") && !choices.containsKey("combat_phase")) {
             choices.put("combat_phase", waitResult.get("combat_phase"));
+        }
+        if (waitResult.containsKey("stop_reason")) {
+            choices.put("stop_reason", waitResult.get("stop_reason"));
         }
 
         return choices;

@@ -84,10 +84,16 @@ def _summarize_tool_result(tool_name: str, content: str) -> str:
         if data.get("player_dead"):
             return "player_dead"
         if data.get("action_pending"):
-            return f"action_pending({data.get('action_type', '?')})"
-        if data.get("timeout"):
-            return "timeout"
-        return f"passed {data.get('actions_passed', '?')}"
+            stop = data.get("stop_reason", "")
+            action_type = data.get("action_type", "?")
+            if stop:
+                return f"action_pending({action_type}, {stop})"
+            return f"action_pending({action_type})"
+        stop = data.get("stop_reason", "")
+        passed = data.get("actions_passed", "?")
+        if stop:
+            return f"{stop}(passed {passed})"
+        return f"passed {passed}"
 
     if tool_name == "choose_action":
         if data.get("success"):
@@ -529,7 +535,6 @@ async def run_pilot_loop(
                                 return
                             if result_data.get("action_pending"):
                                 turn_had_actionable_opportunity = True
-                            # timeout=true means nothing to do — don't penalize
                         except (json.JSONDecodeError, TypeError):
                             pass
 
