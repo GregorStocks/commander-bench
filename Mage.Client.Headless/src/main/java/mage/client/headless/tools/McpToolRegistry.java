@@ -1,5 +1,7 @@
 package mage.client.headless.tools;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -9,6 +11,7 @@ import mage.client.headless.BridgeCallbackHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,6 +24,9 @@ import java.util.Map;
  */
 public class McpToolRegistry {
 
+    private static final Gson PRETTY_GSON = new GsonBuilder()
+            .setPrettyPrinting().disableHtmlEscaping().create();
+
     private final List<ToolEntry> entries = new ArrayList<>();
     private final Map<String, ToolEntry> byName = new LinkedHashMap<>();
 
@@ -32,14 +38,41 @@ public class McpToolRegistry {
         }
     }
 
+    // -- Helpers for building examples in tool classes --
+
+    /** Build a JSON object (LinkedHashMap) from alternating key-value pairs. */
+    public static Map<String, Object> json(Object... kvs) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        for (int i = 0; i < kvs.length; i += 2) {
+            map.put((String) kvs[i], kvs[i + 1]);
+        }
+        return map;
+    }
+
+    /** Build an example entry from a label and a value map (serialized to pretty JSON). */
+    public static Map<String, Object> example(String label, Map<String, Object> value) {
+        Map<String, Object> ex = new HashMap<>();
+        ex.put("label", label);
+        ex.put("value", PRETTY_GSON.toJson(value));
+        return ex;
+    }
+
+    // -- Registry core --
+
     private static ToolEntry scan(Class<?> cls) {
+        Method toolMethod = null;
+        Method examplesMethod = null;
         for (Method m : cls.getDeclaredMethods()) {
-            Tool ann = m.getAnnotation(Tool.class);
-            if (ann != null) {
-                return new ToolEntry(ann, m);
+            if (m.getAnnotation(Tool.class) != null) {
+                toolMethod = m;
+            } else if ("examples".equals(m.getName())) {
+                examplesMethod = m;
             }
         }
-        throw new RuntimeException("No @Tool method found in " + cls.getName());
+        if (toolMethod == null) {
+            throw new RuntimeException("No @Tool method found in " + cls.getName());
+        }
+        return new ToolEntry(toolMethod.getAnnotation(Tool.class), toolMethod, examplesMethod);
     }
 
     /** Build the full tool definition list (for tools/list and JSON export). */
@@ -82,13 +115,20 @@ public class McpToolRegistry {
 
     // -- Schema generation --
 
+    @SuppressWarnings("unchecked")
     private static Map<String, Object> buildDefinition(ToolEntry entry) {
         Map<String, Object> def = new HashMap<>();
         def.put("name", entry.annotation.name());
         def.put("description", entry.annotation.description());
         def.put("inputSchema", buildInputSchema(entry));
         def.put("outputSchema", buildOutputSchema(entry.annotation.output()));
-        def.put("examples", buildExamples(entry.annotation.examples()));
+        if (entry.examplesMethod != null) {
+            try {
+                def.put("examples", (List<Map<String, Object>>) entry.examplesMethod.invoke(null));
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to invoke examples() on " + entry.method.getDeclaringClass().getName(), e);
+            }
+        }
         return def;
     }
 
@@ -168,17 +208,6 @@ public class McpToolRegistry {
         return schema;
     }
 
-    private static List<Map<String, Object>> buildExamples(Tool.Example[] examples) {
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (Tool.Example ex : examples) {
-            Map<String, Object> m = new HashMap<>();
-            m.put("label", ex.label());
-            m.put("value", ex.value());
-            list.add(m);
-        }
-        return list;
-    }
-
     // -- Arg extraction --
 
     private static Object extractArg(JsonObject obj, String key, Class<?> type) {
@@ -214,10 +243,12 @@ public class McpToolRegistry {
     private static class ToolEntry {
         final Tool annotation;
         final Method method;
+        final Method examplesMethod;
 
-        ToolEntry(Tool annotation, Method method) {
+        ToolEntry(Tool annotation, Method method, Method examplesMethod) {
             this.annotation = annotation;
             this.method = method;
+            this.examplesMethod = examplesMethod;
         }
     }
 }

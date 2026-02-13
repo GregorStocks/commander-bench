@@ -1,9 +1,14 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class SendChatMessageTool {
     @Tool(
@@ -11,10 +16,6 @@ public class SendChatMessageTool {
         description = "Send a chat message to the game",
         output = {
             @Tool.Field(name = "success", type = "boolean", description = "Whether the message was sent")
-        },
-        examples = {
-            @Tool.Example(label = "Success",
-                value = "{\n  \"success\": true\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -27,5 +28,11 @@ public class SendChatMessageTool {
         Map<String, Object> result = new HashMap<>();
         result.put("success", success);
         return result;
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Success", json(
+                "success", true)));
     }
 }

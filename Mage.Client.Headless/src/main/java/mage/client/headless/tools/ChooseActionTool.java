@@ -1,8 +1,13 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class ChooseActionTool {
     @Tool(
@@ -15,14 +20,6 @@ public class ChooseActionTool {
             @Tool.Field(name = "action_taken", type = "string", description = "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\")"),
             @Tool.Field(name = "error", type = "string", description = "Error message"),
             @Tool.Field(name = "warning", type = "string", description = "Warning (e.g. possible game loop detected)")
-        },
-        examples = {
-            @Tool.Example(label = "Index selection",
-                value = "{\n  \"success\": true,\n  \"action_taken\": \"selected_0\"\n}"),
-            @Tool.Example(label = "Boolean answer",
-                value = "{\n  \"success\": true,\n  \"action_taken\": \"no\"\n}"),
-            @Tool.Example(label = "Error",
-                value = "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -41,5 +38,18 @@ public class ChooseActionTool {
         if (amounts != null && amounts.length == 0) amounts = null;
         if (text != null && text.isEmpty()) text = null;
         return handler.chooseAction(index, answer, amount, amounts, pile, text);
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Index selection", json(
+                "success", true,
+                "action_taken", "selected_0")),
+            example("Boolean answer", json(
+                "success", true,
+                "action_taken", "no")),
+            example("Error", json(
+                "success", false,
+                "error", "No pending action")));
     }
 }

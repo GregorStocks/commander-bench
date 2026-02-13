@@ -1,8 +1,13 @@
 package mage.client.headless.tools;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import mage.client.headless.BridgeCallbackHandler;
+
+import static mage.client.headless.tools.McpToolRegistry.example;
+import static mage.client.headless.tools.McpToolRegistry.json;
 
 public class GetOracleTextTool {
     @Tool(
@@ -16,16 +21,6 @@ public class GetOracleTextTool {
             @Tool.Field(name = "rules", type = "array[string]", description = "Oracle text lines"),
             @Tool.Field(name = "cards", type = "array[object]", description = "Array of {name, rules} or {name, error} per card"),
             @Tool.Field(name = "error", type = "string", description = "Error message")
-        },
-        examples = {
-            @Tool.Example(label = "Single card",
-                value = "{\n  \"success\": true,\n  \"name\": \"Lightning Bolt\",\n  \"rules\": [\"Deal 3 damage to any target.\"]\n}"),
-            @Tool.Example(label = "Batch lookup",
-                value = "{\n  \"success\": true,\n  \"cards\": [\n"
-                    + "    { \"name\": \"Lightning Bolt\", \"rules\": [\"Deal 3 damage to any target.\"] },\n"
-                    + "    { \"name\": \"Counterspell\", \"rules\": [\"Counter target spell.\"] }\n  ]\n}"),
-            @Tool.Example(label = "Not found",
-                value = "{\n  \"success\": false,\n  \"error\": \"not found\"\n}")
         }
     )
     public static Map<String, Object> execute(
@@ -34,5 +29,21 @@ public class GetOracleTextTool {
             @Param(description = "Batch card name lookup") String[] card_names,
             @Param(description = "UUID of an in-game object") String object_id) {
         return handler.getOracleText(card_name, object_id, card_names);
+    }
+
+    public static List<Map<String, Object>> examples() {
+        return Arrays.asList(
+            example("Single card", json(
+                "success", true,
+                "name", "Lightning Bolt",
+                "rules", Arrays.asList("Deal 3 damage to any target."))),
+            example("Batch lookup", json(
+                "success", true,
+                "cards", Arrays.asList(
+                    json("name", "Lightning Bolt", "rules", Arrays.asList("Deal 3 damage to any target.")),
+                    json("name", "Counterspell", "rules", Arrays.asList("Counter target spell."))))),
+            example("Not found", json(
+                "success", false,
+                "error", "not found")));
     }
 }

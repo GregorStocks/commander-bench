@@ -258,7 +258,7 @@
     "examples": [
       {
         "label": "Mid-game state",
-        "value": "{\n  \"available\": true,\n  \"turn\": 4,\n  \"phase\": \"PRECOMBAT_MAIN\",\n  \"step\": \"PRECOMBAT_MAIN\",\n  \"active_player\": \"Player1\",\n  \"priority_player\": \"Player1\",\n  \"players\": [\n    {\n      \"name\": \"Player1\",\n      \"life\": 18,\n      \"library_size\": 49,\n      \"hand_size\": 5,\n      \"is_active\": true,\n      \"is_you\": true,\n      \"hand\": [\n        { \"name\": \"Lightning Bolt\", \"mana_cost\": \"{R}\", \"mana_value\": 1, \"playable\": true },\n        { \"name\": \"Mountain\", \"mana_value\": 0, \"is_land\": true, \"playable\": true }\n      ],\n      \"battlefield\": [\n        { \"name\": \"Mountain\", \"tapped\": false },\n        { \"name\": \"Goblin Guide\", \"tapped\": false, \"power\": 2, \"toughness\": 2 }\n      ],\n      \"mana_pool\": { \"R\": 0 }\n    },\n    {\n      \"name\": \"Player2\",\n      \"life\": 20,\n      \"library_size\": 52,\n      \"hand_size\": 7,\n      \"is_active\": false,\n      \"is_you\": false,\n      \"battlefield\": [\n        { \"name\": \"Island\", \"tapped\": false }\n      ]\n    }\n  ],\n  \"stack\": []\n}"
+        "value": "{\n  \"available\": true,\n  \"turn\": 4,\n  \"phase\": \"PRECOMBAT_MAIN\",\n  \"step\": \"PRECOMBAT_MAIN\",\n  \"active_player\": \"Player1\",\n  \"priority_player\": \"Player1\",\n  \"players\": [\n    {\n      \"name\": \"Player1\",\n      \"life\": 18,\n      \"library_size\": 49,\n      \"hand_size\": 5,\n      \"is_active\": true,\n      \"is_you\": true,\n      \"hand\": [\n        {\n          \"name\": \"Lightning Bolt\",\n          \"mana_cost\": \"{R}\",\n          \"mana_value\": 1,\n          \"playable\": true\n        },\n        {\n          \"name\": \"Mountain\",\n          \"mana_value\": 0,\n          \"is_land\": true,\n          \"playable\": true\n        }\n      ],\n      \"battlefield\": [\n        {\n          \"name\": \"Mountain\",\n          \"tapped\": false\n        },\n        {\n          \"name\": \"Goblin Guide\",\n          \"tapped\": false,\n          \"power\": 2,\n          \"toughness\": 2\n        }\n      ],\n      \"mana_pool\": {\n        \"R\": 0\n      }\n    },\n    {\n      \"name\": \"Player2\",\n      \"life\": 20,\n      \"library_size\": 52,\n      \"hand_size\": 7,\n      \"is_active\": false,\n      \"is_you\": false,\n      \"battlefield\": [\n        {\n          \"name\": \"Island\",\n          \"tapped\": false\n        }\n      ]\n    }\n  ],\n  \"stack\": []\n}"
       }
     ],
     "inputSchema": {
@@ -309,11 +309,11 @@
     "examples": [
       {
         "label": "Single card",
-        "value": "{\n  \"success\": true,\n  \"name\": \"Lightning Bolt\",\n  \"rules\": [\"Deal 3 damage to any target.\"]\n}"
+        "value": "{\n  \"success\": true,\n  \"name\": \"Lightning Bolt\",\n  \"rules\": [\n    \"Deal 3 damage to any target.\"\n  ]\n}"
       },
       {
         "label": "Batch lookup",
-        "value": "{\n  \"success\": true,\n  \"cards\": [\n    { \"name\": \"Lightning Bolt\", \"rules\": [\"Deal 3 damage to any target.\"] },\n    { \"name\": \"Counterspell\", \"rules\": [\"Counter target spell.\"] }\n  ]\n}"
+        "value": "{\n  \"success\": true,\n  \"cards\": [\n    {\n      \"name\": \"Lightning Bolt\",\n      \"rules\": [\n        \"Deal 3 damage to any target.\"\n      ]\n    },\n    {\n      \"name\": \"Counterspell\",\n      \"rules\": [\n        \"Counter target spell.\"\n      ]\n    }\n  ]\n}"
       },
       {
         "label": "Not found",
@@ -426,11 +426,11 @@
     "examples": [
       {
         "label": "Select (play cards)",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"response_type\": \"select\",\n  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n  \"players\": \"You(20), Opp(18)\",\n  \"choices\": [\n    { \"name\": \"Lightning Bolt\", \"type\": \"card\", \"mana_cost\": \"{R}\", \"mana_value\": 1, \"playable_abilities\": [\"Cast Lightning Bolt\"], \"index\": 0 },\n    { \"name\": \"Mountain\", \"type\": \"card\", \"playable_abilities\": [\"Play Mountain\"], \"index\": 1 }\n  ],\n  \"untapped_lands\": 2\n}"
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"message\": \"Select card to play or pass priority\",\n  \"response_type\": \"select\",\n  \"context\": \"T3 PRECOMBAT_MAIN (Player1) YOUR_MAIN\",\n  \"players\": \"You(20), Opp(18)\",\n  \"choices\": [\n    {\n      \"name\": \"Lightning Bolt\",\n      \"type\": \"card\",\n      \"mana_cost\": \"{R}\",\n      \"mana_value\": 1,\n      \"playable_abilities\": [\n        \"Cast Lightning Bolt\"\n      ],\n      \"index\": 0\n    },\n    {\n      \"name\": \"Mountain\",\n      \"type\": \"card\",\n      \"playable_abilities\": [\n        \"Play Mountain\"\n      ],\n      \"index\": 1\n    }\n  ],\n  \"untapped_lands\": 2\n}"
       },
       {
         "label": "Boolean (mulligan)",
-        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_ASK\",\n  \"message\": \"Mulligan hand?\",\n  \"response_type\": \"boolean\",\n  \"context\": \"T0 PREGAME\",\n  \"players\": \"You(20), Opp(20)\",\n  \"your_hand\": [\n    { \"name\": \"Mountain\", \"mana_value\": 0, \"is_land\": true },\n    { \"name\": \"Lightning Bolt\", \"mana_cost\": \"{R}\", \"mana_value\": 1 }\n  ],\n  \"hand_size\": 7,\n  \"land_count\": 3\n}"
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_ASK\",\n  \"message\": \"Mulligan hand?\",\n  \"response_type\": \"boolean\",\n  \"context\": \"T0 PREGAME\",\n  \"players\": \"You(20), Opp(20)\",\n  \"your_hand\": [\n    {\n      \"name\": \"Mountain\",\n      \"mana_value\": 0,\n      \"is_land\": true\n    },\n    {\n      \"name\": \"Lightning Bolt\",\n      \"mana_cost\": \"{R}\",\n      \"mana_value\": 1\n    }\n  ],\n  \"hand_size\": 7,\n  \"land_count\": 3\n}"
       }
     ],
     "inputSchema": {
