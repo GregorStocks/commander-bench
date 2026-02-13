@@ -13,7 +13,7 @@ public class GetOracleTextTool {
     @Tool(
         name = "get_oracle_text",
         description = "Get oracle text (rules) for cards. Provide exactly one of: card_name (single), "
-            + "card_names (batch array), or object_id (in-game object). "
+            + "card_names (batch array), object_id (in-game object), or object_ids (batch array of in-game objects). "
             + "Single returns {name, rules}. Batch returns {cards: [{name, rules}, ...]}.",
         output = {
             @Tool.Field(name = "success", type = "boolean", description = "Whether the lookup succeeded"),
@@ -27,8 +27,9 @@ public class GetOracleTextTool {
             BridgeCallbackHandler handler,
             @Param(description = "Single card name lookup") String card_name,
             @Param(description = "Batch card name lookup") String[] card_names,
-            @Param(description = "UUID of an in-game object") String object_id) {
-        return handler.getOracleText(card_name, object_id, card_names);
+            @Param(description = "UUID of an in-game object") String object_id,
+            @Param(description = "Batch in-game object UUID lookup") String[] object_ids) {
+        return handler.getOracleText(card_name, object_id, card_names, object_ids);
     }
 
     public static List<Map<String, Object>> examples() {
@@ -37,11 +38,16 @@ public class GetOracleTextTool {
                 "success", true,
                 "name", "Lightning Bolt",
                 "rules", Arrays.asList("Deal 3 damage to any target."))),
-            example("Batch lookup", json(
+            example("Batch card_names lookup", json(
                 "success", true,
                 "cards", Arrays.asList(
                     json("name", "Lightning Bolt", "rules", Arrays.asList("Deal 3 damage to any target.")),
                     json("name", "Counterspell", "rules", Arrays.asList("Counter target spell."))))),
+            example("Batch object_ids lookup", json(
+                "success", true,
+                "cards", Arrays.asList(
+                    json("object_id", "abc-123", "name", "Lightning Bolt", "rules", Arrays.asList("Deal 3 damage to any target.")),
+                    json("object_id", "def-456", "error", "not found")))),
             example("Not found", json(
                 "success", false,
                 "error", "not found")));

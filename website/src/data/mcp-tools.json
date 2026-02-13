@@ -312,8 +312,12 @@
         "value": "{\n  \"success\": true,\n  \"name\": \"Lightning Bolt\",\n  \"rules\": [\n    \"Deal 3 damage to any target.\"\n  ]\n}"
       },
       {
-        "label": "Batch lookup",
+        "label": "Batch card_names lookup",
         "value": "{\n  \"success\": true,\n  \"cards\": [\n    {\n      \"name\": \"Lightning Bolt\",\n      \"rules\": [\n        \"Deal 3 damage to any target.\"\n      ]\n    },\n    {\n      \"name\": \"Counterspell\",\n      \"rules\": [\n        \"Counter target spell.\"\n      ]\n    }\n  ]\n}"
+      },
+      {
+        "label": "Batch object_ids lookup",
+        "value": "{\n  \"success\": true,\n  \"cards\": [\n    {\n      \"object_id\": \"abc-123\",\n      \"name\": \"Lightning Bolt\",\n      \"rules\": [\n        \"Deal 3 damage to any target.\"\n      ]\n    },\n    {\n      \"object_id\": \"def-456\",\n      \"error\": \"not found\"\n    }\n  ]\n}"
       },
       {
         "label": "Not found",
@@ -324,6 +328,13 @@
       "additionalProperties": false,
       "type": "object",
       "properties": {
+        "object_ids": {
+          "description": "Batch in-game object UUID lookup",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "card_name": {
           "description": "Single card name lookup",
           "type": "string"
@@ -342,7 +353,7 @@
       }
     },
     "name": "get_oracle_text",
-    "description": "Get oracle text (rules) for cards. Provide exactly one of: card_name (single), card_names (batch array), or object_id (in-game object). Single returns {name, rules}. Batch returns {cards: [{name, rules}, ...]}."
+    "description": "Get oracle text (rules) for cards. Provide exactly one of: card_name (single), card_names (batch array), object_id (in-game object), or object_ids (batch array of in-game objects). Single returns {name, rules}. Batch returns {cards: [{name, rules}, ...]}."
   },
   {
     "outputSchema": {
