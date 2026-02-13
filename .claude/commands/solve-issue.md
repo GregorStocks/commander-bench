@@ -17,7 +17,7 @@ Pick and solve exactly **one** issue, then create a PR.
    scripts/claim-issue.sh --list
    ```
    Any issue whose filename appears in this list is taken — skip it.
-4. Pick **one** unclaimed issue, preferring higher-priority (lower number) first (see criteria below). **Read the issue JSON** and check any preconditions — some issues only apply in specific circumstances. If the issue doesn't apply or isn't actionable, skip it and pick the next one.
+4. Pick **one** unclaimed issue. **You must select from the highest available priority tier** — never bypass a higher-priority issue (e.g. P2) in favor of a lower-priority one (e.g. P3). No exceptions. Within the same priority tier, use your judgment. **Read the issue JSON** and check any preconditions — some issues only apply in specific circumstances. If the issue doesn't apply, skip it and pick the next one *within the same priority tier*. If an issue applies but isn't immediately actionable, your goal is to make progress on it (e.g. by discussing it with the human to get clarification) — don't skip it. Only move to a lower priority tier after exhausting all unclaimed issues at the current tier.
 5. **Claim the issue** by running:
    ```bash
    scripts/claim-issue.sh <issue-filename>
