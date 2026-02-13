@@ -15,7 +15,7 @@ set -eo pipefail
 if [ "$1" = "--list" ]; then
     gh pr list --state open --json body --jq '.[].body' 2>/dev/null \
         | tr -d '\r' \
-        | sed -n 's/^claim: //p' \
+        | sed -n 's/^<!-- claim: \(.*\) -->$/\1/p' \
         | sort -u
     exit 0
 fi
@@ -51,20 +51,20 @@ if [ -n "$EXISTING_PR" ]; then
     OUR_PR="$EXISTING_PR"
     gh pr edit "$OUR_PR" \
         --title "Solve: $TITLE" \
-        --body "claim: $ISSUE"
+        --body "<!-- claim: $ISSUE -->"
     echo "Updated existing PR #$OUR_PR for $ISSUE"
 else
     PR_URL=$(gh pr create --draft \
         --base master \
         --title "Solve: $TITLE" \
-        --body "claim: $ISSUE")
+        --body "<!-- claim: $ISSUE -->")
     OUR_PR=$(echo "$PR_URL" | grep -oE '[0-9]+$')
     echo "Created draft PR #$OUR_PR: $PR_URL"
 fi
 
 # Race resolution: lowest PR number claiming this issue wins.
 WINNER=$(gh pr list --state open --json number,body \
-    --jq "[.[] | select(.body | startswith(\"claim: ${ISSUE}\")) | .number] | sort | .[0]")
+    --jq "[.[] | select(.body | test(\"<!-- claim: ${ISSUE} -->\")) | .number] | sort | .[0]")
 
 if [ "$WINNER" != "null" ] && [ -n "$WINNER" ] && [ "$WINNER" != "$OUR_PR" ]; then
     echo "Lost race: PR #$WINNER already claims $ISSUE" >&2

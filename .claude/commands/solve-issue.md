@@ -48,10 +48,13 @@ Pick and solve exactly **one** issue, then create a PR.
 10. Run `make check` to verify lint, typecheck, and tests pass
 11. Delete the issue file (e.g., `rm issues/<issue-filename>.json`) and **include the deletion in the commit** — the issue removal must ship with the fix
 12. **Document ALL issues you discover** during exploration, even if you're only fixing one. Future Claudes benefit from this documentation!
-13. Push final changes, update the PR title/description, and mark it as ready:
+13. Push final changes, update the PR title/description, and mark it as ready. **The body must end with the `<!-- claim: ... -->` comment** so the issue stays claimed. Extract it from the current PR body first:
     ```bash
     git push origin HEAD
-    gh pr edit --title "<concise PR title>" --body "<PR description with summary, test plan>"
+    CLAIM_TAG=$(gh pr view --json body --jq '.body' | grep -o '<!-- claim: .* -->')
+    gh pr edit --title "<concise PR title>" --body "<PR description with summary, test plan>
+
+    $CLAIM_TAG"
     gh pr ready
     ```
     Then stop — leave remaining issues for the next Claude.
