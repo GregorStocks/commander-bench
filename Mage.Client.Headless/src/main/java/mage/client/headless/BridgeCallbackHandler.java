@@ -1204,6 +1204,28 @@ public class BridgeCallbackHandler {
     }
 
     /**
+     * Build a standardized error response for choose_action failures.
+     * Must reuse the caller's result map so the finally block can read success=false.
+     */
+    private Map<String, Object> buildError(Map<String, Object> result, String errorCode,
+            String message, boolean retryable, PendingAction action, boolean attachChoices) {
+        result.put("success", false);
+        result.put("error", message);
+        result.put("error_code", errorCode);
+        result.put("retryable", retryable);
+        pendingAction = action;
+        if (attachChoices) {
+            attachChoicesToError(result);
+        }
+        return result;
+    }
+
+    private Map<String, Object> buildError(Map<String, Object> result, String errorCode,
+            String message, boolean retryable, PendingAction action) {
+        return buildError(result, errorCode, message, retryable, action, false);
+    }
+
+    /**
      * Respond to the current pending action with a specific choice.
      * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
      */
@@ -1213,9 +1235,7 @@ public class BridgeCallbackHandler {
         PendingAction action = pendingAction;
 
         if (action == null) {
-            result.put("success", false);
-            result.put("error", "No pending action");
-            return result;
+            return buildError(result, "no_pending_action", "No pending action", false, null);
         }
 
         // Loop detection: model has made too many interactions this turn — auto-handle
@@ -1257,10 +1277,7 @@ public class BridgeCallbackHandler {
                     // GAME_ASK is boolean-only; ignore index if also provided
                     // (some models send all params with defaults)
                     if (answer == null) {
-                        result.put("success", false);
-                        result.put("error", "Boolean 'answer' required for " + method);
-                        pendingAction = action;
-                        return result;
+                        return buildError(result, "missing_param", "Boolean 'answer' required for " + method, true, action);
                     }
                     if (index != null) {
                         logger.warn("[" + client.getUsername() + "] choose_action: ignoring index=" + index + " for GAME_ASK (boolean-only)");
@@ -1284,11 +1301,8 @@ public class BridgeCallbackHandler {
                                 logger.warn("[" + client.getUsername() + "] choose_action: index " + index
                                     + " out of range, falling through to answer=" + answer + " for GAME_SELECT");
                             } else {
-                                result.put("success", false);
-                                result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                                pendingAction = action;
-                                attachChoicesToError(result);
-                                return result;
+                                return buildError(result, "index_out_of_range",
+                                    "Index " + index + " out of range (call get_action_choices first)", true, action, true);
                             }
                         } else {
                             Object chosen = choices.get(index);
@@ -1303,10 +1317,8 @@ public class BridgeCallbackHandler {
                                 result.put("action_taken", "special_" + chosen);
                                 usedIndex = true;
                             } else {
-                                result.put("success", false);
-                                result.put("error", "Unexpected choice type at index " + index);
-                                pendingAction = action;
-                                return result;
+                                return buildError(result, "internal_error",
+                                    "Unexpected choice type at index " + index, false, action);
                             }
                         }
                     }
@@ -1315,11 +1327,8 @@ public class BridgeCallbackHandler {
                             session.sendPlayerBoolean(gameId, answer);
                             result.put("action_taken", answer ? "confirmed" : "passed_priority");
                         } else {
-                            result.put("success", false);
-                            result.put("error", "Provide 'index' to play a card or 'answer: false' to pass priority");
-                            pendingAction = action;
-                            attachChoicesToError(result);
-                            return result;
+                            return buildError(result, "missing_param",
+                                "Provide 'index' to play a card or 'answer: false' to pass priority", true, action, true);
                         }
                     }
                     break;
@@ -1338,11 +1347,8 @@ public class BridgeCallbackHandler {
                                 logger.warn("[" + client.getUsername() + "] choose_action: index " + index
                                     + " out of range, falling through to cancel for GAME_PLAY_MANA");
                             } else {
-                                result.put("success", false);
-                                result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                                pendingAction = action;
-                                attachChoicesToError(result);
-                                return result;
+                                return buildError(result, "index_out_of_range",
+                                    "Index " + index + " out of range (call get_action_choices first)", true, action, true);
                             }
                         } else {
                             Object manaChoice = choices.get(index);
@@ -1354,10 +1360,8 @@ public class BridgeCallbackHandler {
                             } else if (manaChoice instanceof ManaType) {
                                 UUID manaPlayerId = getManaPoolPlayerId(gameId, lastGameView);
                                 if (manaPlayerId == null) {
-                                    result.put("success", false);
-                                    result.put("error", "Could not resolve player ID for mana pool selection");
-                                    pendingAction = action;
-                                    return result;
+                                    return buildError(result, "internal_error",
+                                        "Could not resolve player ID for mana pool selection", false, action);
                                 }
                                 ManaType manaType = (ManaType) manaChoice;
                                 session.sendPlayerManaType(gameId, manaPlayerId, manaType);
@@ -1365,10 +1369,8 @@ public class BridgeCallbackHandler {
                                 result.put("action_taken", "used_pool_" + manaType.toString());
                                 usedManaIndex = true;
                             } else {
-                                result.put("success", false);
-                                result.put("error", "Unsupported mana choice type at index " + index);
-                                pendingAction = action;
-                                return result;
+                                return buildError(result, "internal_error",
+                                    "Unsupported mana choice type at index " + index, false, action);
                             }
                         }
                     }
@@ -1395,11 +1397,8 @@ public class BridgeCallbackHandler {
                             session.sendPlayerBoolean(gameId, false);
                             result.put("action_taken", "cancelled_spell");
                         } else {
-                            result.put("success", false);
-                            result.put("error", "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel");
-                            pendingAction = action;
-                            attachChoicesToError(result);
-                            return result;
+                            return buildError(result, "missing_param",
+                                "Provide 'index' to choose mana source/pool, or 'answer: false' to cancel", true, action, true);
                         }
                     }
                     break;
@@ -1427,11 +1426,8 @@ public class BridgeCallbackHandler {
                         // infinite retry loops. For optional targets, return an error so
                         // the model can retry with a valid index or answer=false.
                         if (!required) {
-                            result.put("success", false);
-                            result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                            pendingAction = action;
-                            attachChoicesToError(result);
-                            return result;
+                            return buildError(result, "index_out_of_range",
+                                "Index " + index + " out of range (call get_action_choices first)", true, action, true);
                         }
                         logger.warn("[" + client.getUsername() + "] choose_action: index " + index
                             + " out of range for required GAME_TARGET (choices="
@@ -1448,11 +1444,8 @@ public class BridgeCallbackHandler {
                         logger.warn("[" + client.getUsername() + "] choose_action: answer=false invalid for required GAME_TARGET, auto-selecting");
                     } else if (!required) {
                         // No index, no answer=false — return error for optional targets
-                        result.put("success", false);
-                        result.put("error", "Integer 'index' required for GAME_TARGET (or answer=false to cancel)");
-                        pendingAction = action;
-                        attachChoicesToError(result);
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Integer 'index' required for GAME_TARGET (or answer=false to cancel)", true, action, true);
                     }
 
                     // Auto-select for required targets when index was invalid/missing
@@ -1475,20 +1468,14 @@ public class BridgeCallbackHandler {
 
                 case GAME_CHOOSE_ABILITY: {
                     if (index == null) {
-                        result.put("success", false);
-                        result.put("error", "Integer 'index' required for GAME_CHOOSE_ABILITY");
-                        pendingAction = action;
-                        attachChoicesToError(result);
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Integer 'index' required for GAME_CHOOSE_ABILITY", true, action, true);
                     }
                     List<Object> abilityChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
                     if (abilityChoices == null || index < 0 || index >= abilityChoices.size()) {
                         logChoiceOutOfRangeDiagnostic(method, index, abilityChoices);
-                        result.put("success", false);
-                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                        pendingAction = action;
-                        attachChoicesToError(result);
-                        return result;
+                        return buildError(result, "index_out_of_range",
+                            "Index " + index + " out of range (call get_action_choices first)", true, action, true);
                     }
                     UUID abilityUUID = (UUID) abilityChoices.get(index);
                     session.sendPlayerUUID(gameId, abilityUUID);
@@ -1503,10 +1490,7 @@ public class BridgeCallbackHandler {
                         GameClientMessage choiceMsg = (GameClientMessage) data;
                         Choice choiceObj = choiceMsg.getChoice();
                         if (choiceObj == null) {
-                            result.put("success", false);
-                            result.put("error", "No choice available");
-                            pendingAction = action;
-                            return result;
+                            return buildError(result, "internal_error", "No choice available", false, action);
                         }
                         // Validate text is a legal choice
                         if (choiceObj.isKeyChoice()) {
@@ -1522,10 +1506,8 @@ public class BridgeCallbackHandler {
                                 }
                             }
                             if (matchedKey == null) {
-                                result.put("success", false);
-                                result.put("error", "'" + text + "' is not a valid choice");
-                                pendingAction = action;
-                                return result;
+                                return buildError(result, "invalid_choice",
+                                    "'" + text + "' is not a valid choice", true, action);
                             }
                             session.sendPlayerString(gameId, matchedKey);
                             trackSentResponse(gameId, ResponseType.STRING, matchedKey, null);
@@ -1542,10 +1524,8 @@ public class BridgeCallbackHandler {
                                 }
                             }
                             if (matched == null) {
-                                result.put("success", false);
-                                result.put("error", "'" + text + "' is not a valid choice");
-                                pendingAction = action;
-                                return result;
+                                return buildError(result, "invalid_choice",
+                                    "'" + text + "' is not a valid choice", true, action);
                             }
                             session.sendPlayerString(gameId, matched);
                             trackSentResponse(gameId, ResponseType.STRING, matched, null);
@@ -1554,20 +1534,14 @@ public class BridgeCallbackHandler {
                         break;
                     }
                     if (index == null) {
-                        result.put("success", false);
-                        result.put("error", "Integer 'index' or string 'text' required for GAME_CHOOSE_CHOICE");
-                        pendingAction = action;
-                        attachChoicesToError(result);
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Integer 'index' or string 'text' required for GAME_CHOOSE_CHOICE", true, action, true);
                     }
                     List<Object> choiceChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
                     if (choiceChoices == null || index < 0 || index >= choiceChoices.size()) {
                         logChoiceOutOfRangeDiagnostic(method, index, choiceChoices);
-                        result.put("success", false);
-                        result.put("error", "Index " + index + " out of range (call get_action_choices first)");
-                        pendingAction = action;
-                        attachChoicesToError(result);
-                        return result;
+                        return buildError(result, "index_out_of_range",
+                            "Index " + index + " out of range (call get_action_choices first)", true, action, true);
                     }
                     String choiceStr = (String) choiceChoices.get(index);
                     session.sendPlayerString(gameId, choiceStr);
@@ -1578,10 +1552,8 @@ public class BridgeCallbackHandler {
 
                 case GAME_CHOOSE_PILE:
                     if (pile == null) {
-                        result.put("success", false);
-                        result.put("error", "Integer 'pile' (1 or 2) required for GAME_CHOOSE_PILE");
-                        pendingAction = action;
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Integer 'pile' (1 or 2) required for GAME_CHOOSE_PILE", true, action);
                     }
                     boolean pileChoice = pile == 1;
                     session.sendPlayerBoolean(gameId, pileChoice);
@@ -1591,10 +1563,8 @@ public class BridgeCallbackHandler {
 
                 case GAME_GET_AMOUNT: {
                     if (amount == null) {
-                        result.put("success", false);
-                        result.put("error", "Integer 'amount' required for GAME_GET_AMOUNT");
-                        pendingAction = action;
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Integer 'amount' required for GAME_GET_AMOUNT", true, action);
                     }
                     GameClientMessage msg = (GameClientMessage) data;
                     int clamped = Math.max(msg.getMin(), Math.min(msg.getMax(), amount));
@@ -1606,10 +1576,8 @@ public class BridgeCallbackHandler {
 
                 case GAME_GET_MULTI_AMOUNT: {
                     if (amounts == null) {
-                        result.put("success", false);
-                        result.put("error", "Array 'amounts' required for GAME_GET_MULTI_AMOUNT");
-                        pendingAction = action;
-                        return result;
+                        return buildError(result, "missing_param",
+                            "Array 'amounts' required for GAME_GET_MULTI_AMOUNT", true, action);
                     }
                     StringBuilder sb = new StringBuilder();
                     for (int i = 0; i < amounts.length; i++) {
@@ -1624,8 +1592,7 @@ public class BridgeCallbackHandler {
                 }
 
                 default:
-                    result.put("success", false);
-                    result.put("error", "Unknown action type: " + method);
+                    buildError(result, "unknown_action_type", "Unknown action type: " + method, false, null);
             }
         } finally {
             lastChoices = null;

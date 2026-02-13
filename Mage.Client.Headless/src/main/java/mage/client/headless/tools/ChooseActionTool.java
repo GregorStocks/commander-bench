@@ -19,6 +19,11 @@ public class ChooseActionTool {
             @Tool.Field(name = "success", type = "boolean", description = "Whether the action was accepted"),
             @Tool.Field(name = "action_taken", type = "string", description = "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\")"),
             @Tool.Field(name = "error", type = "string", description = "Error message"),
+            @Tool.Field(name = "error_code", type = "string",
+                description = "Machine-readable error code: no_pending_action, missing_param, "
+                    + "index_out_of_range, invalid_choice, internal_error, unknown_action_type"),
+            @Tool.Field(name = "retryable", type = "boolean",
+                description = "Whether the action can be retried with different parameters"),
             @Tool.Field(name = "warning", type = "string", description = "Warning (e.g. possible game loop detected)")
         }
     )
@@ -50,6 +55,8 @@ public class ChooseActionTool {
                 "action_taken", "no")),
             example("Error", json(
                 "success", false,
-                "error", "No pending action")));
+                "error", "Index 5 out of range (call get_action_choices first)",
+                "error_code", "index_out_of_range",
+                "retryable", true)));
     }
 }

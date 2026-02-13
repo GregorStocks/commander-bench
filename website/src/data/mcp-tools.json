@@ -461,6 +461,10 @@
     "outputSchema": {
       "type": "object",
       "properties": {
+        "retryable": {
+          "description": "Whether the action can be retried with different parameters",
+          "type": "boolean"
+        },
         "success": {
           "description": "Whether the action was accepted",
           "type": "boolean"
@@ -471,6 +475,10 @@
         },
         "warning": {
           "description": "Warning (e.g. possible game loop detected)",
+          "type": "string"
+        },
+        "error_code": {
+          "description": "Machine-readable error code: no_pending_action, missing_param, index_out_of_range, invalid_choice, internal_error, unknown_action_type",
           "type": "string"
         },
         "error": {
@@ -490,7 +498,7 @@
       },
       {
         "label": "Error",
-        "value": "{\n  \"success\": false,\n  \"error\": \"No pending action\"\n}"
+        "value": "{\n  \"success\": false,\n  \"error\": \"Index 5 out of range (call get_action_choices first)\",\n  \"error_code\": \"index_out_of_range\",\n  \"retryable\": true\n}"
       }
     ],
     "inputSchema": {

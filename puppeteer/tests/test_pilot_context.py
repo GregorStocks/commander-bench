@@ -56,6 +56,21 @@ def test_summarize_choose_action_failure():
     assert "no pending action" in result
 
 
+def test_summarize_choose_action_failure_with_error_code():
+    """Error code and retryable fields should not break existing summarization."""
+    content = json.dumps(
+        {
+            "success": False,
+            "error": "Index 5 out of range (call get_action_choices first)",
+            "error_code": "index_out_of_range",
+            "retryable": True,
+        }
+    )
+    result = _summarize_tool_result("choose_action", content)
+    assert result.startswith("FAIL:")
+    assert "out of range" in result
+
+
 def test_summarize_get_action_choices():
     content = json.dumps(
         {
