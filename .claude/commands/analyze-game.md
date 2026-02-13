@@ -45,7 +45,7 @@ Read `config.json` and `game_meta.json` — understand who played, what models/d
 ### Step 4: Check existing issues
 
 ```bash
-scripts/list-issues.sh
+uv run python scripts/list-issues.py
 ```
 
 ### Step 5: Analyze log files in parallel
