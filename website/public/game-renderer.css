@@ -820,6 +820,135 @@
   line-height: 1.5;
 }
 
+/* Blunder annotations */
+.annotation-block {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid;
+  font-size: 0.78rem;
+}
+
+.annotation-block.severity-minor {
+  background: rgba(251, 191, 36, 0.08);
+  border-left-color: #fbbf24;
+}
+
+.annotation-block.severity-moderate {
+  background: rgba(249, 115, 22, 0.08);
+  border-left-color: #f97316;
+}
+
+.annotation-block.severity-major {
+  background: rgba(239, 68, 68, 0.1);
+  border-left-color: #ef4444;
+}
+
+.annotation-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 4px;
+}
+
+.annotation-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  letter-spacing: 0.03em;
+}
+
+.annotation-badge.severity-minor {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.annotation-badge.severity-moderate {
+  background: rgba(249, 115, 22, 0.2);
+  color: #f97316;
+}
+
+.annotation-badge.severity-major {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.annotation-category {
+  font-size: 0.72rem;
+  color: #a0a0b8;
+  font-style: italic;
+}
+
+.annotation-description {
+  color: #e0e0f0;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.annotation-details {
+  font-size: 0.72rem;
+  margin-top: 4px;
+}
+
+.annotation-details summary {
+  color: #a0a0b8;
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.annotation-field {
+  color: #c0c0d0;
+  margin: 2px 0;
+  line-height: 1.4;
+}
+
+.annotation-field strong {
+  color: #a0a0b8;
+}
+
+/* Timeline annotation markers */
+.annotation-markers {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 20px;
+  pointer-events: none;
+}
+
+.annotation-marker {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  top: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.annotation-marker:hover {
+  transform: translate(-50%, -50%) scale(1.5);
+}
+
+.annotation-marker.severity-minor {
+  background: #fbbf24;
+}
+
+.annotation-marker.severity-moderate {
+  background: #f97316;
+}
+
+.annotation-marker.severity-major {
+  background: #ef4444;
+}
+
 .hidden {
   display: none !important;
 }
