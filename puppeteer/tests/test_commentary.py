@@ -5,7 +5,6 @@ import json
 # Import under test — scripts/commentary.py is run via uv so it's on sys.path
 # We import the module's functions directly.
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -17,7 +16,6 @@ from commentary import (
     TurnEvents,
     _compact_board,
     _is_noise,
-    _strip_html,
     build_messages,
     format_narrative,
     load_game_narrative,
@@ -25,48 +23,38 @@ from commentary import (
 )
 
 
-def _make_game_dir(
-    tmpdir: Path,
+def _make_game_data(
     *,
-    meta: dict | None = None,
-    events: list[dict] | None = None,
-    game_jsonl: list[dict] | None = None,
-) -> Path:
-    """Create a minimal game directory with meta and events."""
-    game_dir = tmpdir / "game_20260101_120000"
-    game_dir.mkdir()
+    players: list[dict] | None = None,
+    actions: list[dict] | None = None,
+    snapshots: list[dict] | None = None,
+    llm_events: list[dict] | None = None,
+    winner: str | None = "Alice",
+    game_type: str = "Two Player Duel",
+    deck_type: str = "Constructed - Standard",
+) -> dict:
+    """Build a minimal exported game dict for testing."""
+    if players is None:
+        players = [
+            {"name": "Alice", "type": "pilot", "model": "test/model-a", "deckName": "Burn"},
+            {"name": "Bob", "type": "pilot", "model": "test/model-b", "deckName": "Control"},
+        ]
 
-    if meta is None:
-        meta = {
-            "game_type": "Two Player Duel",
-            "deck_type": "Constructed - Standard",
-            "players": [
-                {"name": "Alice", "type": "pilot", "model": "test/model-a", "deck_path": "decks/Burn.dck"},
-                {"name": "Bob", "type": "pilot", "model": "test/model-b", "deck_path": "decks/Control.dck"},
-            ],
-        }
-    (game_dir / "game_meta.json").write_text(json.dumps(meta))
+    if actions is None:
+        actions = [
+            {"ts": "t1", "seq": 1, "message": "TURN 1 for Alice (20 - 20)"},
+            {"ts": "t2", "seq": 2, "message": "Alice plays Mountain"},
+            {"ts": "t3", "seq": 3, "message": "Alice casts Lightning Bolt"},
+            {"ts": "t5", "seq": 5, "message": "TURN 2 for Bob (20 - 17)"},
+            {"ts": "t6", "seq": 6, "message": "Bob plays Island"},
+            {"ts": "t8", "seq": 8, "message": "Alice has won the game"},
+        ]
 
-    if events is None:
-        _f = "<font color='#20B2AA'>"
-        _ef = "</font>"
-        _fc = "<font color='#B0C4DE'>"
-        _fy = "<font color='#F0E68C'>"
-        events = [
-            {"message": f"TURN 1 for {_f}Alice{_ef} (20 - 20)", "ts": "t1", "seq": 1, "type": "game_action"},
-            {"message": f"{_f}Alice{_ef} plays {_fc}Mountain{_ef} [abc]", "ts": "t2", "seq": 2, "type": "game_action"},
-            {
-                "message": f"{_f}Alice{_ef} casts {_fy}Lightning Bolt{_ef} [def]",
-                "ts": "t3",
-                "seq": 3,
-                "type": "game_action",
-            },
+    if snapshots is None:
+        snapshots = [
             {
                 "turn": 1,
                 "phase": "PRECOMBAT_MAIN",
-                "step": "PRECOMBAT_MAIN",
-                "active_player": "Alice",
-                "priority_player": "Alice",
                 "players": [
                     {"name": "Alice", "life": 20, "hand_count": 6, "battlefield": [{"name": "Mountain"}]},
                     {"name": "Bob", "life": 17, "hand_count": 7, "battlefield": []},
@@ -74,16 +62,10 @@ def _make_game_dir(
                 "stack": [],
                 "ts": "t4",
                 "seq": 4,
-                "type": "state_snapshot",
             },
-            {"message": f"TURN 2 for {_f}Bob{_ef} (20 - 17)", "ts": "t5", "seq": 5, "type": "game_action"},
-            {"message": f"{_f}Bob{_ef} plays {_fc}Island{_ef} [ghi]", "ts": "t6", "seq": 6, "type": "game_action"},
             {
                 "turn": 2,
                 "phase": "PRECOMBAT_MAIN",
-                "step": "PRECOMBAT_MAIN",
-                "active_player": "Bob",
-                "priority_player": "Bob",
                 "players": [
                     {"name": "Alice", "life": 20, "hand_count": 5, "battlefield": [{"name": "Mountain"}]},
                     {"name": "Bob", "life": 17, "hand_count": 6, "battlefield": [{"name": "Island"}]},
@@ -91,26 +73,20 @@ def _make_game_dir(
                 "stack": [],
                 "ts": "t7",
                 "seq": 7,
-                "type": "state_snapshot",
             },
-            {"message": f"{_f}Alice{_ef} has won the game", "ts": "t8", "seq": 8, "type": "game_action"},
-            {"seq": 9, "message": "Player Alice is the winner", "type": "game_over"},
         ]
 
-    source = game_dir / "game_events.jsonl"
-    if game_jsonl is not None:
-        source = game_dir / "game.jsonl"
-        events = game_jsonl
-    source.write_text("\n".join(json.dumps(e) for e in events) + "\n")
-
-    return game_dir
-
-
-def test_strip_html():
-    html = "<font color='#20B2AA'>Alice</font> plays <font color='#B0C4DE'>Mountain</font> [abc]"
-    assert _strip_html(html) == "Alice plays Mountain"
-    assert _strip_html("no tags here") == "no tags here"
-    assert _strip_html("<font color='red'>X</font> [1a2b3c]") == "X"
+    return {
+        "id": "game_20260101_120000",
+        "gameType": game_type,
+        "deckType": deck_type,
+        "winner": winner,
+        "players": players,
+        "actions": actions,
+        "snapshots": snapshots,
+        "llmEvents": llm_events or [],
+        "gameOver": {"seq": 9, "message": "Player Alice is the winner"},
+    }
 
 
 def test_is_noise():
@@ -147,115 +123,100 @@ def test_compact_board():
 
 
 def test_load_game_narrative():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        game_dir = _make_game_dir(Path(tmpdir))
-        narrative = load_game_narrative(game_dir)
+    game = _make_game_data()
+    narrative = load_game_narrative(game)
 
-        assert narrative.game_id == "game_20260101_120000"
-        assert narrative.game_type == "Two Player Duel"
-        assert narrative.deck_type == "Constructed - Standard"
-        assert len(narrative.players) == 2
-        assert narrative.players[0]["name"] == "Alice"
-        assert narrative.players[1]["name"] == "Bob"
-        assert narrative.winner == "Alice"
-        assert len(narrative.turns) == 2
-        assert narrative.turns[0].turn_number == 1
-        assert narrative.turns[0].active_player == "Alice"
-        assert narrative.turns[1].turn_number == 2
-        assert narrative.turns[1].active_player == "Bob"
+    assert narrative.game_id == "game_20260101_120000"
+    assert narrative.game_type == "Two Player Duel"
+    assert narrative.deck_type == "Constructed - Standard"
+    assert len(narrative.players) == 2
+    assert narrative.players[0]["name"] == "Alice"
+    assert narrative.players[1]["name"] == "Bob"
+    assert narrative.winner == "Alice"
+    assert len(narrative.turns) == 2
+    assert narrative.turns[0].turn_number == 1
+    assert narrative.turns[0].active_player == "Alice"
+    assert narrative.turns[1].turn_number == 2
+    assert narrative.turns[1].active_player == "Bob"
 
 
 def test_load_game_narrative_actions_filtered():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        game_dir = _make_game_dir(Path(tmpdir))
-        narrative = load_game_narrative(game_dir)
+    game = _make_game_data()
+    narrative = load_game_narrative(game)
 
-        # Turn 1 should have "plays Mountain" and "casts Lightning Bolt" but NOT the TURN line
-        turn1_actions = narrative.turns[0].actions
-        assert any("plays" in a and "Mountain" in a for a in turn1_actions)
-        assert any("casts" in a and "Lightning Bolt" in a for a in turn1_actions)
-        # TURN line is consumed as a boundary, not an action
-        assert not any("TURN 1" in a for a in turn1_actions)
+    # Turn 1 should have "plays Mountain" and "casts Lightning Bolt"
+    # but NOT the TURN line
+    turn1_actions = narrative.turns[0].actions
+    assert any("plays" in a and "Mountain" in a for a in turn1_actions)
+    assert any("casts" in a and "Lightning Bolt" in a for a in turn1_actions)
+    # TURN line is consumed as a boundary, not an action
+    assert not any("TURN 1" in a for a in turn1_actions)
 
 
 def test_load_game_narrative_board_summary():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        game_dir = _make_game_dir(Path(tmpdir))
-        narrative = load_game_narrative(game_dir)
+    game = _make_game_data()
+    narrative = load_game_narrative(game)
 
-        # Turn 1 should have a board summary from the snapshot
-        assert narrative.turns[0].board_summary
-        assert "Alice" in narrative.turns[0].board_summary
-        assert "20 life" in narrative.turns[0].board_summary
+    # Turn 1 should have a board summary from the snapshot
+    assert narrative.turns[0].board_summary
+    assert "Alice" in narrative.turns[0].board_summary
+    assert "20 life" in narrative.turns[0].board_summary
 
 
 def test_load_game_narrative_with_reasoning():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        _f = "<font color='#20B2AA'>"
-        _ef = "</font>"
-        _fy = "<font color='#F0E68C'>"
-        reasoning_text = "I should bolt the opponent to pressure their life total early."
-        events = [
-            {"message": f"TURN 1 for {_f}Alice{_ef} (20 - 20)", "ts": "t1", "seq": 1, "type": "game_action"},
-            {"message": f"{_f}Alice{_ef} casts {_fy}Lightning Bolt{_ef}", "ts": "t2", "seq": 2, "type": "game_action"},
-            {"ts": "t2.5", "seq": 3, "type": "llm_response", "player": "Alice", "reasoning": reasoning_text},
-            {
-                "turn": 1,
-                "phase": "PRECOMBAT_MAIN",
-                "players": [
-                    {"name": "Alice", "life": 20, "hand_count": 6, "battlefield": []},
-                    {"name": "Bob", "life": 17, "hand_count": 7, "battlefield": []},
-                ],
-                "stack": [],
-                "ts": "t3",
-                "seq": 4,
-                "type": "state_snapshot",
-            },
-        ]
-        game_dir = _make_game_dir(Path(tmpdir), game_jsonl=events)
-        narrative = load_game_narrative(game_dir)
+    reasoning_text = "I should bolt the opponent to pressure their life total early."
+    llm_events = [
+        {
+            "ts": "t2.5",
+            "player": "Alice",
+            "type": "llm_response",
+            "reasoning": reasoning_text,
+        },
+    ]
+    game = _make_game_data(llm_events=llm_events)
+    narrative = load_game_narrative(game)
 
-        assert narrative.turns[0].reasoning.get("Alice") == reasoning_text
-
-
-def test_load_game_narrative_fallback_no_game_jsonl():
-    """When game.jsonl doesn't exist, falls back to game_events.jsonl."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        game_dir = _make_game_dir(Path(tmpdir))
-        # game_events.jsonl was created by _make_game_dir, game.jsonl was not
-        assert not (game_dir / "game.jsonl").exists()
-        assert (game_dir / "game_events.jsonl").exists()
-
-        narrative = load_game_narrative(game_dir)
-        assert len(narrative.turns) == 2
-        assert narrative.winner == "Alice"
+    assert narrative.turns[0].reasoning.get("Alice") == reasoning_text
 
 
 def test_load_game_narrative_chat():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        _f = "<font color='#20B2AA'>"
-        _ef = "</font>"
-        events = [
-            {"message": f"TURN 1 for {_f}Alice{_ef} (20 - 20)", "ts": "t1", "seq": 1, "type": "game_action"},
-            {"from": "Alice", "message": "Hello there!", "ts": "t2", "seq": 2, "type": "player_chat"},
-            {"from": "Bob", "message": "Good luck&#33;", "ts": "t3", "seq": 3, "type": "player_chat"},
-            {
-                "turn": 1,
-                "phase": "PRECOMBAT_MAIN",
-                "players": [],
-                "stack": [],
-                "ts": "t4",
-                "seq": 4,
-                "type": "state_snapshot",
-            },
-        ]
-        game_dir = _make_game_dir(Path(tmpdir), game_jsonl=events)
-        narrative = load_game_narrative(game_dir)
+    actions = [
+        {"ts": "t1", "seq": 1, "message": "TURN 1 for Alice (20 - 20)"},
+        {
+            "ts": "t2",
+            "seq": 2,
+            "message": "Hello there!",
+            "type": "chat",
+            "from": "Alice",
+        },
+        {
+            "ts": "t3",
+            "seq": 3,
+            "message": "Good luck&#33;",
+            "type": "chat",
+            "from": "Bob",
+        },
+    ]
+    game = _make_game_data(actions=actions, snapshots=[])
+    narrative = load_game_narrative(game)
 
-        assert len(narrative.turns[0].chat) == 2
-        assert narrative.turns[0].chat[0] == ("Alice", "Hello there!")
-        # HTML entities should be unescaped
-        assert narrative.turns[0].chat[1] == ("Bob", "Good luck!")
+    assert len(narrative.turns[0].chat) == 2
+    assert narrative.turns[0].chat[0] == ("Alice", "Hello there!")
+    # HTML entities should be unescaped
+    assert narrative.turns[0].chat[1] == ("Bob", "Good luck!")
+
+
+def test_load_game_narrative_deck_name():
+    """Player deckName and commander are picked up."""
+    players = [
+        {"name": "Alice", "type": "pilot", "model": "m", "deckName": "Burn"},
+        {"name": "Bob", "type": "pilot", "model": "m", "commander": "Atraxa"},
+    ]
+    game = _make_game_data(players=players)
+    narrative = load_game_narrative(game)
+
+    assert narrative.players[0]["deck_name"] == "Burn"
+    assert narrative.players[1]["deck_name"] == "Atraxa"
 
 
 def test_build_messages():
@@ -265,7 +226,13 @@ def test_build_messages():
         deck_type="Constructed - Standard",
         players=[{"name": "Alice", "model": "test/model", "deck_name": "Burn"}],
         winner="Alice",
-        turns=[TurnEvents(turn_number=1, active_player="Alice", actions=["Alice casts Lightning Bolt"])],
+        turns=[
+            TurnEvents(
+                turn_number=1,
+                active_player="Alice",
+                actions=["Alice casts Lightning Bolt"],
+            )
+        ],
     )
     messages = build_messages(narrative)
     assert len(messages) == 2
@@ -353,7 +320,10 @@ async def test_generate_commentary():
     client = MagicMock()
     client.chat.completions.create = AsyncMock(return_value=mock_response)
 
-    messages = [{"role": "system", "content": "test"}, {"role": "user", "content": "test"}]
+    messages = [
+        {"role": "system", "content": "test"},
+        {"role": "user", "content": "test"},
+    ]
     prices = {"test/model": (1.0, 2.0)}
 
     text, cost = await generate_commentary(client, "test/model", messages, prices)

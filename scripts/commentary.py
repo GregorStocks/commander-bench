@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Generate AI play-by-play commentary for a completed game."""
+"""Generate AI play-by-play commentary for a completed game.
+
+Reads from the exported .json.gz in the website games directory, generates
+commentary via an LLM, and writes the commentary back into the gz.
+"""
 
 import argparse
 import asyncio
+import gzip
 import html
 import json
 import os
@@ -19,12 +24,12 @@ from puppeteer.llm_cost import (
     required_api_key_env,
 )
 
-LOGS_DIR = Path.home() / ".mage-bench" / "logs"
+WEBSITE_GAMES_DIR = (
+    Path(__file__).resolve().parent.parent / "website" / "public" / "games"
+)
 DEFAULT_MODEL = "google/gemini-2.5-flash"
 MAX_COMMENTARY_TOKENS = 4096
 
-FONT_TAG_RE = re.compile(r"<font[^>]*>|</font>")
-OBJECT_ID_RE = re.compile(r"\s*\[[0-9a-f]{3,}\]")
 TURN_RE = re.compile(r"^TURN (\d+) for (.+?) \(")
 
 # Messages that are noise and should be filtered from the narrative
@@ -38,13 +43,6 @@ _NOISE_PATTERNS = [
     "from stack onto the Battlefield",
     "from hand onto the Battlefield",
 ]
-
-
-def _strip_html(message: str) -> str:
-    """Remove <font> tags and [hex_id] suffixes from action messages."""
-    message = FONT_TAG_RE.sub("", message)
-    message = OBJECT_ID_RE.sub("", message)
-    return message.strip()
 
 
 def _is_noise(action: str) -> bool:
@@ -95,136 +93,158 @@ def _compact_board(snapshot: dict) -> str:
     return " | ".join(parts)
 
 
-def _deck_display_name(player_meta: dict) -> str | None:
-    """Get a display name for a player's deck from metadata."""
-    deck_path = player_meta.get("deck_path", "")
-    if deck_path:
-        return Path(deck_path).stem.replace("-", " ")
-    return None
-
-
-def load_game_narrative(game_dir: Path) -> GameNarrative:
-    """Parse game logs into a structured narrative."""
-    meta_path = game_dir / "game_meta.json"
-    assert meta_path.exists(), f"No game_meta.json in {game_dir}"
-    meta = json.loads(meta_path.read_text())
+def load_game_narrative(game: dict) -> GameNarrative:
+    """Build a structured narrative from an exported game JSON dict."""
+    game_id = game.get("id", "")
 
     # Build player info
     players = []
-    for p in meta.get("players", []):
+    for p in game.get("players", []):
         players.append(
             {
                 "name": p.get("name", "?"),
                 "model": p.get("model", ""),
-                "deck_name": _deck_display_name(p),
+                "deck_name": p.get("deckName") or p.get("commander"),
                 "type": p.get("type", "?"),
             }
         )
 
-    # Read events: prefer game.jsonl (merged), fall back to game_events.jsonl
-    game_jsonl = game_dir / "game.jsonl"
-    events_jsonl = game_dir / "game_events.jsonl"
-    if game_jsonl.exists():
-        source = game_jsonl
-    else:
-        assert events_jsonl.exists(), (
-            f"No game.jsonl or game_events.jsonl in {game_dir}"
-        )
-        source = events_jsonl
+    # Build a map of (turn, player) -> reasoning from llmEvents
+    # We want the longest reasoning per player per turn. To associate
+    # llm_response events with turns, we use the snapshots' seq numbers
+    # to determine which turn each event falls into.
+    snapshot_turn_boundaries: list[tuple[int, int]] = []  # (seq, turn)
+    for snap in game.get("snapshots", []):
+        snapshot_turn_boundaries.append((snap.get("seq", 0), snap.get("turn", 0)))
+    snapshot_turn_boundaries.sort()
 
-    events = []
-    for line in source.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
+    def _seq_to_turn(ts: str) -> int | None:
+        """Map a timestamp to a turn number using snapshot boundaries."""
+        # We don't have seq on llmEvents, so match by timestamp
+        # against snapshots. Just use the nearest snapshot turn.
+        # This is approximate but good enough for commentary.
+        return None
 
-    # Group by turn
-    turns: list[TurnEvents] = []
-    current_turn: TurnEvents | None = None
-    last_snapshot: dict | None = None
-    winner: str | None = None
-
-    for event in events:
-        event_type = event.get("type", "")
-
-        if event_type == "game_action":
-            message = _strip_html(event.get("message", ""))
-            # Detect turn boundaries
-            turn_match = TURN_RE.match(message)
-            if turn_match:
-                # Finalize previous turn with last snapshot
-                if current_turn is not None and last_snapshot is not None:
-                    current_turn.board_summary = _compact_board(last_snapshot)
-                turn_num = int(turn_match.group(1))
-                active = turn_match.group(2)
-                current_turn = TurnEvents(turn_number=turn_num, active_player=active)
-                turns.append(current_turn)
-                last_snapshot = None
-                continue
-
-            # Filter noise
-            if _is_noise(message):
-                continue
-
-            # Check for winner
-            won_match = re.match(r"^(.+?) has won the game$", message)
-            if won_match:
-                winner = won_match.group(1)
-
-            if current_turn is not None:
-                current_turn.actions.append(message)
-            # Actions before the first turn (mulligans, etc.) get their own turn 0
-            elif turns or message:
-                if not turns:
-                    current_turn = TurnEvents(turn_number=0, active_player="Pregame")
-                    turns.append(current_turn)
-                if current_turn is not None:
-                    current_turn.actions.append(message)
-
-        elif event_type == "player_chat":
-            player = event.get("from", "?")
-            message = html.unescape(event.get("message", ""))
-            if current_turn is not None:
-                current_turn.chat.append((player, message))
-            elif turns:
-                turns[-1].chat.append((player, message))
-
-        elif event_type == "state_snapshot":
-            last_snapshot = event
-
-        elif event_type == "llm_response":
+    # Build reasoning index: we'll assign reasoning to turns by
+    # matching timestamps. LLM events between two snapshots belong
+    # to the turn of the earlier snapshot.
+    llm_reasoning: dict[str, list[tuple[str, str]]] = {}  # ts -> [(player, reasoning)]
+    for event in game.get("llmEvents", []):
+        if event.get("type") == "llm_response":
             reasoning = event.get("reasoning", "")
             player = event.get("player", "")
-            if reasoning and player and current_turn is not None:
-                # Keep the longest reasoning per player per turn
-                existing = current_turn.reasoning.get(player, "")
-                if len(reasoning) > len(existing):
-                    current_turn.reasoning[player] = reasoning
+            if reasoning and player:
+                ts = event.get("ts", "")
+                llm_reasoning.setdefault(ts, []).append((player, reasoning))
 
-        elif event_type == "game_over":
-            msg = _strip_html(event.get("message", ""))
-            m = re.match(r"Player (.+?) is the winner", msg)
-            if m:
-                winner = m.group(1)
+    # Group actions by turn
+    actions = game.get("actions", [])
+    snapshots = game.get("snapshots", [])
 
-    # Finalize last turn
-    if current_turn is not None and last_snapshot is not None:
-        current_turn.board_summary = _compact_board(last_snapshot)
+    # Build snapshot lookup by seq for board summaries
+    snapshot_by_seq: dict[int, dict] = {}
+    for snap in snapshots:
+        snapshot_by_seq[snap.get("seq", 0)] = snap
 
-    # Fall back to meta winner
-    if winner is None:
-        # Check meta for youtube or other hints -- no, just leave it None
+    # Build a sorted list of snapshot seqs per turn for assigning reasoning
+    turn_snapshot_seqs: dict[int, list[int]] = {}
+    for snap in snapshots:
+        turn = snap.get("turn", 0)
+        turn_snapshot_seqs.setdefault(turn, []).append(snap.get("seq", 0))
 
-        pass
+    turns: list[TurnEvents] = []
+    current_turn: TurnEvents | None = None
+    winner = game.get("winner")
+
+    for action in actions:
+        message = action.get("message", "")
+        action_type = action.get("type")
+
+        if action_type == "chat":
+            player = action.get("from", "?")
+            chat_msg = html.unescape(message)
+            if current_turn is not None:
+                current_turn.chat.append((player, chat_msg))
+            continue
+
+        # Regular game action
+        turn_match = TURN_RE.match(message)
+        if turn_match:
+            turn_num = int(turn_match.group(1))
+            active = turn_match.group(2)
+            current_turn = TurnEvents(turn_number=turn_num, active_player=active)
+            turns.append(current_turn)
+            continue
+
+        if _is_noise(message):
+            continue
+
+        if current_turn is not None:
+            current_turn.actions.append(message)
+        elif message:
+            if not turns:
+                current_turn = TurnEvents(turn_number=0, active_player="Pregame")
+                turns.append(current_turn)
+            if current_turn is not None:
+                current_turn.actions.append(message)
+
+    # Assign board summaries from snapshots: for each turn, use the last
+    # snapshot with that turn number
+    last_snapshot_per_turn: dict[int, dict] = {}
+    for snap in snapshots:
+        turn = snap.get("turn", 0)
+        last_snapshot_per_turn[turn] = snap
+    for turn in turns:
+        snap = last_snapshot_per_turn.get(turn.turn_number)
+        if snap:
+            turn.board_summary = _compact_board(snap)
+
+    # Assign reasoning from llmEvents to turns by timestamp
+    # Sort llm events and snapshots by timestamp, then assign each llm event
+    # to the current turn based on which TURN action preceded it
+    all_timestamps: list[tuple[str, str, str, str]] = []  # (ts, kind, player, data)
+    for event in game.get("llmEvents", []):
+        if event.get("type") == "llm_response" and event.get("reasoning"):
+            all_timestamps.append(
+                (
+                    event.get("ts", ""),
+                    "reasoning",
+                    event.get("player", ""),
+                    event.get("reasoning", ""),
+                )
+            )
+    # Also get action timestamps to know turn boundaries
+    for action in actions:
+        msg = action.get("message", "")
+        if TURN_RE.match(msg):
+            turn_match = TURN_RE.match(msg)
+            assert turn_match is not None
+            all_timestamps.append(
+                (
+                    action.get("ts", ""),
+                    "turn",
+                    "",
+                    turn_match.group(1),
+                )
+            )
+    all_timestamps.sort(key=lambda x: x[0])
+
+    turn_map: dict[int, TurnEvents] = {t.turn_number: t for t in turns}
+    current_turn_num = 0
+    for ts, kind, player, data in all_timestamps:
+        if kind == "turn":
+            current_turn_num = int(data)
+        elif kind == "reasoning":
+            t = turn_map.get(current_turn_num)
+            if t and player:
+                existing = t.reasoning.get(player, "")
+                if len(data) > len(existing):
+                    t.reasoning[player] = data
 
     return GameNarrative(
-        game_id=game_dir.name,
-        game_type=meta.get("game_type", ""),
-        deck_type=meta.get("deck_type", ""),
+        game_id=game_id,
+        game_type=game.get("gameType", "") or "",
+        deck_type=game.get("deckType", "") or "",
         players=players,
         winner=winner,
         turns=turns,
@@ -372,12 +392,21 @@ async def generate_commentary(
     return text, cost_usd
 
 
-async def async_main(args: argparse.Namespace) -> None:
-    game_dir = LOGS_DIR / args.game_id
-    assert game_dir.is_dir(), f"{game_dir} is not a directory"
+def _load_game_gz(game_id: str, games_dir: Path) -> tuple[dict, Path]:
+    """Load a game from its .json.gz file. Returns (game_dict, gz_path)."""
+    gz_path = games_dir / f"{game_id}.json.gz"
+    assert gz_path.exists(), f"No exported game found: {gz_path}"
+    game = json.loads(gzip.decompress(gz_path.read_bytes()))
+    return game, gz_path
 
-    print(f"Loading game narrative from {game_dir.name}...")
-    narrative = load_game_narrative(game_dir)
+
+async def async_main(args: argparse.Namespace) -> None:
+    games_dir = Path(args.games_dir)
+    game_id = args.game_id
+
+    print(f"Loading game from {games_dir / (game_id + '.json.gz')}...")
+    game, gz_path = _load_game_gz(game_id, games_dir)
+    narrative = load_game_narrative(game)
     print(f"  {len(narrative.turns)} turns, {len(narrative.players)} players")
     if narrative.winner:
         print(f"  Winner: {narrative.winner}")
@@ -402,15 +431,10 @@ async def async_main(args: argparse.Namespace) -> None:
     entries = parse_commentary_response(raw_text)
     print(f"  {len(entries)} commentary entries")
 
-    # Write output
-    output = {
-        "model": model,
-        "cost_usd": round(cost_usd, 6),
-        "entries": entries,
-    }
-    output_path = game_dir / "commentary.json"
-    output_path.write_text(json.dumps(output, indent=2) + "\n")
-    print(f"Commentary written to {output_path}")
+    # Write commentary back into the gz
+    game["commentary"] = entries
+    gz_path.write_bytes(gzip.compress(json.dumps(game).encode()))
+    print(f"Commentary written to {gz_path}")
     print(f"Cost: ${cost_usd:.4f}")
 
 
@@ -418,11 +442,18 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate AI commentary for a completed game"
     )
-    parser.add_argument("game_id", help=f"Game directory name under {LOGS_DIR}")
+    parser.add_argument("game_id", help="Game ID (name of the .json.gz file)")
     parser.add_argument(
-        "--model", default=DEFAULT_MODEL, help=f"LLM model (default: {DEFAULT_MODEL})"
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"LLM model (default: {DEFAULT_MODEL})",
     )
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="API base URL")
+    parser.add_argument(
+        "--games-dir",
+        default=str(WEBSITE_GAMES_DIR),
+        help=f"Games directory (default: {WEBSITE_GAMES_DIR})",
+    )
     args = parser.parse_args()
     asyncio.run(async_main(args))
 
