@@ -166,6 +166,25 @@ ls -l ~/.mage-bench/logs/last-branch-GregorStocks-my-branch
 
 When the user talks about "the UI", they mean the **Java Swing UI** (`StreamingGamePanel`) by default, not the website visualizer.
 
+## Website
+
+Use `make website` for all website development. This single command handles everything — generating leaderboard data, installing npm dependencies, and starting the Astro dev server:
+
+```bash
+make website
+```
+
+**Never** run `npm install`, `npx astro dev`, or other npm/npx commands directly. `make website` does it all.
+
+The dev server runs at `http://localhost:4321/`. Key pages:
+- Home: `http://localhost:4321/`
+- Leaderboard: `http://localhost:4321/leaderboard`
+- About: `http://localhost:4321/about`
+- MCP Tools: `http://localhost:4321/mcp-tools`
+- Games list: `http://localhost:4321/games`
+- Live viewer (mock): `http://localhost:4321/games/live?mock=1`
+- Game replay: `http://localhost:4321/games/{game_id}`
+
 ## Screenshots
 
 When working on UI changes, take screenshots to verify your work. See `doc/screenshots.md` for full details.
@@ -181,9 +200,7 @@ make screenshot T=5          # frame at 5s into the game
 
 **Website visualizer** (via Chrome browser automation):
 
-Start the dev server with `make website`, then navigate Chrome to:
-- Mock data: `http://localhost:4321/games/live?mock=1`
-- Game replay: `http://localhost:4321/games/{game_id}`
+Start the dev server with `make website`, then navigate Chrome to the pages listed above.
 
 Use visual verification when:
 - Modifying `StreamingGamePanel` layout or rendering
