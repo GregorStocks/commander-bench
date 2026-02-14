@@ -329,7 +329,7 @@ const { slug } = Astro.params;
   }
 
   #game-right {
-    width: 320px;
+    width: 420px;
     flex-shrink: 0;
   }
 
@@ -349,7 +349,6 @@ const { slug } = Astro.params;
     background: #16213e;
     border: 1px solid #0f3460;
     border-radius: 8px;
-    margin-bottom: 0.75rem;
     position: sticky;
     top: 0.5rem;
   }
@@ -393,10 +392,11 @@ const { slug } = Astro.params;
   }
 
   #action-list {
-    max-height: calc(100vh - 8rem);
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 0.8rem;
     line-height: 1.5;
+    word-break: break-word;
   }
 
 </style>
@@ -457,7 +457,8 @@ const { slug } = Astro.params;
     var eloData = null;
     var turnStartIndices = [];
     var showLlm = true;
-    var traceByTs = {};  // ts -> trace event lookup for LLM I/O display
+    var isCommander = false;
+    var traceByTs = {};  // ts -> trace event lookup (kept for potential future use)
     var filterPlayer = "";  // "" = all players
     var filterEventType = "";  // "" = all, "llm" = LLM only, "game" = game actions only
 
@@ -539,16 +540,77 @@ const { slug } = Astro.params;
       }
     }
 
+    // Merge consecutive llm_response + tool_call events into combined entries.
+    // Each llm_response is followed by zero or more tool_call results from the same player.
+    function mergeLlmEvents(events) {
+      var merged = [];
+      var i = 0;
+      while (i < events.length) {
+        var e = events[i];
+        if (e.type === "llm_response") {
+          // Collect subsequent tool_call events from the same player
+          var toolResults = [];
+          var j = i + 1;
+          while (j < events.length && events[j].type === "tool_call" && events[j].player === e.player) {
+            toolResults.push(events[j]);
+            j++;
+          }
+          merged.push({
+            type: "llm_merged",
+            ts: e.ts,
+            player: e.player,
+            reasoning: e.reasoning,
+            thinking: e.thinking,
+            toolCalls: e.toolCalls,
+            costUsd: e.costUsd,
+            toolResults: toolResults,
+          });
+          i = j;
+        } else if (e.type === "tool_call") {
+          // Orphan tool_call (no preceding llm_response) — render standalone
+          merged.push({
+            type: "llm_merged",
+            ts: e.ts,
+            player: e.player,
+            toolResults: [e],
+          });
+          i++;
+        } else {
+          // Meta events pass through unchanged
+          merged.push(e);
+          i++;
+        }
+      }
+      return merged;
+    }
+
+    function renderToolResult(tc) {
+      var details = document.createElement("details");
+      details.className = "llm-tool-detail";
+      var summary = document.createElement("summary");
+      var argsSummary = formatToolArgs(tc.args);
+      var latency = tc.latencyMs != null ? " " + (tc.latencyMs / 1000).toFixed(1) + "s" : "";
+      summary.innerHTML = escapeHtml(tc.tool) + "(" + escapeHtml(argsSummary) + ")" +
+        (latency ? '<span class="llm-cost">' + latency + '</span>' : "");
+      details.appendChild(summary);
+      if (tc.result) {
+        var pre = document.createElement("pre");
+        pre.textContent = tryFormatJson(tc.result);
+        details.appendChild(pre);
+      }
+      return details;
+    }
+
     function renderLlmEvent(event) {
       var type = event.type;
 
-      if (type === "llm_response") {
+      if (type === "llm_merged") {
         var hasReasoning = event.reasoning && event.reasoning.trim();
         var hasThinking = event.thinking && event.thinking.trim();
-        var hasToolCalls = event.toolCalls && event.toolCalls.length > 0;
+        var hasToolResults = event.toolResults && event.toolResults.length > 0;
 
         if (hasReasoning || hasThinking) {
-          // Full thought block with reasoning and/or extended thinking
+          // Full thought block with reasoning and/or extended thinking + tool results
           var div = document.createElement("div");
           div.className = "llm-event llm-thought " + playerColorClass(event.player);
 
@@ -581,84 +643,31 @@ const { slug } = Astro.params;
             div.appendChild(reasoningEl);
           }
 
-          // Full LLM I/O trace (expandable)
-          var trace = traceByTs[event.ts + "|" + event.player];
-          if (trace) {
-            var traceDetails = document.createElement("details");
-            traceDetails.className = "llm-trace-block";
-            var traceSummary = document.createElement("summary");
-            var promptTok = (event.usage && event.usage.promptTokens) || "?";
-            var compTok = (event.usage && event.usage.completionTokens) || "?";
-            traceSummary.textContent = "Full LLM I/O (" + promptTok + "\u2192" + compTok + " tokens)";
-            traceDetails.appendChild(traceSummary);
-            var tracePre = document.createElement("pre");
-            tracePre.className = "llm-trace-text";
-            tracePre.textContent = JSON.stringify({request: trace.request, response: trace.response}, null, 2);
-            traceDetails.appendChild(tracePre);
-            div.appendChild(traceDetails);
-          }
-
-          if (hasToolCalls) {
-            var tcEl = document.createElement("div");
-            tcEl.className = "llm-tool-calls";
-            tcEl.textContent = event.toolCalls.map(function (tc) {
-              return tc.name + "(" + formatToolArgs(typeof tc.arguments === "string" ? (function () { try { return JSON.parse(tc.arguments); } catch (e) { return {}; } })() : tc.arguments) + ")";
-            }).join(", ");
-            div.appendChild(tcEl);
+          // Inline tool results
+          if (hasToolResults) {
+            event.toolResults.forEach(function (tc) {
+              div.appendChild(renderToolResult(tc));
+            });
           }
 
           return div;
-        } else if (hasToolCalls) {
-          // Compact tool-call-only line (no reasoning text)
+        } else if (hasToolResults) {
+          // Compact: no reasoning, just tool call(s) with expandable results
           var div = document.createElement("div");
           div.className = "llm-event llm-compact";
-          var toolNames = event.toolCalls.map(function (tc) { return tc.name; }).join(", ");
-          div.innerHTML = playerSpan(event.player) + " " + escapeHtml(toolNames);
+          var headerHtml = playerSpan(event.player);
           if (event.costUsd != null) {
-            div.innerHTML += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
+            headerHtml += '<span class="llm-cost">$' + event.costUsd.toFixed(4) + '</span>';
           }
-
-          // Full LLM I/O trace for compact events too
-          var trace = traceByTs[event.ts + "|" + event.player];
-          if (trace) {
-            var traceDetails = document.createElement("details");
-            traceDetails.className = "llm-trace-block";
-            var traceSummary = document.createElement("summary");
-            var promptTok = (event.usage && event.usage.promptTokens) || "?";
-            var compTok = (event.usage && event.usage.completionTokens) || "?";
-            traceSummary.textContent = "Full LLM I/O (" + promptTok + "\u2192" + compTok + " tokens)";
-            traceDetails.appendChild(traceSummary);
-            var tracePre = document.createElement("pre");
-            tracePre.className = "llm-trace-text";
-            tracePre.textContent = JSON.stringify({request: trace.request, response: trace.response}, null, 2);
-            traceDetails.appendChild(tracePre);
-            div.appendChild(traceDetails);
-          }
-
+          var headerEl = document.createElement("span");
+          headerEl.innerHTML = headerHtml;
+          div.appendChild(headerEl);
+          event.toolResults.forEach(function (tc) {
+            div.appendChild(renderToolResult(tc));
+          });
           return div;
         }
         return null; // Empty response, skip
-      }
-
-      if (type === "tool_call") {
-        var details = document.createElement("details");
-        details.className = "llm-event llm-tool-result";
-
-        var summary = document.createElement("summary");
-        var argsSummary = formatToolArgs(event.args);
-        var latency = event.latencyMs != null ? " " + (event.latencyMs / 1000).toFixed(1) + "s" : "";
-        summary.innerHTML = playerSpan(event.player) + " " +
-          escapeHtml(event.tool) + "(" + escapeHtml(argsSummary) + ")" +
-          (latency ? '<span class="llm-cost">' + latency + '</span>' : "");
-        details.appendChild(summary);
-
-        if (event.result) {
-          var pre = document.createElement("pre");
-          pre.textContent = tryFormatJson(event.result);
-          details.appendChild(pre);
-        }
-
-        return details;
       }
 
       // Meta events: stall, llm_error, context_trim, context_reset, auto_pilot_mode
@@ -765,19 +774,16 @@ const { slug } = Astro.params;
         diffs: diffs,
         previewEls: previewEls,
         priorityPlayerName: snap.priority_player,
+        isCommander: isCommander,
       });
 
       // Stack
       R.renderStack(stackSection, stackCards, snap.stack, game.cardImages, previewEls);
 
-      // Action log: show all actions up to current snapshot (persistent/accumulated)
+      // Action log: show full accumulated log up to current snapshot
       actionList.innerHTML = "";
       var prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
       var curSeq = snap.seq;
-
-      // When filtering by player, show ALL LLM events (not just current step window)
-      // so you can see the full call log for that player
-      var showAllLlm = filterPlayer || filterEventType === "llm";
 
       // All game actions + chat up to current snapshot
       var allActions = game.actions.filter(function (a) {
@@ -792,63 +798,65 @@ const { slug } = Astro.params;
         return true;
       });
 
-      // LLM events — window forward: show events in [curTs, nextTs) so thinking
-      // appears at the snapshot the LLM was looking at, not the one after its action.
+      // All LLM events up to current snapshot (accumulated, not windowed)
       var hasLlmEvents = game.llmEvents && game.llmEvents.length > 0;
       var relevantLlm = [];
       if (hasLlmEvents && showLlm) {
         var nextSnap = index < game.snapshots.length - 1 ? game.snapshots[index + 1] : null;
-        var curTs = snap.ts || "";
         var nextTs = nextSnap ? (nextSnap.ts || "") : "";
-        if (showAllLlm) {
-          // Show all LLM events associated with this or earlier snapshots
-          relevantLlm = game.llmEvents.filter(function (e) {
-            if (nextTs && e.ts >= nextTs) return false;
-            if (filterPlayer && e.player !== filterPlayer) return false;
-            return true;
-          });
-        } else {
-          // Default: windowed to current step
-          relevantLlm = game.llmEvents.filter(function (e) {
-            if (!prevSnap) {
-              // First snapshot: include all events before nextTs
-              return !nextTs || e.ts < nextTs;
-            }
-            return e.ts >= curTs && (!nextTs || e.ts < nextTs);
-          });
-        }
+        relevantLlm = game.llmEvents.filter(function (e) {
+          if (nextTs && e.ts >= nextTs) return false;
+          if (filterPlayer && e.player !== filterPlayer) return false;
+          return true;
+        });
       }
 
-      // Render accumulated game actions and chat (unless filtering to LLM only)
+      // Merge llm_response + tool_call into combined events
+      var mergedLlm = mergeLlmEvents(relevantLlm);
+
+      // Build unified timeline: interleave game actions and LLM events by timestamp
+      var timeline = [];
       if (filterEventType !== "llm") {
         allActions.forEach(function (a) {
-          if (a.type === "chat") {
-            var line = document.createElement("div");
-            line.className = "chat-line";
-            var fromIdx = playerColorMap[a.from];
-            var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
-            line.innerHTML = '<span class="chat-badge">chat</span><span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
-            actionList.appendChild(line);
-          } else {
-            var line = document.createElement("div");
-            line.className = "action-line";
-            // Highlight actions from the current step
-            if (a.seq > prevSeq) {
-              line.style.color = "#e0e0f0";
-            }
-            line.innerHTML = colorizePlayerNames(a.message);
-            actionList.appendChild(line);
-          }
+          timeline.push({ kind: a.type === "chat" ? "chat" : "action", ts: a.ts || "", data: a });
         });
       }
+      if (filterEventType !== "game") {
+        mergedLlm.forEach(function (e) {
+          timeline.push({ kind: "llm", ts: e.ts || "", data: e });
+        });
+      }
+      timeline.sort(function (a, b) {
+        if (a.ts < b.ts) return -1;
+        if (a.ts > b.ts) return 1;
+        return 0;
+      });
 
-      // Append LLM events (unless filtering to game actions only)
-      if (filterEventType !== "game" && relevantLlm.length > 0) {
-        relevantLlm.forEach(function (e) {
-          var el = renderLlmEvent(e);
+      // Render interleaved timeline
+      timeline.forEach(function (item) {
+        if (item.kind === "chat") {
+          var a = item.data;
+          var line = document.createElement("div");
+          line.className = "chat-line";
+          var fromIdx = playerColorMap[a.from];
+          var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
+          line.innerHTML = '<span class="chat-badge">chat</span><span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
+          actionList.appendChild(line);
+        } else if (item.kind === "action") {
+          var a = item.data;
+          var line = document.createElement("div");
+          line.className = "action-line";
+          // Highlight actions from the current step
+          if (a.seq > prevSeq) {
+            line.style.color = "#e0e0f0";
+          }
+          line.innerHTML = colorizePlayerNames(a.message);
+          actionList.appendChild(line);
+        } else if (item.kind === "llm") {
+          var el = renderLlmEvent(item.data);
           if (el) actionList.appendChild(el);
-        });
-      }
+        }
+      });
 
       // Render annotations for this snapshot
       if (game.annotations) {
@@ -859,8 +867,14 @@ const { slug } = Astro.params;
         });
       }
 
-      // Auto-scroll to bottom
-      actionList.scrollTop = actionList.scrollHeight;
+      // Sync game log height with left column, then auto-scroll to bottom
+      setTimeout(function () {
+        var leftHeight = document.getElementById("game-left").offsetHeight;
+        // Subtract action-log header (~60px for filters/title)
+        var headerHeight = actionList.parentElement.offsetHeight - actionList.offsetHeight;
+        actionList.style.maxHeight = Math.max(200, leftHeight - headerHeight) + "px";
+        actionList.scrollTop = actionList.scrollHeight;
+      }, 50);
 
       // Update transport
       slider.value = String(index);
@@ -949,6 +963,9 @@ const { slug } = Astro.params;
             playerMeta[p.name] = meta;
           }
         });
+
+        // Detect commander format
+        isCommander = (game.players || []).some(function (p) { return !!p.commander; });
 
         // Show LLM toggle and filters if we have LLM events
         if (game.llmEvents && game.llmEvents.length > 0) {

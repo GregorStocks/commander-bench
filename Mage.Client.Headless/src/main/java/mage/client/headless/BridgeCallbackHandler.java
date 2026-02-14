@@ -640,7 +640,6 @@ public class BridgeCallbackHandler {
                             if (manaCost != null && !manaCost.isEmpty()) {
                                 cardInfo.put("mana_cost", manaCost);
                             }
-                            cardInfo.put("mana_value", card.getManaValue());
                             if (card.isLand()) {
                                 cardInfo.put("is_land", true);
                             }
@@ -741,7 +740,6 @@ public class BridgeCallbackHandler {
                                 String manaCost = cardView.getManaCostStr();
                                 if (manaCost != null && !manaCost.isEmpty()) {
                                     choiceEntry.put("mana_cost", manaCost);
-                                    choiceEntry.put("mana_value", cardView.getManaValue());
                                 }
                                 if (cardView.isCreature() && cardView.getPower() != null) {
                                     choiceEntry.put("power", cardView.getPower());
@@ -2245,7 +2243,7 @@ public class BridgeCallbackHandler {
     }
 
     /**
-     * Build a structured info map for a card, with name, mana_cost, mana_value, power, toughness.
+     * Build a structured info map for a card, with name, mana_cost, power, toughness.
      * Consistent with the card representation in getGameState().
      */
     private Map<String, Object> buildCardInfoMap(CardView cv) {
@@ -2254,7 +2252,6 @@ public class BridgeCallbackHandler {
         String manaCost = cv.getManaCostStr();
         if (manaCost != null && !manaCost.isEmpty()) {
             info.put("mana_cost", manaCost);
-            info.put("mana_value", cv.getManaValue());
         }
         if (cv.isCreature() && cv.getPower() != null) {
             info.put("power", cv.getPower());
@@ -2854,7 +2851,6 @@ public class BridgeCallbackHandler {
                     if (manaCost != null && !manaCost.isEmpty()) {
                         cardInfo.put("mana_cost", manaCost);
                     }
-                    cardInfo.put("mana_value", card.getManaValue());
 
                     if (card.isLand()) {
                         cardInfo.put("is_land", true);

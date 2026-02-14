@@ -671,6 +671,7 @@
 
       // Zones
       var zoneOpts = { cardImages: cardImages, previewEls: previewEls };
+      var isCommander = opts.isCommander || false;
 
       var bfDiff = playerDiff ? {
         enteredNames: (playerDiff.battlefield.entered || []).slice(),
@@ -678,8 +679,50 @@
         ghostCards: playerDiff.battlefield.left || [],
       } : null;
 
-      card.appendChild(makeZone("Commander", player.commanders, zoneOpts));
-      card.appendChild(makeBattlefieldZone(player.battlefield, {
+      // Side zones (commander/graveyard/exile) + battlefield in a horizontal layout
+      var bodyRow = document.createElement("div");
+      bodyRow.className = "player-body";
+
+      // Side zones column (left)
+      var hasAnySideZone = isCommander || player.graveyard.length > 0 || (player.exile && player.exile.length > 0);
+      if (hasAnySideZone) {
+        var sideCol = document.createElement("div");
+        sideCol.className = "side-zones";
+
+        if (isCommander) {
+          sideCol.appendChild(makeZone("Commander", player.commanders, zoneOpts));
+        }
+
+        var gyDiff = playerDiff ? {
+          enteredNames: (playerDiff.graveyard.entered || []).slice(),
+          tapChangedNames: [],
+          ghostCards: [],
+        } : null;
+        sideCol.appendChild(makeZone("Graveyard", player.graveyard, {
+          cardImages: cardImages, diffInfo: gyDiff, previewEls: previewEls,
+          useThumbnails: player.graveyard.length > 0, smallThumbs: true,
+        }));
+
+        if (player.exile && player.exile.length > 0) {
+          var exDiff = playerDiff ? {
+            enteredNames: (playerDiff.exile.entered || []).slice(),
+            tapChangedNames: [],
+            ghostCards: [],
+          } : null;
+          sideCol.appendChild(makeZone("Exile", player.exile, {
+            cardImages: cardImages, diffInfo: exDiff, previewEls: previewEls,
+            useThumbnails: true, smallThumbs: true,
+          }));
+        }
+
+        bodyRow.appendChild(sideCol);
+      }
+
+      // Main column (battlefield + hand)
+      var mainCol = document.createElement("div");
+      mainCol.className = "main-zones";
+
+      mainCol.appendChild(makeBattlefieldZone(player.battlefield, {
         cardImages: cardImages, diffInfo: bfDiff, previewEls: previewEls,
       }));
 
@@ -688,32 +731,13 @@
         tapChangedNames: [],
         ghostCards: [],
       } : null;
-      card.appendChild(makeZone("Hand", player.hand, {
+      mainCol.appendChild(makeZone("Hand", player.hand, {
         cardImages: cardImages, countOverride: player.hand_count, diffInfo: handDiff, previewEls: previewEls,
         useThumbnails: player.hand.length > 0, smallThumbs: true,
       }));
 
-      var gyDiff = playerDiff ? {
-        enteredNames: (playerDiff.graveyard.entered || []).slice(),
-        tapChangedNames: [],
-        ghostCards: [],
-      } : null;
-      card.appendChild(makeZone("Graveyard", player.graveyard, {
-        cardImages: cardImages, diffInfo: gyDiff, previewEls: previewEls,
-        useThumbnails: player.graveyard.length > 0, smallThumbs: true,
-      }));
-
-      if (player.exile && player.exile.length > 0) {
-        var exDiff = playerDiff ? {
-          enteredNames: (playerDiff.exile.entered || []).slice(),
-          tapChangedNames: [],
-          ghostCards: [],
-        } : null;
-        card.appendChild(makeZone("Exile", player.exile, {
-          cardImages: cardImages, diffInfo: exDiff, previewEls: previewEls,
-          useThumbnails: true, smallThumbs: true,
-        }));
-      }
+      bodyRow.appendChild(mainCol);
+      card.appendChild(bodyRow);
 
       container.appendChild(card);
     });

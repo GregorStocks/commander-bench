@@ -130,6 +130,29 @@
   padding: 0.15rem 0.75rem;
 }
 
+/* Player body: side zones + main zones horizontal layout */
+.player-body {
+  display: flex;
+  gap: 0;
+}
+
+.side-zones {
+  width: 80px;
+  flex-shrink: 0;
+  border-right: 1px dashed rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.main-zones {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Battlefield minimum height: space for creatures row + lands row */
+.battlefield-zone {
+  min-height: 240px;
+}
+
 /* Zones */
 .zone {
   padding: 0.4rem 0.75rem;
@@ -138,6 +161,43 @@
 
 .zone:last-child {
   border-bottom: 0;
+}
+
+/* Side zones: compact styling with stacked/overlapping cards */
+.side-zones .zone {
+  padding: 0.3rem 0.4rem;
+}
+
+.side-zones .zone-title {
+  font-size: 0.55rem;
+}
+
+.side-zones .cards-row {
+  flex-direction: column;
+}
+
+.side-zones .card-thumb-sm {
+  width: 55px;
+}
+
+/* Stack cards with overlap in side zones (like Java graveyard) */
+.side-zones .cards-grid-sm {
+  gap: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.side-zones .card-thumb-sm {
+  width: 65px;
+}
+
+.side-zones .cards-grid-sm .card-thumb-sm {
+  margin-top: -35px;
+}
+
+.side-zones .cards-grid-sm .card-thumb-sm:first-child {
+  margin-top: 0;
 }
 
 .zone-title {
@@ -206,7 +266,7 @@
 
 .card-thumb {
   position: relative;
-  width: 60px;
+  width: 80px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid rgba(150, 195, 205, 0.2);
@@ -229,7 +289,7 @@
 
 .card-thumb.tapped {
   transform: rotate(90deg);
-  margin: 12px 12px;
+  margin: 16px 16px;
 }
 
 .card-thumb-pt {
@@ -291,7 +351,7 @@
 
 /* Small thumbnails for hand/graveyard/exile */
 .card-thumb-sm {
-  width: 45px;
+  width: 65px;
 }
 
 .cards-grid-sm {
@@ -618,13 +678,6 @@
   margin-top: 2px;
 }
 
-.llm-thought .llm-tool-calls {
-  color: #888;
-  font-size: 0.72rem;
-  font-family: monospace;
-  margin-top: 2px;
-}
-
 .llm-thinking-block {
   margin: 4px 0;
   font-size: 0.72rem;
@@ -660,32 +713,30 @@
   font-weight: 600;
 }
 
-.llm-tool-result {
+/* Inline tool result (expandable) within merged LLM events */
+.llm-tool-detail {
   font-size: 0.72rem;
   color: #888;
-  margin: 1px 0;
+  margin: 2px 0;
 }
 
-.llm-tool-result summary {
+.llm-tool-detail summary {
   cursor: pointer;
   font-family: monospace;
   padding: 1px 0;
   list-style: disclosure-closed;
+  word-break: break-all;
 }
 
-.llm-tool-result summary::-webkit-details-marker {
+.llm-tool-detail summary::-webkit-details-marker {
   color: #666;
 }
 
-.llm-tool-result[open] summary {
+.llm-tool-detail[open] summary {
   list-style: disclosure-open;
 }
 
-.llm-tool-result .llm-player {
-  font-weight: 600;
-}
-
-.llm-tool-result pre {
+.llm-tool-detail pre {
   margin: 4px 0 4px 16px;
   padding: 6px 8px;
   background: rgba(0, 0, 0, 0.3);
@@ -711,31 +762,6 @@
   font-size: 0.65rem;
   font-family: monospace;
   margin-left: 6px;
-}
-
-/* Full LLM I/O trace (expandable) */
-.llm-trace-block {
-  margin: 4px 0;
-  font-size: 0.72rem;
-}
-
-.llm-trace-block summary {
-  color: #60a5fa;
-  cursor: pointer;
-  font-style: italic;
-}
-
-.llm-trace-text {
-  color: #94a3b8;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.68rem;
-  max-height: 30rem;
-  overflow-y: auto;
-  margin-top: 2px;
-  padding: 4px;
-  background: rgba(59, 130, 246, 0.06);
-  border-radius: 4px;
 }
 
 /* Player-colored left borders and background tints for LLM thoughts */
