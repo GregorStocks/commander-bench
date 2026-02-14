@@ -64,6 +64,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
   <h1>Games</h1>
   <p class="subtitle">Replay past mage-bench games.</p>
   <div id="format-tabs" class="format-tabs"></div>
+  <div id="model-tabs" class="model-tabs"></div>
   <div id="filter-bar" style="display:none"></div>
   <div id="games-list">
     <p class="loading">Loading games...</p>
@@ -121,6 +122,47 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     font-size: 0.75rem;
     opacity: 0.7;
     margin-left: 0.2rem;
+  }
+
+  .model-tabs {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .model-tabs:empty {
+    display: none;
+  }
+
+  .model-tabs-label {
+    font-size: 0.8rem;
+    color: #a0a0b8;
+    align-self: center;
+    margin-right: 0.2rem;
+  }
+
+  .model-tab {
+    font-family: inherit;
+    font-size: 0.8rem;
+    padding: 0.3rem 0.7rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 20px;
+    color: #a0a0b8;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .model-tab:hover {
+    border-color: #e94560;
+    color: #e0e0e0;
+  }
+
+  .model-tab.active {
+    background: rgba(233, 69, 96, 0.15);
+    border-color: #e94560;
+    color: #e94560;
   }
 
   .filter-bar {
@@ -785,6 +827,65 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     });
   }
 
+  function renderModelTabs(games) {
+    var tabsEl = document.getElementById("model-tabs");
+    if (!tabsEl) return;
+    var filters = getFilters();
+
+    // Count games per model, respecting current format filter
+    var counts = {};
+    games.forEach(function (game) {
+      if (filters.format) {
+        var fmt = getGameFormat(game.deckType);
+        if (fmt !== filters.format) return;
+      }
+      var seen = {};
+      (game.players || []).forEach(function (p) {
+        if (p.model && !seen[p.model]) {
+          seen[p.model] = true;
+          counts[p.model] = (counts[p.model] || 0) + 1;
+        }
+      });
+    });
+
+    var models = Object.keys(counts).sort(function (a, b) {
+      return counts[b] - counts[a] || a.localeCompare(b);
+    });
+
+    if (models.length === 0) {
+      tabsEl.innerHTML = "";
+      return;
+    }
+
+    tabsEl.innerHTML = "";
+    var label = document.createElement("span");
+    label.className = "model-tabs-label";
+    label.textContent = "Model:";
+    tabsEl.appendChild(label);
+
+    models.forEach(function (model) {
+      var btn = document.createElement("button");
+      btn.className = "model-tab" + (filters.model === model ? " active" : "");
+      var displayName = model;
+      var slash = displayName.indexOf("/");
+      if (slash !== -1) displayName = displayName.substring(slash + 1);
+      btn.innerHTML = displayName + ' <span class="tab-count">(' + counts[model] + ")</span>";
+      btn.onclick = function () {
+        var f = getFilters();
+        if (f.model === model) {
+          f.model = "";
+          f.effort = "";
+        } else {
+          f.model = model;
+          f.effort = "";
+        }
+        setFilters(f);
+        renderAll();
+      };
+      tabsEl.appendChild(btn);
+    });
+  }
+
   function renderAll() {
     var games = __games;
     var eloData = __eloData;
@@ -798,6 +899,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     }
 
     renderFormatTabs(games);
+    renderModelTabs(games);
     var filters = getFilters();
     var filtered = filterGames(games, filters);
     renderFilterBar(filters, games.length, filtered.length);
