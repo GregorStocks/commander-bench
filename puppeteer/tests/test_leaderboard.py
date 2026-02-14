@@ -1,4 +1,4 @@
-"""Tests for leaderboard generation: OpenSkill ratings, placement, aggregation."""
+"""Tests for leaderboard generation: Elo ratings, placement, aggregation."""
 
 import gzip
 import json
