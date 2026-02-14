@@ -181,15 +181,15 @@ def test_maybe_upload_and_export_defaults_to_no(capsys):
 
 
 def test_maybe_upload_and_export_skips_without_recording():
-    """Should not prompt if no recording.mov exists."""
+    """Without recording.mov, should prompt for export only (not YouTube)."""
     from puppeteer.orchestrator import _maybe_upload_and_export
 
     with tempfile.TemporaryDirectory() as tmpdir:
         game_dir = Path(tmpdir)
         project_root = Path(tmpdir)
-        with patch("builtins.input") as mock_input:
+        with patch("builtins.input", return_value="n") as mock_input:
             _maybe_upload_and_export(game_dir, project_root)
-        mock_input.assert_not_called()
+        mock_input.assert_called_once()
 
 
 def test_maybe_upload_and_export_reprompts_on_bad_input(capsys):
