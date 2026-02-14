@@ -16,7 +16,10 @@ public class DefaultActionTool {
             @Tool.Field(name = "success", type = "boolean", description = "Whether the action was executed successfully"),
             @Tool.Field(name = "action_type", type = "string", description = "The callback method that was handled"),
             @Tool.Field(name = "action_taken", type = "string", description = "Description of what was done (e.g. \"passed_priority\")"),
-            @Tool.Field(name = "error", type = "string", description = "Error message")
+            @Tool.Field(name = "error", type = "string", description = "Error message"),
+            @Tool.Field(name = "game_over", type = "boolean", description = "Whether the game has ended"),
+            @Tool.Field(name = "player_dead", type = "boolean", description = "Whether you died"),
+            @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check")
         }
     )
     public static Map<String, Object> execute(BridgeCallbackHandler handler) {

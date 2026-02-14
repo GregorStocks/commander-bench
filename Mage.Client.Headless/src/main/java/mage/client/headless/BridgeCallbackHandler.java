@@ -160,7 +160,8 @@ public class BridgeCallbackHandler {
     // Lost callback recovery: if we're stuck with no pendingAction and no tracked response,
     // the server may have sent a callback we never received. Send a speculative pass to nudge.
     private volatile long lastStallNudgeAt = 0;
-    private static final long STALL_NUDGE_MS = 25_000;
+    private static final long STALL_NUDGE_MS = 10_000; // speculative nudge interval (fresh pass, not subject to 30s server timeout)
+    private static final long STALL_NUDGE_FALLBACK_MS = 60_000; // nudge even without transport evidence after 60s
     private static final ZoneId LOG_TZ = ZoneId.of("America/Los_Angeles");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
@@ -407,6 +408,7 @@ public class BridgeCallbackHandler {
         if (action == null) {
             result.put("success", false);
             result.put("error", "No pending action");
+            attachUnseenChat(result);
             return result;
         }
 
@@ -520,6 +522,7 @@ public class BridgeCallbackHandler {
             }
         }
 
+        attachUnseenChat(result);
         return result;
     }
 
@@ -2226,14 +2229,21 @@ public class BridgeCallbackHandler {
                     long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
                     boolean transportAlive = lastCallbackReceivedAt > startTime;
                     UUID gameId = currentGameId;
-                    if (idleTime > STALL_NUDGE_MS && transportAlive && gameId != null
-                            && activeGames.containsKey(gameId)
+                    if (gameId != null && activeGames.containsKey(gameId)
                             && now - lastStallNudgeAt > STALL_NUDGE_MS) {
-                        lastStallNudgeAt = now;
-                        logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
-                                + "no actionable callback for " + idleTime + "ms, sending speculative pass");
-                        session.sendPlayerBoolean(gameId, false);
-                        startTime = System.currentTimeMillis();
+                        if (idleTime > STALL_NUDGE_MS && transportAlive) {
+                            lastStallNudgeAt = now;
+                            logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
+                                    + "no actionable callback for " + idleTime + "ms, sending speculative pass");
+                            session.sendPlayerBoolean(gameId, false);
+                            startTime = System.currentTimeMillis();
+                        } else if (idleTime > STALL_NUDGE_FALLBACK_MS && !transportAlive) {
+                            lastStallNudgeAt = now;
+                            logger.warn("[" + client.getUsername() + "] Lost callback recovery (no transport): "
+                                    + "absolute silence for " + idleTime + "ms, sending speculative pass");
+                            session.sendPlayerBoolean(gameId, false);
+                            startTime = System.currentTimeMillis();
+                        }
                     }
                 }
             }

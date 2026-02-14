@@ -223,3 +223,181 @@ async def test_prefetch_game_over():
     session.call_tool = AsyncMock(return_value=_mock_tool_result('{"game_over": true}'))
     msg = await _prefetch_first_action(session)
     assert "over" in msg.lower()
+
+
+# --- consecutive pass_priority error tests ---
+
+
+def _make_llm_response(tool_name: str, args: str) -> MagicMock:
+    """Create a mock LLM response that requests a single tool call."""
+    tool_call = MagicMock()
+    tool_call.id = f"call_{id(tool_call)}"
+    tool_call.function.name = tool_name
+    tool_call.function.arguments = args
+
+    choice = MagicMock()
+    choice.finish_reason = "tool_calls"
+    choice.message.tool_calls = [tool_call]
+    choice.message.content = None
+
+    response = MagicMock()
+    response.choices = [choice]
+    response.usage = MagicMock(prompt_tokens=10, completion_tokens=5)
+    return response
+
+
+_BAD_PASS_ARGS = '{"yield_until":"my_turn","yield_until_step":"draw"}'
+_PASS_ERROR = '{"error": "yield_until and yield_until_step are mutually exclusive"}'
+_PASS_OK = '{"action_pending": false, "stop_reason": "passed"}'
+_TOOLS = [{"type": "function", "function": {"name": "pass_priority", "parameters": {}}}]
+
+
+@pytest.mark.asyncio
+async def test_repeated_pass_error_forces_plain_pass():
+    """After 3 identical pass_priority errors, pilot forces a plain pass."""
+    session = MagicMock()
+    tool_calls = []
+    pass_call_count = 0
+
+    async def fake_call_tool(name, args):
+        nonlocal pass_call_count
+        tool_calls.append((name, dict(args) if args else {}))
+        if name == "pass_priority":
+            pass_call_count += 1
+            if pass_call_count == 1:  # prefetch
+                return _mock_tool_result('{"action_pending": true, "action_type": "GAME_SELECT"}')
+            if pass_call_count in (2, 3, 4):  # LLM turns 1-3: error
+                return _mock_tool_result(_PASS_ERROR)
+            if pass_call_count == 5:  # forced plain pass
+                return _mock_tool_result(_PASS_OK)
+            return _mock_tool_result('{"game_over": true}')  # exit
+        if name == "get_action_choices":
+            return _mock_tool_result('{"action_type": "GAME_SELECT", "message": "Choose"}')
+        return _mock_tool_result("{}")
+
+    session.call_tool = AsyncMock(side_effect=fake_call_tool)
+
+    bad_pass = _make_llm_response("pass_priority", _BAD_PASS_ARGS)
+    clean_pass = _make_llm_response("pass_priority", "{}")
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(side_effect=[bad_pass, bad_pass, bad_pass, clean_pass])
+
+    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock):
+        await run_pilot_loop(
+            session=session,
+            client=client,
+            model="test-model",
+            system_prompt="You are a test.",
+            tools=_TOOLS,
+            username="test-player",
+        )
+
+    # Verify the forced plain pass was called (pass_priority with empty args)
+    pass_calls = [(n, a) for n, a in tool_calls if n == "pass_priority"]
+    # pass_calls[0] = prefetch ({}), [1-3] = LLM errors (bad args), [4] = forced ({})
+    assert len(pass_calls) >= 5
+    assert pass_calls[4] == ("pass_priority", {})
+
+
+@pytest.mark.asyncio
+async def test_different_pass_errors_dont_trigger_forced_pass():
+    """Alternating between different errors should not trigger forced pass."""
+    session = MagicMock()
+    forced_pass_count = 0
+    pass_call_count = 0
+    error_a = '{"error": "error A"}'
+    error_b = '{"error": "error B"}'
+
+    async def fake_call_tool(name, args):
+        nonlocal pass_call_count, forced_pass_count
+        if name == "pass_priority":
+            pass_call_count += 1
+            # Detect forced passes: they come with empty args after an error sequence
+            if not args or args == {}:
+                if pass_call_count > 1:  # not prefetch
+                    forced_pass_count += 1
+            if pass_call_count == 1:  # prefetch
+                return _mock_tool_result('{"action_pending": true, "action_type": "GAME_SELECT"}')
+            if pass_call_count > 5:
+                return _mock_tool_result('{"game_over": true}')
+            # Alternate between two different errors
+            if pass_call_count % 2 == 0:
+                return _mock_tool_result(error_a)
+            return _mock_tool_result(error_b)
+        if name == "get_action_choices":
+            return _mock_tool_result('{"action_type": "GAME_SELECT", "message": "Choose"}')
+        return _mock_tool_result("{}")
+
+    session.call_tool = AsyncMock(side_effect=fake_call_tool)
+
+    bad_pass = _make_llm_response("pass_priority", '{"yield_until":"bad"}')
+    # Use yield_until for the exit call so it's distinguishable from forced {}
+    exit_pass = _make_llm_response("pass_priority", '{"yield_until":"my_turn"}')
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(side_effect=[bad_pass, bad_pass, bad_pass, bad_pass, exit_pass])
+
+    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock):
+        await run_pilot_loop(
+            session=session,
+            client=client,
+            model="test-model",
+            system_prompt="You are a test.",
+            tools=_TOOLS,
+            username="test-player",
+        )
+
+    # No forced plain pass should have been made (errors alternate, never 3 identical)
+    assert forced_pass_count == 0
+
+
+@pytest.mark.asyncio
+async def test_successful_pass_resets_error_counter():
+    """A successful pass between errors should reset the consecutive counter."""
+    session = MagicMock()
+    forced_pass_count = 0
+    pass_call_count = 0
+
+    async def fake_call_tool(name, args):
+        nonlocal pass_call_count, forced_pass_count
+        if name == "pass_priority":
+            pass_call_count += 1
+            if not args or args == {}:
+                if pass_call_count > 1:  # not prefetch
+                    forced_pass_count += 1
+            if pass_call_count == 1:  # prefetch
+                return _mock_tool_result('{"action_pending": true, "action_type": "GAME_SELECT"}')
+            if pass_call_count in (2, 3):  # 2 errors
+                return _mock_tool_result(_PASS_ERROR)
+            if pass_call_count == 4:  # success resets counter
+                return _mock_tool_result('{"action_pending": true, "stop_reason": "playable_cards"}')
+            if pass_call_count in (5, 6):  # 2 more errors (not 3 consecutive)
+                return _mock_tool_result(_PASS_ERROR)
+            return _mock_tool_result('{"game_over": true}')
+        if name == "get_action_choices":
+            return _mock_tool_result('{"action_type": "GAME_SELECT", "message": "Choose"}')
+        return _mock_tool_result("{}")
+
+    session.call_tool = AsyncMock(side_effect=fake_call_tool)
+
+    bad_pass = _make_llm_response("pass_priority", _BAD_PASS_ARGS)
+    # Use yield_until for the "ok" calls so they're distinguishable from forced {}
+    ok_pass = _make_llm_response("pass_priority", '{"yield_until":"my_turn"}')
+
+    client = MagicMock()
+    # 2 errors, 1 success, 2 errors, then game_over
+    client.chat.completions.create = AsyncMock(side_effect=[bad_pass, bad_pass, ok_pass, bad_pass, bad_pass, ok_pass])
+
+    with patch("puppeteer.pilot.auto_pass_loop", new_callable=AsyncMock):
+        await run_pilot_loop(
+            session=session,
+            client=client,
+            model="test-model",
+            system_prompt="You are a test.",
+            tools=_TOOLS,
+            username="test-player",
+        )
+
+    # No forced plain pass should have been made (never hit 3 consecutive)
+    assert forced_pass_count == 0

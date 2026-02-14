@@ -420,6 +420,9 @@ async def run_pilot_loop(
     consecutive_timeouts = 0
     turns_without_progress = 0  # LLM turns without a successful game action
     MAX_TURNS_WITHOUT_PROGRESS = 20
+    consecutive_pass_errors = 0  # consecutive identical pass_priority errors
+    last_pass_error_msg = ""
+    MAX_CONSECUTIVE_PASS_ERRORS = 3
     game_start = time.monotonic()
     # Render caching: reuse rendered prefix between full re-renders to improve
     # prompt cache hit rates.  Only re-render every RENDER_INTERVAL iterations.
@@ -633,8 +636,34 @@ async def run_pilot_loop(
                                 return
                             if result_data.get("action_pending"):
                                 turn_had_actionable_opportunity = True
+                                consecutive_pass_errors = 0
+                                last_pass_error_msg = ""
                             if result_data.get("error"):
                                 turn_had_actionable_opportunity = True
+                                err_msg = result_data["error"]
+                                if err_msg == last_pass_error_msg:
+                                    consecutive_pass_errors += 1
+                                else:
+                                    consecutive_pass_errors = 1
+                                    last_pass_error_msg = err_msg
+                                if consecutive_pass_errors >= MAX_CONSECUTIVE_PASS_ERRORS:
+                                    _log(
+                                        f"[pilot] {consecutive_pass_errors} consecutive identical "
+                                        f"pass_priority errors, forcing plain pass"
+                                    )
+                                    if game_log:
+                                        game_log.emit(
+                                            "forced_pass",
+                                            reason="repeated_pass_error",
+                                            error=err_msg,
+                                            count=consecutive_pass_errors,
+                                        )
+                                    result_text = await execute_tool(session, "pass_priority", {})
+                                    consecutive_pass_errors = 0
+                                    last_pass_error_msg = ""
+                            else:
+                                consecutive_pass_errors = 0
+                                last_pass_error_msg = ""
                         except (json.JSONDecodeError, TypeError):
                             pass
 
