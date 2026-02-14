@@ -270,6 +270,7 @@ def _print_game_summary(game_dir: Path) -> None:
                 if "Game over:" in line:
                     game_over_found = True
                     print(f"  {line.strip()}")
+                    break  # Only first game_over per log (client may join next game)
         except OSError:
             pass
 
