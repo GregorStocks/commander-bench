@@ -307,9 +307,56 @@ def _print_game_summary(game_dir: Path) -> None:
     if not game_over_found:
         print("  Game did not finish (killed or disconnected)")
 
-    # Print per-player costs
+    # Extract turn count from game events
+    max_turn = 0
+    events_file = game_dir / "game_events.jsonl"
+    if events_file.exists():
+        try:
+            import re
+
+            turn_pattern = re.compile(r"TURN (\d+) for ")
+            for line in events_file.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                msg = event.get("message", "")
+                m = turn_pattern.search(msg)
+                if m:
+                    max_turn = max(max_turn, int(m.group(1)))
+        except OSError:
+            pass
+    if max_turn > 0:
+        print(f"  Turns: {max_turn}")
+
+    # Count actions per player from LLM JSONL files and collect costs
+    llm_files = sorted(game_dir.glob("*_llm.jsonl"))
+    player_actions: dict[str, int] = {}
+    for llm_file in llm_files:
+        player = llm_file.stem.replace("_llm", "")
+        actions = 0
+        try:
+            for line in llm_file.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("type") == "llm_response" and entry.get("tool_calls"):
+                    actions += len(entry["tool_calls"])
+        except OSError:
+            pass
+        if actions > 0:
+            player_actions[player] = actions
+
+    # Print per-player costs and actions
     cost_files = sorted(game_dir.glob("*_cost.json"))
-    if cost_files:
+    if cost_files or player_actions:
         print()
         total_cost = 0.0
         for cost_file in cost_files:
@@ -318,9 +365,15 @@ def _print_game_summary(game_dir: Path) -> None:
                 cost = data.get("cost_usd", 0.0)
                 player = cost_file.stem.replace("_cost", "")
                 total_cost += cost
-                print(f"  {player}: ${cost:.4f}")
+                actions_str = ""
+                if player in player_actions:
+                    actions_str = f" ({player_actions.pop(player)} actions)"
+                print(f"  {player}: ${cost:.4f}{actions_str}")
             except (OSError, json.JSONDecodeError):
                 pass
+        # Print any players with actions but no cost file (shouldn't happen, but just in case)
+        for player, actions in player_actions.items():
+            print(f"  {player}: {actions} actions")
         print(f"  Total: ${total_cost:.4f}")
 
     print("=" * 60 + "\n")

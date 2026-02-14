@@ -241,6 +241,49 @@ def test_print_game_summary_spectator_crashed(capsys):
         assert "did not finish" in output
 
 
+def test_print_game_summary_turns_and_actions(capsys):
+    """Summary should show turn count and per-player action counts."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        # Game events with turn markers
+        events = [
+            json.dumps({"type": "game_action", "message": "TURN 1 for Alice (20 - 20)"}),
+            json.dumps({"type": "game_action", "message": "TURN 2 for Bob (20 - 18)"}),
+            json.dumps({"type": "game_action", "message": "TURN 3 for Alice (15 - 18)"}),
+            json.dumps({"type": "game_over", "message": "Alice wins"}),
+        ]
+        (game_dir / "game_events.jsonl").write_text("\n".join(events) + "\n")
+        # LLM JSONL with tool calls
+        alice_llm = [
+            json.dumps({"type": "game_start", "player": "Alice"}),
+            json.dumps({"type": "llm_response", "player": "Alice", "tool_calls": [{"name": "pass_priority"}]}),
+            json.dumps(
+                {
+                    "type": "llm_response",
+                    "player": "Alice",
+                    "tool_calls": [{"name": "get_action_choices"}, {"name": "choose_action"}],
+                }
+            ),
+        ]
+        (game_dir / "Alice_llm.jsonl").write_text("\n".join(alice_llm) + "\n")
+        bob_llm = [
+            json.dumps({"type": "game_start", "player": "Bob"}),
+            json.dumps({"type": "llm_response", "player": "Bob", "tool_calls": [{"name": "pass_priority"}]}),
+        ]
+        (game_dir / "Bob_llm.jsonl").write_text("\n".join(bob_llm) + "\n")
+        # Cost files
+        (game_dir / "Alice_cost.json").write_text(json.dumps({"cost_usd": 0.05}))
+        (game_dir / "Bob_cost.json").write_text(json.dumps({"cost_usd": 0.03}))
+
+        _print_game_summary(game_dir)
+
+        output = capsys.readouterr().out
+        assert "Turns: 3" in output
+        assert "Alice: $0.0500 (3 actions)" in output
+        assert "Bob: $0.0300 (1 actions)" in output
+        assert "Total: $0.0800" in output
+
+
 def test_write_error_log_combines():
     """Should combine per-player error logs into errors.log."""
     with tempfile.TemporaryDirectory() as tmpdir:
