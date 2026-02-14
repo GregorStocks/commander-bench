@@ -1,0 +1,10 @@
+{
+  "title": "Card hover popup can be clipped by viewport edges",
+  "description": "When hovering over cards in the game replay viewer, the enlarged card popup appears in a fixed position relative to the card. For cards near the bottom or right edge of the viewport, the popup extends beyond the visible area and gets clipped. The popup should detect proximity to viewport edges and reposition itself (e.g. show above instead of below, or to the left instead of right) to stay fully visible. See game-renderer.js hover logic.",
+  "status": "open",
+  "priority": 4,
+  "type": "task",
+  "labels": ["website", "ui"],
+  "created_at": "2026-02-14T12:00:00.000000-08:00",
+  "updated_at": "2026-02-14T12:00:00.000000-08:00"
+}

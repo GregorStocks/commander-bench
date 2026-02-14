@@ -1,0 +1,10 @@
+{
+  "title": "Watch nav link navigates internally instead of opening YouTube in new tab",
+  "description": "The 'Watch' link in the site nav points to an external YouTube playlist URL, but it renders as a plain <a> tag without target=\"_blank\". Clicking it navigates the current tab away from the site. It should open in a new tab and ideally have a visual indicator that it's an external link (e.g. an icon or subtle styling). See website/src/layouts/Base.astro line 16.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "labels": ["website", "ui"],
+  "created_at": "2026-02-14T12:00:00.000000-08:00",
+  "updated_at": "2026-02-14T12:00:00.000000-08:00"
+}
