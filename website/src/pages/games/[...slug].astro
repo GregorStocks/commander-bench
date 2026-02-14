@@ -792,27 +792,30 @@ const { slug } = Astro.params;
         return true;
       });
 
-      // LLM events
+      // LLM events — window forward: show events in [curTs, nextTs) so thinking
+      // appears at the snapshot the LLM was looking at, not the one after its action.
       var hasLlmEvents = game.llmEvents && game.llmEvents.length > 0;
       var relevantLlm = [];
       if (hasLlmEvents && showLlm) {
+        var nextSnap = index < game.snapshots.length - 1 ? game.snapshots[index + 1] : null;
+        var curTs = snap.ts || "";
+        var nextTs = nextSnap ? (nextSnap.ts || "") : "";
         if (showAllLlm) {
-          // Show all LLM events up to current snapshot timestamp
-          var curTs = snap.ts || "";
+          // Show all LLM events associated with this or earlier snapshots
           relevantLlm = game.llmEvents.filter(function (e) {
-            if (curTs && e.ts > curTs) return false;
+            if (nextTs && e.ts >= nextTs) return false;
             if (filterPlayer && e.player !== filterPlayer) return false;
             return true;
           });
         } else {
           // Default: windowed to current step
-          var prevTs = prevSnap ? (prevSnap.ts || "") : "";
-          var curTs = snap.ts || "";
-          if (curTs) {
-            relevantLlm = game.llmEvents.filter(function (e) {
-              return e.ts > prevTs && e.ts <= curTs;
-            });
-          }
+          relevantLlm = game.llmEvents.filter(function (e) {
+            if (!prevSnap) {
+              // First snapshot: include all events before nextTs
+              return !nextTs || e.ts < nextTs;
+            }
+            return e.ts >= curTs && (!nextTs || e.ts < nextTs);
+          });
         }
       }
 
