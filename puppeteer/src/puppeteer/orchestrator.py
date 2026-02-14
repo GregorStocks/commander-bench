@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -15,11 +16,12 @@ from puppeteer.deck_choice import resolve_choice_decks
 from puppeteer.game_log import merge_game_log, read_decklist
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
-from puppeteer.port import find_available_overlay_port, find_available_port, wait_for_port
+from puppeteer.port import PortReservation, find_available_overlay_port, find_available_port, wait_for_port
 from puppeteer.process_manager import ProcessManager
 from puppeteer.xml_config import modify_server_config
 
 _SPECTATOR_TABLE_READY = "AI Puppeteer: waiting for"
+_SPECTATOR_GAME_STARTED = "AI Puppeteer: all players joined"
 
 
 def _git(cmd: str, cwd: Path) -> str:
@@ -54,6 +56,25 @@ def _wait_for_spectator_table(log_path: Path, proc: subprocess.Popen, timeout: i
                 return
         time.sleep(2)
     raise TimeoutError(f"Spectator did not create a table within {timeout}s — check {log_path}")
+
+
+def _wait_for_game_start(log_path: Path, proc: subprocess.Popen, timeout: int = 600) -> None:
+    """Block until the spectator log indicates all players have joined and the game started.
+
+    Used in parallel mode to ensure a game's table has left the WAITING state
+    before starting the next game's spectator.  This prevents headless clients
+    from joining the wrong table.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return  # Process exited — game may have started and ended quickly
+        if log_path.exists():
+            text = log_path.read_text()
+            if _SPECTATOR_GAME_STARTED in text:
+                return
+        time.sleep(2)
+    raise TimeoutError(f"Game did not start within {timeout}s — check {log_path}")
 
 
 def _missing_llm_api_keys(config: Config) -> list[str]:
@@ -340,6 +361,12 @@ def parse_args() -> Config:
         default="127.0.0.1",
         help="Local overlay bind host (default: 127.0.0.1)",
     )
+    parser.add_argument(
+        "--games",
+        type=int,
+        default=1,
+        help="Number of parallel games on the same server (default: 1)",
+    )
     args = parser.parse_args()
 
     # Determine record output path
@@ -355,6 +382,7 @@ def parse_args() -> Config:
         overlay=not args.no_overlay,
         overlay_port=args.overlay_port,
         overlay_host=args.overlay_host,
+        num_games=args.games,
     )
     return config
 
@@ -788,15 +816,253 @@ def _maybe_upload_and_export(game_dir: Path, project_root: Path) -> None:
         print(f"  Warning: website export failed: {e}")
 
 
+@dataclass
+class GameSession:
+    """State for a single game within a parallel run."""
+
+    index: int
+    game_dir: Path
+    config: Config
+    spectator_proc: subprocess.Popen | None = None
+    pilot_procs: list[tuple[str, subprocess.Popen]] = field(default_factory=list)
+    overlay_reservation: PortReservation | None = None
+
+
+def _setup_game(
+    index: int,
+    num_games: int,
+    base_config: Config,
+    pm: ProcessManager,
+    project_root: Path,
+    log_dir: Path,
+    timestamp: str,
+) -> GameSession:
+    """Set up a single game: create dir, load config, start spectator + clients.
+
+    For parallel runs (num_games > 1), each game gets a fresh Config with
+    independent random resolution (different decks, presets, personalities).
+    Games are started sequentially (staggered) so headless clients join the
+    correct table.
+    """
+    batch = num_games > 1
+    game_label = f"Game {index + 1}/{num_games}: " if batch else ""
+
+    # Create a fresh config for each game so random resolution is independent.
+    # For single-game runs, reuse the base_config directly (already loaded).
+    if batch:
+        game_config = Config(
+            config_file=base_config.config_file,
+            streaming=base_config.streaming,
+            record=False,  # Validated earlier: --record is an error with --games
+            overlay=False,  # Overlay disabled for parallel mode
+            overlay_port=base_config.overlay_port,
+            overlay_host=base_config.overlay_host,
+            num_games=num_games,
+        )
+        game_config.load_config()
+        game_config.port = base_config.port
+        game_config.timestamp = timestamp
+    else:
+        game_config = base_config
+
+    # Create game directory
+    suffix = f"_g{index + 1}" if batch else ""
+    game_dir = log_dir / f"game_{timestamp}{suffix}"
+    game_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write provenance manifest
+    manifest = {
+        "timestamp": timestamp,
+        "branch": _git("rev-parse --abbrev-ref HEAD", project_root),
+        "commit": _git("rev-parse HEAD", project_root),
+        "commit_log": _git("log --oneline -10", project_root).splitlines(),
+        "command": sys.argv,
+        "config_file": str(game_config.config_file) if game_config.config_file else None,
+    }
+    if batch:
+        manifest["game_index"] = index + 1
+        manifest["num_games"] = num_games
+    (game_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+    # Copy config into game directory for reference
+    if game_config.config_file:
+        shutil.copy2(game_config.config_file, game_dir / "config.json")
+
+    # Resolve decks
+    resolve_choice_decks(game_config.pilot_players, project_root, game_config.deck_type)
+    game_config.resolve_random_decks(project_root)
+
+    # Write game metadata
+    _write_game_meta(game_dir, game_config, project_root)
+
+    # Overlay port reservation (single-game only)
+    overlay_reservation: PortReservation | None = None
+    if not batch and game_config.streaming and game_config.overlay:
+        requested_overlay_port = game_config.overlay_port
+        overlay_reservation = find_available_overlay_port(requested_overlay_port)
+        game_config.overlay_port = overlay_reservation.port
+        if game_config.overlay_port != requested_overlay_port:
+            print(f"Overlay port {requested_overlay_port} unavailable, using {game_config.overlay_port}")
+
+    # Log paths
+    spectator_log = game_dir / "spectator.log"
+    print(f"{game_label}Game logs: {game_dir}")
+    print(f"{game_label}Spectator log: {spectator_log}")
+    if game_config.record:
+        record_path = game_config.record_output or (game_dir / "recording.mov")
+        print(f"{game_label}Recording to: {record_path}")
+    if game_config.streaming and game_config.overlay:
+        base = f"http://{game_config.overlay_host}:{game_config.overlay_port}"
+        print(f"{game_label}Overlay API: {base}/api/state")
+        print(f"{game_label}Live viewer: {base}/live")
+        print(f"{game_label}OBS source:  {base}/live?positions=1&obs=1")
+
+    # Choose spectator client type
+    if game_config.streaming:
+        print(f"{game_label}Starting streaming spectator client...")
+        start_spectator_client = start_streaming_client
+    else:
+        start_spectator_client = start_gui_client
+
+    # Start spectator
+    if game_config.streaming:
+        spectator_proc = start_spectator_client(pm, project_root, game_config, spectator_log, game_dir=game_dir)
+    else:
+        spectator_proc = start_spectator_client(pm, project_root, game_config, spectator_log)
+
+    session = GameSession(
+        index=index,
+        game_dir=game_dir,
+        config=game_config,
+        spectator_proc=spectator_proc,
+        overlay_reservation=overlay_reservation,
+    )
+
+    # Count headless clients
+    headless_count = (
+        len(game_config.sleepwalker_players)
+        + len(game_config.pilot_players)
+        + len(game_config.potato_players)
+        + len(game_config.staller_players)
+    )
+
+    if headless_count > 0:
+        _wait_for_spectator_table(spectator_log, spectator_proc, timeout=300)
+
+        # Release overlay reservation now that spectator has bound it
+        if overlay_reservation is not None:
+            overlay_reservation.release()
+            session.overlay_reservation = None
+
+        # Start headless clients
+        for player in game_config.sleepwalker_players:
+            log_path = game_dir / f"{player.name}_mcp.log"
+            print(f"{game_label}Sleepwalker ({player.name}) log: {log_path}")
+            start_sleepwalker_client(pm, project_root, game_config, player.name, player.deck, log_path)
+
+        for player in game_config.pilot_players:
+            log_path = game_dir / f"{player.name}_pilot.log"
+            print(f"{game_label}Pilot ({player.name}) log: {log_path}")
+            proc = start_pilot_client(pm, project_root, game_config, player, log_path, game_dir=game_dir)
+            session.pilot_procs.append((player.name, proc))
+
+        for player in game_config.potato_players:
+            log_path = game_dir / f"{player.name}_mcp.log"
+            print(f"{game_label}Potato ({player.name}) log: {log_path}")
+            start_potato_client(pm, project_root, game_config, player.name, player.deck, log_path)
+
+        for player in game_config.staller_players:
+            log_path = game_dir / f"{player.name}_mcp.log"
+            print(f"{game_label}Staller ({player.name}) log: {log_path}")
+            start_potato_client(
+                pm, project_root, game_config, player.name, player.deck, log_path, personality="staller"
+            )
+
+        # In parallel mode, wait for the game to actually start (table leaves
+        # WAITING state) before returning.  This prevents the next game's
+        # headless clients from joining this table by mistake.
+        if batch:
+            _wait_for_game_start(spectator_log, spectator_proc)
+    else:
+        if overlay_reservation is not None:
+            overlay_reservation.release()
+            session.overlay_reservation = None
+
+    return session
+
+
+def _wait_for_all_games(
+    sessions: list[GameSession],
+    pm: ProcessManager,
+    poll_interval: float = 2.0,
+) -> dict[int, int]:
+    """Wait for all parallel games to complete.
+
+    Monitors spectators and pilots across all games.  If a pilot in any game
+    fails (non-zero exit), that game's spectator is terminated.  Other games
+    continue running.
+
+    Returns a mapping of game index to spectator exit code (-1 if killed due
+    to pilot failure).
+    """
+    results: dict[int, int] = {}
+    active = list(sessions)
+
+    while active:
+        time.sleep(poll_interval)
+        for session in list(active):
+            assert session.spectator_proc is not None
+
+            # Check spectator
+            spectator_rc = session.spectator_proc.poll()
+            if spectator_rc is not None:
+                results[session.index] = spectator_rc
+                active.remove(session)
+                continue
+
+            # Check pilots for failure
+            for name, pilot_proc in session.pilot_procs:
+                pilot_rc = pilot_proc.poll()
+                if pilot_rc is not None and pilot_rc != 0:
+                    print(f"\nGame {session.index + 1}: pilot '{name}' exited with code {pilot_rc} — aborting game.")
+                    session.spectator_proc.terminate()
+                    results[session.index] = -1
+                    active.remove(session)
+                    break
+
+    return results
+
+
+def _finalize_game(session: GameSession, project_root: Path, spectator_rc: int) -> None:
+    """Post-game processing for a single game session."""
+    game_label = f"Game {session.index + 1}: " if session.config.num_games > 1 else ""
+    _ensure_game_over_event(session.game_dir, spectator_rc)
+    _write_error_log(session.game_dir)
+    try:
+        merge_game_log(session.game_dir)
+        print(f"  {game_label}Merged game log: {session.game_dir / 'game.jsonl'}")
+    except Exception as e:
+        print(f"  {game_label}Warning: failed to merge game log: {e}")
+    _print_game_summary(session.game_dir)
+    if not session.config.skip_post_game_prompts:
+        _maybe_upload_and_export(session.game_dir, project_root)
+
+
 def main() -> int:
     """Main orchestrator for game lifecycle management."""
     config = parse_args()
     project_root = Path.cwd().resolve()
     pm = ProcessManager()
     port_reservation = None
-    overlay_reservation = None
+    sessions: list[GameSession] = []
+    batch = config.num_games > 1
 
     try:
+        # Validate parallel mode constraints
+        if batch and config.record:
+            print("ERROR: --record cannot be used with --games (recording is a single-game feature)")
+            return 2
+
         # Load player config as early as possible so invalid LLM setup fails fast.
         config.load_config()
         missing_llm_keys = _missing_llm_api_keys(config)
@@ -815,24 +1081,14 @@ def main() -> int:
             print("Recording requires streaming mode, enabling --streaming")
             config.streaming = True
 
-        # Create log directory structure:
-        #   ~/mage-logs/                       (top-level, persists across workspaces)
-        #   ~/mage-logs/game_TS/               (per-game directory)
+        # Parallel mode: force skip post-game prompts and disable overlay
+        if batch:
+            config.skip_post_game_prompts = True
+            config.overlay = False
+
+        # Create log directory
         log_dir = (project_root / config.log_dir).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
-        game_dir = log_dir / f"game_{config.timestamp}"
-        game_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write provenance manifest
-        manifest = {
-            "timestamp": config.timestamp,
-            "branch": _git("rev-parse --abbrev-ref HEAD", project_root),
-            "commit": _git("rev-parse HEAD", project_root),
-            "commit_log": _git("log --oneline -10", project_root).splitlines(),
-            "command": sys.argv,
-            "config_file": str(config.config_file) if config.config_file else None,
-        }
-        (game_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
         # Compile if needed
         if not compile_project(project_root, streaming=config.streaming):
@@ -851,50 +1107,24 @@ def main() -> int:
         config.port = port_reservation.port
         print(f"Using port {config.port}")
 
-        # Pick an available overlay port for this run to support parallel spectators.
-        if config.streaming and config.overlay:
-            requested_overlay_port = config.overlay_port
-            overlay_reservation = find_available_overlay_port(requested_overlay_port)
-            config.overlay_port = overlay_reservation.port
-            if config.overlay_port != requested_overlay_port:
-                print(f"Overlay port {requested_overlay_port} unavailable, using {config.overlay_port}")
+        # Generate server config (lives in first game's dir for N=1,
+        # or in the log_dir for parallel runs)
+        if batch:
+            server_config_path = log_dir / f"server_config_{config.timestamp}.xml"
+            server_log = log_dir / f"server_{config.timestamp}.log"
+        else:
+            first_game_dir = log_dir / f"game_{config.timestamp}"
+            first_game_dir.mkdir(parents=True, exist_ok=True)
+            server_config_path = first_game_dir / "server_config.xml"
+            server_log = first_game_dir / "server.log"
 
-        # Generate server config into game directory
-        server_config_path = game_dir / "server_config.xml"
         modify_server_config(
             source=project_root / "Mage.Server" / "config" / "config.xml",
             destination=server_config_path,
             port=config.port,
         )
 
-        # Set up log paths (all inside game directory)
-        server_log = game_dir / "server.log"
-        spectator_log = game_dir / "spectator.log"
-
-        # Update per-target "last-{tag}" symlink to point to this game directory
-        last_link = log_dir / f"last-{config.run_tag}"
-        last_link.unlink(missing_ok=True)
-        last_link.symlink_to(game_dir.name)
-
-        # Update per-branch symlink so agents can find their own recent runs
-        branch = _git("rev-parse --abbrev-ref HEAD", project_root)
-        if branch:
-            safe_branch = branch.replace("/", "-")
-            branch_link = log_dir / f"last-branch-{safe_branch}"
-            branch_link.unlink(missing_ok=True)
-            branch_link.symlink_to(game_dir.name)
-
-        print(f"Game logs: {game_dir}")
         print(f"Server log: {server_log}")
-        print(f"Spectator log: {spectator_log}")
-        if config.record:
-            record_path = config.record_output or (game_dir / "recording.mov")
-            print(f"Recording to: {record_path}")
-        if config.streaming and config.overlay:
-            base = f"http://{config.overlay_host}:{config.overlay_port}"
-            print(f"Overlay API: {base}/api/state")
-            print(f"Live viewer: {base}/live")
-            print(f"OBS source:  {base}/live?positions=1&obs=1")
 
         # Start server
         print("Starting XMage server...")
@@ -911,122 +1141,58 @@ def main() -> int:
 
         print("Server is ready!")
 
-        # Player config was already loaded above (passed to spectator/GUI via environment variable)
         if config.config_file:
             print(f"Using config: {config.config_file}")
-            # Copy config into game directory for reference
-            shutil.copy2(config.config_file, game_dir / "config.json")
 
-        resolve_choice_decks(config.pilot_players, project_root, config.deck_type)
-        config.resolve_random_decks(project_root)
-        _write_game_meta(game_dir, config, project_root)
+        if batch:
+            print(f"Starting {config.num_games} parallel games...")
 
-        # Choose which spectator client to start (streaming or regular GUI)
-        if config.streaming:
-            print("Starting streaming spectator client...")
-            start_spectator_client = start_streaming_client
+        # --- Per-game setup (staggered for parallel) ---
+        for i in range(config.num_games):
+            session = _setup_game(i, config.num_games, config, pm, project_root, log_dir, config.timestamp)
+            sessions.append(session)
+
+        # Bring the GUI window to the foreground on macOS (single game only)
+        if not batch:
+            bring_to_foreground_macos()
+
+        # Update symlinks to point to the last game directory
+        last_game_dir = sessions[-1].game_dir
+        if config.config_file:
+            last_link = log_dir / f"last-{config.run_tag}"
+            last_link.unlink(missing_ok=True)
+            last_link.symlink_to(last_game_dir.name)
+        branch = _git("rev-parse --abbrev-ref HEAD", project_root)
+        if branch:
+            safe_branch = branch.replace("/", "-")
+            branch_link = log_dir / f"last-branch-{safe_branch}"
+            branch_link.unlink(missing_ok=True)
+            branch_link.symlink_to(last_game_dir.name)
+
+        # --- Wait for all games to complete ---
+        if batch:
+            results = _wait_for_all_games(sessions, pm)
+            for session in sessions:
+                spectator_rc = results.get(session.index, -1)
+                _finalize_game(session, project_root, spectator_rc)
         else:
-            start_spectator_client = start_gui_client
-
-        # Count headless clients (sleepwalker, pilot, potato, staller)
-        headless_count = (
-            len(config.sleepwalker_players)
-            + len(config.pilot_players)
-            + len(config.potato_players)
-            + len(config.staller_players)
-        )
-
-        # Start spectator client first
-        if config.streaming:
-            spectator_proc = start_spectator_client(pm, project_root, config, spectator_log, game_dir=game_dir)
-        else:
-            spectator_proc = start_spectator_client(pm, project_root, config, spectator_log)
-
-        # Bring the GUI window to the foreground on macOS
-        bring_to_foreground_macos()
-
-        pilot_procs: list[tuple[str, subprocess.Popen]] = []
-        if headless_count > 0:
-            # Wait for spectator to create the table before starting headless
-            # clients.  The spectator logs a distinctive line once the table is
-            # ready to accept joins.  Polling for that line avoids a fixed
-            # delay that races against variable DB-init times.
-            _wait_for_spectator_table(spectator_log, spectator_proc, timeout=300)
-
-            # Spectator has bound the overlay port — release the reservation lock
-            if overlay_reservation is not None:
-                overlay_reservation.release()
-                overlay_reservation = None
-
-            # Start sleepwalker clients (MCP-based, Python controls bridge)
-            for player in config.sleepwalker_players:
-                log_path = game_dir / f"{player.name}_mcp.log"
-                print(f"Sleepwalker ({player.name}) log: {log_path}")
-                start_sleepwalker_client(pm, project_root, config, player.name, player.deck, log_path)
-
-            # Start pilot clients (LLM-based game player)
-            for player in config.pilot_players:
-                log_path = game_dir / f"{player.name}_pilot.log"
-                print(f"Pilot ({player.name}) log: {log_path}")
-                proc = start_pilot_client(pm, project_root, config, player, log_path, game_dir=game_dir)
-                pilot_procs.append((player.name, proc))
-
-            # Start potato clients (pure Java, auto-responds)
-            for player in config.potato_players:
-                log_path = game_dir / f"{player.name}_mcp.log"
-                print(f"Potato ({player.name}) log: {log_path}")
-                start_potato_client(pm, project_root, config, player.name, player.deck, log_path)
-
-            # Start staller clients (pure Java, intentionally slow auto-responders)
-            for player in config.staller_players:
-                log_path = game_dir / f"{player.name}_mcp.log"
-                print(f"Staller ({player.name}) log: {log_path}")
-                start_potato_client(
-                    pm,
-                    project_root,
-                    config,
-                    player.name,
-                    player.deck,
-                    log_path,
-                    personality="staller",
-                )
-
-            # Note: CPU players are handled by the GUI client/server
-        else:
-            # No headless clients — release overlay reservation now
-            if overlay_reservation is not None:
-                overlay_reservation.release()
-                overlay_reservation = None
-
-        # Wait for spectator client to exit, but abort if a pilot fails permanently
-        if pilot_procs:
-            spectator_rc = _wait_with_pilot_monitoring(spectator_proc, pilot_procs, pm)
-        else:
-            spectator_rc = spectator_proc.wait()
-
-        # Ensure a game_over event exists in game_events.jsonl.
-        # When the game ends via time limit or window close, XMage may not
-        # send a GAME_OVER callback, leaving the event log without a
-        # termination record.  Pass the exit code so the reason can
-        # distinguish "user closed window" (exit 0) from crashes.
-        _ensure_game_over_event(game_dir, spectator_rc)
-
-        _write_error_log(game_dir)
-        try:
-            merge_game_log(game_dir)
-            print(f"  Merged game log: {game_dir / 'game.jsonl'}")
-        except Exception as e:
-            print(f"  Warning: failed to merge game log: {e}")
-        _print_game_summary(game_dir)
-        if not config.skip_post_game_prompts:
-            _maybe_upload_and_export(game_dir, project_root)
+            # Single game: use existing wait logic
+            session = sessions[0]
+            assert session.spectator_proc is not None
+            if session.pilot_procs:
+                spectator_rc = _wait_with_pilot_monitoring(session.spectator_proc, session.pilot_procs, pm)
+            else:
+                spectator_rc = session.spectator_proc.wait()
+            _finalize_game(session, project_root, spectator_rc)
 
         return 0
     finally:
         # Release any held port reservations (safety net for early exits)
         if port_reservation is not None:
             port_reservation.release()
-        if overlay_reservation is not None:
-            overlay_reservation.release()
+        # Release any overlay reservations held by game sessions
+        for session in sessions:
+            if session.overlay_reservation is not None:
+                session.overlay_reservation.release()
         # Always cleanup child processes, even on exceptions
         pm.cleanup()

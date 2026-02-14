@@ -8,10 +8,14 @@ from unittest.mock import MagicMock, patch
 
 from puppeteer.config import Config, PilotPlayer
 from puppeteer.orchestrator import (
+    GameSession,
     _ensure_game_over_event,
+    _finalize_game,
     _git,
     _missing_llm_api_keys,
     _print_game_summary,
+    _wait_for_all_games,
+    _wait_for_game_start,
     _wait_with_pilot_monitoring,
     _write_error_log,
 )
@@ -335,3 +339,116 @@ def test_pilot_monitoring_pilot_exits_zero_ignored(mock_sleep):
 
     assert rc == 0
     pm.cleanup.assert_not_called()
+
+
+# --- _wait_for_game_start tests ---
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_wait_for_game_start_finds_marker(mock_sleep):
+    """Should return once the spectator log contains the game-started marker."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_path = Path(tmpdir) / "spectator.log"
+        log_path.write_text("AI Puppeteer: all players joined, starting match for table abc\n")
+        proc = _mock_proc([None])  # Still running
+
+        _wait_for_game_start(log_path, proc, timeout=5)
+        # Should not raise
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_wait_for_game_start_process_exited(mock_sleep):
+    """Should return immediately if the spectator process has already exited."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_path = Path(tmpdir) / "spectator.log"
+        proc = _mock_proc([0])  # Already exited
+
+        _wait_for_game_start(log_path, proc, timeout=5)
+        # Should not raise — game may have started and ended quickly
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_wait_for_game_start_timeout(mock_sleep):
+    """Should raise TimeoutError if the marker never appears."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        log_path = Path(tmpdir) / "spectator.log"
+        log_path.write_text("Some other log line\n")
+        proc = _mock_proc([None] * 100)  # Never exits
+
+        import pytest
+
+        with patch("puppeteer.orchestrator.time.monotonic", side_effect=[0, 0, 100]), pytest.raises(TimeoutError):
+            _wait_for_game_start(log_path, proc, timeout=5)
+
+
+# --- _wait_for_all_games tests ---
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_wait_for_all_games_all_complete(mock_sleep):
+    """All games complete normally — returns their exit codes."""
+    s1 = GameSession(index=0, game_dir=Path("/fake/g1"), config=Config())
+    s1.spectator_proc = _mock_proc([None, 0])
+    s2 = GameSession(index=1, game_dir=Path("/fake/g2"), config=Config())
+    s2.spectator_proc = _mock_proc([None, None, 0])
+
+    pm = MagicMock()
+    results = _wait_for_all_games([s1, s2], pm)
+
+    assert results == {0: 0, 1: 0}
+
+
+@patch("puppeteer.orchestrator.time.sleep")
+def test_wait_for_all_games_pilot_fails(mock_sleep):
+    """A pilot failure should terminate that game's spectator but not others."""
+    s1 = GameSession(index=0, game_dir=Path("/fake/g1"), config=Config())
+    s1.spectator_proc = _mock_proc([None, None, None, 0])
+    s1.pilot_procs = []
+
+    s2 = GameSession(index=1, game_dir=Path("/fake/g2"), config=Config())
+    s2.spectator_proc = MagicMock()
+    # Spectator for s2 never exits on its own — will be terminated
+    s2.spectator_proc.poll = MagicMock(side_effect=[None, None, None, None])
+    s2.pilot_procs = [("bob", _mock_proc([None, 3]))]
+
+    pm = MagicMock()
+    results = _wait_for_all_games([s1, s2], pm)
+
+    assert results[0] == 0
+    assert results[1] == -1
+    s2.spectator_proc.terminate.assert_called_once()
+
+
+# --- _finalize_game tests ---
+
+
+def test_finalize_game_writes_logs():
+    """_finalize_game should write error log and ensure game_over event."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        game_dir = Path(tmpdir)
+        (game_dir / "alice_errors.log").write_text("Some error\n")
+        events_file = game_dir / "game_events.jsonl"
+        events_file.write_text(json.dumps({"ts": "2024-01-01", "seq": 1, "type": "game_start"}) + "\n")
+
+        session = GameSession(index=0, game_dir=game_dir, config=Config())
+        _finalize_game(session, Path("/fake/root"), spectator_rc=0)
+
+        assert (game_dir / "errors.log").exists()
+        # game_over event should have been appended
+        lines = events_file.read_text().strip().splitlines()
+        assert any(json.loads(line).get("type") == "game_over" for line in lines)
+
+
+# --- Config num_games tests ---
+
+
+def test_config_num_games_default():
+    """Config should default to num_games=1."""
+    config = Config()
+    assert config.num_games == 1
+
+
+def test_config_num_games_set():
+    """num_games should be settable."""
+    config = Config(num_games=3)
+    assert config.num_games == 3

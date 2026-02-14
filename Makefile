@@ -84,6 +84,7 @@ website-build: leaderboard
 # Pass OUTPUT to specify recording path: make run OUTPUT=/path/to/video.mov
 # Overlay controls: make run ARGS="--overlay-port 18080"
 # Disable overlay: make run ARGS="--no-overlay"
+# Parallel games: make run CONFIG=commander-gauntlet GAMES=3
 CONFIG ?= standard-dumb
 .PHONY: run
 run: website-build
@@ -93,7 +94,8 @@ run: website-build
 	  *) CONFIG_PATH="configs/$$CONFIG_PATH.json" ;; \
 	esac; \
 	uv run --project puppeteer python -m puppeteer --streaming \
-	  --record$(if $(OUTPUT),=$(OUTPUT)) --config "$$CONFIG_PATH" $(ARGS)
+	  $(if $(GAMES),--games $(GAMES),--record$(if $(OUTPUT),=$(OUTPUT))) \
+	  --config "$$CONFIG_PATH" $(ARGS)
 
 # List available configs
 .PHONY: configs
