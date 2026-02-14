@@ -1,0 +1,10 @@
+{
+  "title": "Increase leaderboard minimum games threshold to 5",
+  "description": "Currently _MIN_GAMES = 3 in leaderboard.py. Once the combined leaderboard has over 100 games, increase the threshold to 5 to improve rating reliability. Models with fewer games have very high sigma and their ordinal ratings are essentially noise.",
+  "status": "open",
+  "priority": 4,
+  "type": "enhancement",
+  "labels": ["leaderboard"],
+  "created_at": "2026-02-14T00:00:00.000000-08:00",
+  "updated_at": "2026-02-14T00:00:00.000000-08:00"
+}
