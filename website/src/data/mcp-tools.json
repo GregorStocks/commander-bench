@@ -15,9 +15,24 @@
           "description": "Description of what was done (e.g. \"passed_priority\")",
           "type": "string"
         },
+        "game_over": {
+          "description": "Whether the game has ended",
+          "type": "boolean"
+        },
+        "recent_chat": {
+          "description": "Chat messages received since last check",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "error": {
           "description": "Error message",
           "type": "string"
+        },
+        "player_dead": {
+          "description": "Whether you died",
+          "type": "boolean"
         }
       }
     },
