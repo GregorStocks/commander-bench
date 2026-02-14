@@ -1385,7 +1385,9 @@ public class BridgeCallbackHandler {
                                     + " out of range, falling through to answer=" + answer + " for GAME_SELECT");
                             } else {
                                 return buildError(result, "index_out_of_range",
-                                    "Index " + index + " out of range (call get_action_choices first)", true, action, true);
+                                    "Index " + index + " is out of range"
+                                    + (choices != null ? " (valid: 0-" + (choices.size() - 1) + ")" : " (no choices loaded)")
+                                    + ". Call get_action_choices to see current options.", true, action, true);
                             }
                         } else {
                             Object chosen = choices.get(index);
@@ -1419,7 +1421,9 @@ public class BridgeCallbackHandler {
                             result.put("action_taken", answer ? "confirmed" : "passed_priority");
                         } else {
                             return buildError(result, "missing_param",
-                                "Provide 'index' to play a card or 'answer: false' to pass priority", true, action, true);
+                                "GAME_SELECT requires either index=N (from get_action_choices) to play a card, "
+                                + "or answer=false to pass priority. Call get_action_choices first to see available cards.",
+                                true, action, true);
                         }
                     }
                     break;
@@ -1439,7 +1443,9 @@ public class BridgeCallbackHandler {
                                     + " out of range, falling through to cancel for GAME_PLAY_MANA");
                             } else {
                                 return buildError(result, "index_out_of_range",
-                                    "Index " + index + " out of range (call get_action_choices first)", true, action, true);
+                                    "Index " + index + " is out of range"
+                                    + (choices != null ? " (valid: 0-" + (choices.size() - 1) + ")" : " (no choices loaded)")
+                                    + ". Call get_action_choices to see current options.", true, action, true);
                             }
                         } else {
                             Object manaChoice = choices.get(index);
@@ -1518,8 +1524,11 @@ public class BridgeCallbackHandler {
                         // infinite retry loops. For optional targets, return an error so
                         // the model can retry with a valid index or answer=false.
                         if (!required) {
+                            List<Object> targetChoices = lastChoices;
                             return buildError(result, "index_out_of_range",
-                                "Index " + index + " out of range (call get_action_choices first)", true, action, true);
+                                "Index " + index + " is out of range"
+                                + (targetChoices != null ? " (valid: 0-" + (targetChoices.size() - 1) + ")" : " (no choices loaded)")
+                                + ". Call get_action_choices to see current targets.", true, action, true);
                         }
                         logger.warn("[" + client.getUsername() + "] choose_action: index " + index
                             + " out of range for required GAME_TARGET (choices="
@@ -1561,13 +1570,17 @@ public class BridgeCallbackHandler {
                 case GAME_CHOOSE_ABILITY: {
                     if (index == null) {
                         return buildError(result, "missing_param",
-                            "Integer 'index' required for GAME_CHOOSE_ABILITY", true, action, true);
+                            "GAME_CHOOSE_ABILITY requires index=N. Call get_action_choices first to see "
+                            + "the available abilities, then choose_action with the index of the one you want.",
+                            true, action, true);
                     }
                     List<Object> abilityChoices = lastChoices; // snapshot volatile to prevent TOCTOU race
                     if (abilityChoices == null || index < 0 || index >= abilityChoices.size()) {
                         logChoiceOutOfRangeDiagnostic(method, index, abilityChoices);
                         return buildError(result, "index_out_of_range",
-                            "Index " + index + " out of range (call get_action_choices first)", true, action, true);
+                            "Index " + index + " is out of range"
+                            + (abilityChoices != null ? " (valid: 0-" + (abilityChoices.size() - 1) + ")" : " (no choices loaded)")
+                            + ". Call get_action_choices to see current options.", true, action, true);
                     }
                     UUID abilityUUID = (UUID) abilityChoices.get(index);
                     session.sendPlayerUUID(gameId, abilityUUID);
@@ -1633,7 +1646,9 @@ public class BridgeCallbackHandler {
                     if (choiceChoices == null || index < 0 || index >= choiceChoices.size()) {
                         logChoiceOutOfRangeDiagnostic(method, index, choiceChoices);
                         return buildError(result, "index_out_of_range",
-                            "Index " + index + " out of range (call get_action_choices first)", true, action, true);
+                            "Index " + index + " is out of range"
+                            + (choiceChoices != null ? " (valid: 0-" + (choiceChoices.size() - 1) + ")" : " (no choices loaded)")
+                            + ". Call get_action_choices to see current options.", true, action, true);
                     }
                     String choiceStr = (String) choiceChoices.get(index);
                     session.sendPlayerString(gameId, choiceStr);
