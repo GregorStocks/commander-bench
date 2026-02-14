@@ -102,6 +102,7 @@ public class BridgeCallbackHandler {
     private volatile UUID currentGameId = null;
     private volatile GameView lastGameView = null;
     private final RoundTracker roundTracker = new RoundTracker();
+    private final ShortIdRegistry shortIds = new ShortIdRegistry();
     private volatile List<Object> lastChoices = null; // Index→UUID/String mapping for choose_action
     private volatile String lastChoicesActionType = null; // Debug context for stale-choice diagnostics
     private volatile String lastChoicesResponseType = null; // Debug context for stale-choice diagnostics
@@ -703,6 +704,7 @@ public class BridgeCallbackHandler {
 
                         var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
+                        choiceEntry.put("id", shortIds.getOrAssign(objectId));
 
                         // Determine where this object lives (hand = cast, battlefield = activate)
                         CardView cardView = findCardViewById(objectId);
@@ -775,6 +777,9 @@ public class BridgeCallbackHandler {
                                 for (CombatGroupView group : gameView.getCombat()) {
                                     for (CardView attacker : group.getAttackers().values()) {
                                         var aInfo = new HashMap<String, Object>();
+                                        if (attacker.getId() != null) {
+                                            aInfo.put("id", shortIds.getOrAssign(attacker.getId()));
+                                        }
                                         aInfo.put("name", safeDisplayName(attacker));
                                         if (attacker.getPower() != null) {
                                             aInfo.put("power", attacker.getPower());
@@ -795,6 +800,7 @@ public class BridgeCallbackHandler {
 
                                 var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
+                                choiceEntry.put("id", shortIds.getOrAssign(attackerId));
                                 choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
                                     choiceEntry.put("power", perm.getPower());
@@ -810,6 +816,7 @@ public class BridgeCallbackHandler {
                             if (options.containsKey("specialButton")) {
                                 var allAttackEntry = new HashMap<String, Object>();
                                 allAttackEntry.put("index", idx);
+                                allAttackEntry.put("id", "all");
                                 allAttackEntry.put("name", "All attack");
                                 allAttackEntry.put("choice_type", "special");
                                 choiceList.add(allAttackEntry);
@@ -827,6 +834,9 @@ public class BridgeCallbackHandler {
                                 for (CombatGroupView group : gameView.getCombat()) {
                                     for (CardView attacker : group.getAttackers().values()) {
                                         var aInfo = new HashMap<String, Object>();
+                                        if (attacker.getId() != null) {
+                                            aInfo.put("id", shortIds.getOrAssign(attacker.getId()));
+                                        }
                                         aInfo.put("name", attacker.getDisplayName());
                                         if (attacker.getPower() != null) {
                                             aInfo.put("power", attacker.getPower());
@@ -847,6 +857,7 @@ public class BridgeCallbackHandler {
 
                                 var choiceEntry = new HashMap<String, Object>();
                                 choiceEntry.put("index", idx);
+                                choiceEntry.put("id", shortIds.getOrAssign(blockerId));
                                 choiceEntry.put("name", safeDisplayName(perm));
                                 if (perm.getPower() != null) {
                                     choiceEntry.put("power", perm.getPower());
@@ -905,6 +916,7 @@ public class BridgeCallbackHandler {
                         for (String manaAbilityText : manaAbilities) {
                             var choiceEntry = new HashMap<String, Object>();
                             choiceEntry.put("index", idx);
+                            choiceEntry.put("id", shortIds.getOrAssign(manaObjectId));
                             boolean isTap = manaAbilityText.contains("{T}");
                             choiceEntry.put("choice_type", isTap ? "tap_source" : "mana_source");
                             choiceEntry.put("name", cardName);
@@ -963,6 +975,7 @@ public class BridgeCallbackHandler {
                     for (UUID targetId : targets) {
                         var choiceEntry = new HashMap<String, Object>();
                         choiceEntry.put("index", idx);
+                        choiceEntry.put("id", shortIds.getOrAssign(targetId));
                         buildTargetInfo(choiceEntry, targetId, cardsView, targetGameView, myPlayerId);
                         choiceList.add(choiceEntry);
                         indexToUuid.add(targetId);
@@ -1227,7 +1240,7 @@ public class BridgeCallbackHandler {
      * Respond to the current pending action with a specific choice.
      * Exactly one parameter should be non-null, matching the response_type from getActionChoices().
      */
-    public Map<String, Object> chooseAction(Integer index, Boolean answer, Integer amount, int[] amounts, Integer pile, String text, String manaPlanJson, Boolean autoTap) {
+    public Map<String, Object> chooseAction(Integer index, String id, Boolean answer, Integer amount, int[] amounts, Integer pile, String text, String manaPlanJson, Boolean autoTap, String[] attackers, String blockers) {
         interactionsThisTurn++;
         var result = new HashMap<String, Object>();
         PendingAction action = pendingAction;
@@ -1245,6 +1258,68 @@ public class BridgeCallbackHandler {
             result.put("action_taken", "auto_passed_loop_detected");
             result.put("warning", "Too many interactions this turn (" + interactionsThisTurn + "). Auto-passing until next turn.");
             return result;
+        }
+
+        // Batch combat: attackers
+        if (attackers != null && attackers.length > 0) {
+            String combatType = detectCombatSelect(action);
+            if (!"attackers".equals(combatType)) {
+                return buildError(result, "invalid_choice",
+                    "attackers parameter only valid during declare_attackers", false, action);
+            }
+            return handleBatchAttackers(attackers, action, result);
+        }
+
+        // Batch combat: blockers
+        if (blockers != null && !blockers.isBlank()) {
+            String combatType = detectCombatSelect(action);
+            if (!"blockers".equals(combatType)) {
+                return buildError(result, "invalid_choice",
+                    "blockers parameter only valid during declare_blockers", false, action);
+            }
+            return handleBatchBlockers(blockers, action, result);
+        }
+
+        // Resolve id to index
+        if (id != null) {
+            if (index != null) {
+                return buildError(result, "missing_param",
+                    "id and index are mutually exclusive", false, action);
+            }
+            List<Object> choices = lastChoices;
+            if (choices == null) {
+                getActionChoices();
+                choices = lastChoices;
+            }
+            if ("all".equals(id)) {
+                // Find the "special" entry in lastChoices
+                if (choices != null) {
+                    for (int i = 0; i < choices.size(); i++) {
+                        if ("special".equals(choices.get(i))) {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+                if (index == null) {
+                    return buildError(result, "invalid_choice",
+                        "\"all\" is not available in current choices", true, action, true);
+                }
+            } else {
+                UUID resolvedUuid = shortIds.resolve(id);
+                if (choices != null) {
+                    for (int i = 0; i < choices.size(); i++) {
+                        if (resolvedUuid.equals(choices.get(i))) {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
+                if (index == null) {
+                    return buildError(result, "invalid_choice",
+                        "Object " + id + " not found in current choices", true, action, true);
+                }
+            }
         }
 
         // Validate mana_plan / auto_tap mutual exclusivity
@@ -1663,6 +1738,389 @@ public class BridgeCallbackHandler {
 
         return result;
     }
+
+    // ── Batch combat ──────────────────────────────────────────────────────
+
+    /**
+     * Wait for the next pending action callback from the server.
+     * Used internally by batch combat to chain multiple send→wait cycles.
+     * Returns the new PendingAction, or null on timeout.
+     */
+    private PendingAction waitForNextCallback(UUID gameId) {
+        long waitStart = System.currentTimeMillis();
+        while (true) {
+            PendingAction next = pendingAction;
+            if (next != null) {
+                return next;
+            }
+            if (playerDead || (activeGames.isEmpty() && gameEverStarted)) {
+                return null;
+            }
+            if (System.currentTimeMillis() - waitStart > 10_000) {
+                logger.warn("[" + client.getUsername() + "] waitForNextCallback: timed out after 10s");
+                return null;
+            }
+            synchronized (actionLock) {
+                try {
+                    actionLock.wait(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+        }
+    }
+
+    /**
+     * Declare multiple attackers in one batch.
+     * Sends each attacker UUID, waits for the next GAME_SELECT, then confirms.
+     * Special case: attackers=["all"] sends the "special" all-attack button.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> handleBatchAttackers(String[] attackerIds, PendingAction action, Map<String, Object> result) {
+        UUID gameId = action.gameId();
+        var declared = new ArrayList<String>();
+        var failed = new ArrayList<Map<String, Object>>();
+
+        // Special case: "all" attack
+        if (attackerIds.length == 1 && "all".equals(attackerIds[0])) {
+            synchronized (actionLock) {
+                if (pendingAction == action) {
+                    pendingAction = null;
+                }
+            }
+            session.sendPlayerString(gameId, "special");
+            trackSentResponse(gameId, ResponseType.STRING, "special", null);
+            // Wait for next callback (server will send a new GAME_SELECT to confirm)
+            PendingAction next = waitForNextCallback(gameId);
+            if (next != null && next.method() == ClientCallbackMethod.GAME_SELECT) {
+                synchronized (actionLock) {
+                    if (pendingAction == next) {
+                        pendingAction = null;
+                    }
+                }
+                session.sendPlayerBoolean(gameId, true);
+                trackSentResponse(gameId, ResponseType.BOOLEAN, true, null);
+            }
+            result.put("success", true);
+            result.put("action_taken", "batch_attack");
+            declared.add("all");
+            result.put("declared", declared);
+            lastChoices = null;
+            waitForNextActionAfterBatch(result);
+            return result;
+        }
+
+        // Get possibleAttackers from the current action's options
+        GameClientMessage gcm = (GameClientMessage) action.data();
+        Map<String, Serializable> options = gcm.getOptions();
+        List<UUID> possibleAttackerUuids = (List<UUID>) options.get("possibleAttackers");
+
+        for (String shortId : attackerIds) {
+            UUID attackerUuid;
+            try {
+                attackerUuid = shortIds.resolve(shortId);
+            } catch (IllegalArgumentException e) {
+                failed.add(Map.of("id", shortId, "reason", "unknown short ID"));
+                continue;
+            }
+
+            // Verify this attacker is in the possible list
+            if (possibleAttackerUuids == null || !possibleAttackerUuids.contains(attackerUuid)) {
+                failed.add(Map.of("id", shortId, "reason", "not a valid attacker"));
+                continue;
+            }
+
+            // Clear pending action and send the attacker UUID
+            synchronized (actionLock) {
+                if (pendingAction != null) {
+                    pendingAction = null;
+                }
+            }
+            session.sendPlayerUUID(gameId, attackerUuid);
+            trackSentResponse(gameId, ResponseType.UUID, attackerUuid, null);
+            declared.add(shortId);
+
+            // Wait for next callback
+            PendingAction next = waitForNextCallback(gameId);
+            if (next == null) {
+                result.put("interrupted", true);
+                break;
+            }
+            if (next.method() != ClientCallbackMethod.GAME_SELECT) {
+                // Interrupted by a trigger or other callback
+                result.put("interrupted", true);
+                break;
+            }
+            // Update possibleAttackers from the new callback for validation
+            if (next.data() instanceof GameClientMessage) {
+                GameClientMessage nextGcm = (GameClientMessage) next.data();
+                Map<String, Serializable> nextOptions = nextGcm.getOptions();
+                if (nextOptions != null && nextOptions.containsKey("possibleAttackers")) {
+                    possibleAttackerUuids = (List<UUID>) nextOptions.get("possibleAttackers");
+                }
+            }
+        }
+
+        // Confirm attackers (send true)
+        if (!Boolean.TRUE.equals(result.get("interrupted"))) {
+            synchronized (actionLock) {
+                if (pendingAction != null) {
+                    pendingAction = null;
+                }
+            }
+            session.sendPlayerBoolean(gameId, true);
+            trackSentResponse(gameId, ResponseType.BOOLEAN, true, null);
+        }
+
+        result.put("success", true);
+        result.put("action_taken", "batch_attack");
+        result.put("declared", declared);
+        if (!failed.isEmpty()) {
+            result.put("failed", failed);
+        }
+        lastChoices = null;
+        waitForNextActionAfterBatch(result);
+        return result;
+    }
+
+    /**
+     * Declare multiple blockers in one batch.
+     * Format: [{"id":"p5","blocks":"p1"},{"id":"p6","blocks":"p2"}]
+     * Sends each blocker UUID, then the attacker UUID when prompted, then confirms.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> handleBatchBlockers(String blockersJson, PendingAction action, Map<String, Object> result) {
+        UUID gameId = action.gameId();
+        var declared = new ArrayList<Map<String, Object>>();
+        var failed = new ArrayList<Map<String, Object>>();
+
+        // Parse blocker assignments JSON
+        // Expected: [{"id":"p5","blocks":"p1"},...]
+        List<Map<String, String>> assignments;
+        try {
+            assignments = parseBlockerAssignments(blockersJson);
+        } catch (IllegalArgumentException e) {
+            return buildError(result, "missing_param",
+                "Invalid blockers JSON: " + e.getMessage(), false, action);
+        }
+
+        // Get possibleBlockers from the current action's options
+        GameClientMessage gcm = (GameClientMessage) action.data();
+        Map<String, Serializable> options = gcm.getOptions();
+        List<UUID> possibleBlockerUuids = (List<UUID>) options.get("possibleBlockers");
+
+        for (Map<String, String> assignment : assignments) {
+            String blockerShortId = assignment.get("id");
+            String attackerShortId = assignment.get("blocks");
+
+            UUID blockerUuid;
+            try {
+                blockerUuid = shortIds.resolve(blockerShortId);
+            } catch (IllegalArgumentException e) {
+                failed.add(Map.of("id", blockerShortId, "reason", "unknown short ID"));
+                continue;
+            }
+
+            // Verify this blocker is in the possible list
+            if (possibleBlockerUuids == null || !possibleBlockerUuids.contains(blockerUuid)) {
+                failed.add(Map.of("id", blockerShortId, "reason", "not a valid blocker"));
+                continue;
+            }
+
+            // Clear pending action and send the blocker UUID
+            synchronized (actionLock) {
+                if (pendingAction != null) {
+                    pendingAction = null;
+                }
+            }
+            session.sendPlayerUUID(gameId, blockerUuid);
+            trackSentResponse(gameId, ResponseType.UUID, blockerUuid, null);
+
+            // Wait for next callback — could be GAME_TARGET (pick which attacker)
+            // or GAME_SELECT (single attacker, auto-assigned)
+            PendingAction next = waitForNextCallback(gameId);
+            if (next == null) {
+                result.put("interrupted", true);
+                break;
+            }
+
+            if (next.method() == ClientCallbackMethod.GAME_TARGET) {
+                // Multiple attackers — server asks which one to block
+                UUID attackerUuid;
+                try {
+                    attackerUuid = shortIds.resolve(attackerShortId);
+                } catch (IllegalArgumentException e) {
+                    failed.add(Map.of("id", blockerShortId, "reason", "unknown attacker ID: " + attackerShortId));
+                    // Cancel the target selection
+                    synchronized (actionLock) {
+                        if (pendingAction == next) {
+                            pendingAction = null;
+                        }
+                    }
+                    session.sendPlayerBoolean(gameId, false);
+                    trackSentResponse(gameId, ResponseType.BOOLEAN, false, null);
+                    next = waitForNextCallback(gameId);
+                    if (next == null || next.method() != ClientCallbackMethod.GAME_SELECT) {
+                        result.put("interrupted", true);
+                        break;
+                    }
+                    continue;
+                }
+
+                // Verify the attacker UUID is a valid target
+                GameClientMessage targetMsg = (GameClientMessage) next.data();
+                Set<UUID> validTargets = findValidTargets(targetMsg);
+                if (validTargets == null || !validTargets.contains(attackerUuid)) {
+                    failed.add(Map.of("id", blockerShortId, "reason",
+                        "attacker " + attackerShortId + " is not a valid block target"));
+                    synchronized (actionLock) {
+                        if (pendingAction == next) {
+                            pendingAction = null;
+                        }
+                    }
+                    session.sendPlayerBoolean(gameId, false);
+                    trackSentResponse(gameId, ResponseType.BOOLEAN, false, null);
+                    next = waitForNextCallback(gameId);
+                    if (next == null || next.method() != ClientCallbackMethod.GAME_SELECT) {
+                        result.put("interrupted", true);
+                        break;
+                    }
+                    continue;
+                }
+
+                // Send the attacker UUID as the target
+                synchronized (actionLock) {
+                    if (pendingAction == next) {
+                        pendingAction = null;
+                    }
+                }
+                session.sendPlayerUUID(gameId, attackerUuid);
+                trackSentResponse(gameId, ResponseType.UUID, attackerUuid, null);
+                declared.add(Map.of("id", blockerShortId, "blocks", attackerShortId));
+
+                // Wait for next GAME_SELECT (back to blocker selection)
+                next = waitForNextCallback(gameId);
+                if (next == null || next.method() != ClientCallbackMethod.GAME_SELECT) {
+                    result.put("interrupted", true);
+                    break;
+                }
+
+                // Update possibleBlockers from the new callback
+                if (next.data() instanceof GameClientMessage) {
+                    GameClientMessage nextGcm = (GameClientMessage) next.data();
+                    Map<String, Serializable> nextOptions = nextGcm.getOptions();
+                    if (nextOptions != null && nextOptions.containsKey("possibleBlockers")) {
+                        possibleBlockerUuids = (List<UUID>) nextOptions.get("possibleBlockers");
+                    }
+                }
+            } else if (next.method() == ClientCallbackMethod.GAME_SELECT) {
+                // Single attacker — auto-assigned by the server (lines 3010-3024 in handleCallback)
+                declared.add(Map.of("id", blockerShortId, "blocks", attackerShortId));
+
+                // Update possibleBlockers from the new callback
+                if (next.data() instanceof GameClientMessage) {
+                    GameClientMessage nextGcm = (GameClientMessage) next.data();
+                    Map<String, Serializable> nextOptions = nextGcm.getOptions();
+                    if (nextOptions != null && nextOptions.containsKey("possibleBlockers")) {
+                        possibleBlockerUuids = (List<UUID>) nextOptions.get("possibleBlockers");
+                    }
+                }
+            } else {
+                // Interrupted by unexpected callback
+                result.put("interrupted", true);
+                break;
+            }
+        }
+
+        // Confirm blockers (send true)
+        if (!Boolean.TRUE.equals(result.get("interrupted"))) {
+            synchronized (actionLock) {
+                if (pendingAction != null) {
+                    pendingAction = null;
+                }
+            }
+            session.sendPlayerBoolean(gameId, true);
+            trackSentResponse(gameId, ResponseType.BOOLEAN, true, null);
+        }
+
+        result.put("success", true);
+        result.put("action_taken", "batch_block");
+        result.put("declared", declared);
+        if (!failed.isEmpty()) {
+            result.put("failed", failed);
+        }
+        lastChoices = null;
+        waitForNextActionAfterBatch(result);
+        return result;
+    }
+
+    /**
+     * Parse blocker assignments JSON: [{"id":"p5","blocks":"p1"},...]
+     */
+    private List<Map<String, String>> parseBlockerAssignments(String json) {
+        var assignments = new ArrayList<Map<String, String>>();
+        json = json.trim();
+        if (!json.startsWith("[") || !json.endsWith("]")) {
+            throw new IllegalArgumentException("blockers must be a JSON array");
+        }
+        json = json.substring(1, json.length() - 1).trim();
+        if (json.isEmpty()) return assignments;
+
+        // Split on },{ boundaries
+        String[] entries = json.split("\\}\\s*,\\s*\\{");
+        for (String entry : entries) {
+            entry = entry.replace("{", "").replace("}", "").trim();
+            // Parse "id":"p5","blocks":"p1"
+            String id = null, blocks = null;
+            String[] parts = entry.split("\\s*,\\s*");
+            for (String part : parts) {
+                String[] kv = part.split("\\s*:\\s*", 2);
+                if (kv.length != 2) continue;
+                String key = kv[0].trim().replace("\"", "");
+                String value = kv[1].trim().replace("\"", "");
+                if ("id".equals(key)) id = value;
+                else if ("blocks".equals(key)) blocks = value;
+            }
+            if (id == null || blocks == null) {
+                throw new IllegalArgumentException("Each blocker entry must have 'id' and 'blocks' fields");
+            }
+            assignments.add(Map.of("id", id, "blocks", blocks));
+        }
+        return assignments;
+    }
+
+    /**
+     * After batch combat, wait for the next pending action before returning.
+     * Similar to the post-chooseAction wait, but factored out for reuse.
+     */
+    private void waitForNextActionAfterBatch(Map<String, Object> result) {
+        long waitStart = System.currentTimeMillis();
+        while (pendingAction == null) {
+            if (playerDead || (activeGames.isEmpty() && gameEverStarted)) {
+                break;
+            }
+            if (System.currentTimeMillis() - waitStart > STALL_NUDGE_MS) {
+                break;
+            }
+            synchronized (actionLock) {
+                try {
+                    actionLock.wait(200);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            retryLastResponseIfLost();
+        }
+        PendingAction next = pendingAction;
+        if (next != null) {
+            result.put("next_action_pending", true);
+            result.put("next_action_type", next.method().name());
+        }
+    }
+
+    // ── End batch combat ──────────────────────────────────────────────────
 
     private String describeTarget(UUID targetId, CardsView cardsView, GameView gameView) {
         GameView view = gameView != null ? gameView : lastGameView;
@@ -2389,6 +2847,7 @@ public class BridgeCallbackHandler {
                 for (Map.Entry<UUID, CardView> handEntry : gameView.getMyHand().entrySet()) {
                     CardView card = handEntry.getValue();
                     var cardInfo = new HashMap<String, Object>();
+                    cardInfo.put("id", shortIds.getOrAssign(handEntry.getKey()));
                     cardInfo.put("name", safeDisplayName(card));
 
                     String manaCost = card.getManaCostStr();
@@ -2418,7 +2877,7 @@ public class BridgeCallbackHandler {
             if (player.getBattlefield() != null) {
                 for (PermanentView perm : player.getBattlefield().values()) {
                     var permInfo = new HashMap<String, Object>();
-                    permInfo.put("id", perm.getId().toString());
+                    permInfo.put("id", shortIds.getOrAssign(perm.getId()));
                     permInfo.put("name", safeDisplayName(perm));
                     permInfo.put("tapped", perm.isTapped());
 
@@ -2471,10 +2930,13 @@ public class BridgeCallbackHandler {
             }
 
             // Graveyard
-            var graveyard = new ArrayList<String>();
+            var graveyard = new ArrayList<Map<String, Object>>();
             if (player.getGraveyard() != null) {
-                for (CardView card : player.getGraveyard().values()) {
-                    graveyard.add(safeDisplayName(card));
+                for (Map.Entry<UUID, CardView> entry : player.getGraveyard().entrySet()) {
+                    var cardInfo = new HashMap<String, Object>();
+                    cardInfo.put("id", shortIds.getOrAssign(entry.getKey()));
+                    cardInfo.put("name", safeDisplayName(entry.getValue()));
+                    graveyard.add(cardInfo);
                 }
             }
             if (!graveyard.isEmpty()) {
@@ -2482,10 +2944,13 @@ public class BridgeCallbackHandler {
             }
 
             // Exile
-            var exileCards = new ArrayList<String>();
+            var exileCards = new ArrayList<Map<String, Object>>();
             if (player.getExile() != null) {
-                for (CardView card : player.getExile().values()) {
-                    exileCards.add(safeDisplayName(card));
+                for (Map.Entry<UUID, CardView> entry : player.getExile().entrySet()) {
+                    var cardInfo = new HashMap<String, Object>();
+                    cardInfo.put("id", shortIds.getOrAssign(entry.getKey()));
+                    cardInfo.put("name", safeDisplayName(entry.getValue()));
+                    exileCards.add(cardInfo);
                 }
             }
             if (!exileCards.isEmpty()) {
@@ -2536,6 +3001,9 @@ public class BridgeCallbackHandler {
         if (gameView.getStack() != null) {
             for (CardView card : gameView.getStack().values()) {
                 var stackItem = new HashMap<String, Object>();
+                if (card.getId() != null) {
+                    stackItem.put("id", shortIds.getOrAssign(card.getId()));
+                }
                 stackItem.put("name", safeDisplayName(card));
                 stackItem.put("rules", card.getRules());
                 if (card.getTargets() != null && !card.getTargets().isEmpty()) {
@@ -2560,6 +3028,9 @@ public class BridgeCallbackHandler {
                 var attackers = new ArrayList<Map<String, Object>>();
                 for (CardView attacker : group.getAttackers().values()) {
                     var aInfo = new HashMap<String, Object>();
+                    if (attacker.getId() != null) {
+                        aInfo.put("id", shortIds.getOrAssign(attacker.getId()));
+                    }
                     aInfo.put("name", safeDisplayName(attacker));
                     if (attacker.getPower() != null) {
                         aInfo.put("power", attacker.getPower());
@@ -2571,6 +3042,9 @@ public class BridgeCallbackHandler {
                 var blockers = new ArrayList<Map<String, Object>>();
                 for (CardView blocker : group.getBlockers().values()) {
                     var bInfo = new HashMap<String, Object>();
+                    if (blocker.getId() != null) {
+                        bInfo.put("id", shortIds.getOrAssign(blocker.getId()));
+                    }
                     bInfo.put("name", safeDisplayName(blocker));
                     if (blocker.getPower() != null) {
                         bInfo.put("power", blocker.getPower());
@@ -2710,7 +3184,7 @@ public class BridgeCallbackHandler {
                 } else {
                     entry.put("object_id", oid);
                     try {
-                        UUID uuid = UUID.fromString(oid);
+                        UUID uuid = shortIds.resolve(oid);
                         CardView cardView = findCardViewById(uuid);
                         if (cardView != null) {
                             entry.put("name", cardView.getDisplayName());
@@ -2719,7 +3193,7 @@ public class BridgeCallbackHandler {
                             entry.put("error", "not found");
                         }
                     } catch (IllegalArgumentException e) {
-                        entry.put("error", "invalid UUID format");
+                        entry.put("error", "unknown short ID: " + oid);
                     }
                 }
                 results.add(entry);
@@ -2748,10 +3222,10 @@ public class BridgeCallbackHandler {
             return result;
         }
 
-        // Object ID lookup (in-game)
+        // Object ID lookup (in-game, uses short IDs like "p1", "p2")
         if (hasObjectId) {
             try {
-                UUID uuid = UUID.fromString(objectId);
+                UUID uuid = shortIds.resolve(objectId);
                 CardView cardView = findCardViewById(uuid);
                 if (cardView != null) {
                     result.put("success", true);
@@ -2765,7 +3239,7 @@ public class BridgeCallbackHandler {
                 }
             } catch (IllegalArgumentException e) {
                 result.put("success", false);
-                result.put("error", "Invalid UUID format: " + objectId);
+                result.put("error", "Unknown short ID: " + objectId);
                 return result;
             }
         }
@@ -3197,6 +3671,7 @@ public class BridgeCallbackHandler {
         activeGames.put(gameId, playerId);
         currentGameId = gameId;
         gameEverStarted = true;
+        shortIds.clear();
 
         // Join the game session (creates GameSessionPlayer on server)
         if (!session.joinGame(gameId)) {
@@ -3653,12 +4128,12 @@ public class BridgeCallbackHandler {
             ManaPlanEntry entry = plan.remove(0);  // consume first entry
 
             if ("tap".equals(entry.type())) {
-                UUID targetId = UUID.fromString(entry.value());
+                UUID targetId = shortIds.resolve(entry.value());
                 PlayableObjectsList playableForPlan = gameView != null ? gameView.getCanPlayObjects() : null;
                 if (playableForPlan != null) {
                     PlayableObjectStats stats = playableForPlan.getObjects().get(targetId);
                     if (stats != null && !targetId.equals(payingForId) && !failedManaCasts.contains(targetId)) {
-                        logger.info("[" + client.getUsername() + "] Mana plan: \"" + msg + "\" -> tapping " + targetId.toString().substring(0, 8));
+                        logger.info("[" + client.getUsername() + "] Mana plan: \"" + msg + "\" -> tapping " + entry.value());
                         poolManaAttempts = 0;
                         session.sendPlayerUUID(gameId, targetId);
                         return true;

@@ -381,7 +381,7 @@
       },
       {
         "label": "Batch object_ids lookup",
-        "value": "{\n  \"success\": true,\n  \"cards\": [\n    {\n      \"object_id\": \"abc-123\",\n      \"name\": \"Lightning Bolt\",\n      \"rules\": [\n        \"Deal 3 damage to any target.\"\n      ]\n    },\n    {\n      \"object_id\": \"def-456\",\n      \"error\": \"not found\"\n    }\n  ]\n}"
+        "value": "{\n  \"success\": true,\n  \"cards\": [\n    {\n      \"object_id\": \"p3\",\n      \"name\": \"Lightning Bolt\",\n      \"rules\": [\n        \"Deal 3 damage to any target.\"\n      ]\n    },\n    {\n      \"object_id\": \"p99\",\n      \"error\": \"not found\"\n    }\n  ]\n}"
       },
       {
         "label": "Not found",
@@ -393,7 +393,7 @@
       "type": "object",
       "properties": {
         "object_ids": {
-          "description": "Batch in-game object UUID lookup",
+          "description": "Batch in-game object short ID lookup (e.g. [\"p1\",\"p2\"])",
           "type": "array",
           "items": {
             "type": "string"
@@ -411,7 +411,7 @@
           }
         },
         "object_id": {
-          "description": "UUID of an in-game object",
+          "description": "Short ID of an in-game object (e.g. \"p3\")",
           "type": "string"
         }
       }
@@ -542,12 +542,16 @@
           "description": "Whether the action can be retried with different parameters",
           "type": "boolean"
         },
+        "declared": {
+          "description": "IDs of successfully declared attackers/blockers (batch combat)",
+          "type": "array"
+        },
         "success": {
           "description": "Whether the action was accepted",
           "type": "boolean"
         },
         "action_taken": {
-          "description": "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\")",
+          "description": "Description of what was done (e.g. \"selected_0\", \"yes\", \"passed_priority\", \"batch_attack\")",
           "type": "string"
         },
         "warning": {
@@ -562,6 +566,14 @@
           "description": "Machine-readable error code: no_pending_action, missing_param, index_out_of_range, invalid_choice, internal_error, unknown_action_type",
           "type": "string"
         },
+        "failed": {
+          "description": "Entries that failed during batch combat: {id, reason}",
+          "type": "array"
+        },
+        "interrupted": {
+          "description": "Whether batch combat was interrupted by a trigger",
+          "type": "boolean"
+        },
         "error": {
           "description": "Error message",
           "type": "string"
@@ -574,8 +586,8 @@
     },
     "examples": [
       {
-        "label": "Index selection",
-        "value": "{\n  \"success\": true,\n  \"action_taken\": \"selected_0\"\n}"
+        "label": "ID-based selection",
+        "value": "{\n  \"success\": true,\n  \"action_taken\": \"selected_2\"\n}"
       },
       {
         "label": "Boolean answer",
@@ -584,6 +596,14 @@
       {
         "label": "Cast with mana plan",
         "value": "{\n  \"success\": true,\n  \"action_taken\": \"selected_2\",\n  \"mana_plan_set\": true,\n  \"mana_plan_size\": 3\n}"
+      },
+      {
+        "label": "Batch attack",
+        "value": "{\n  \"success\": true,\n  \"action_taken\": \"batch_attack\",\n  \"declared\": [\n    \"p1\",\n    \"p2\",\n    \"p3\"\n  ]\n}"
+      },
+      {
+        "label": "Batch block",
+        "value": "{\n  \"success\": true,\n  \"action_taken\": \"batch_block\",\n  \"declared\": [\n    {\n      \"id\": \"p5\",\n      \"blocks\": \"p1\"\n    },\n    {\n      \"id\": \"p6\",\n      \"blocks\": \"p2\"\n    }\n  ]\n}"
       },
       {
         "label": "Error",
@@ -618,11 +638,26 @@
           "type": "integer"
         },
         "index": {
-          "description": "Choice index from get_action_choices (for target/ability/choice and mana source/pool choices)",
+          "description": "Choice index from get_action_choices",
           "type": "integer"
         },
         "mana_plan": {
-          "description": "JSON array of mana sources to tap when casting a spell. Each entry: {\"tap\": \"permanent-id\"} to tap a permanent, or {\"pool\": \"RED\"} to spend mana from pool (valid types: WHITE, BLUE, BLACK, RED, GREEN, COLORLESS). Consumed in order as mana payment callbacks arrive. Example: [{\"tap\": \"a1b2-...\"}, {\"tap\": \"c3d4-...\"}]. The plan must be COMPLETE — if any entry fails (wrong ID, unavailable permanent) or the plan runs out before all mana is paid, the spell is cancelled. Avoid multi-ability permanents (filter lands, dual lands) — they cancel the spell. For X spells, include entries for both the X pips and the regular cost. Mutually exclusive with auto_tap.",
+          "description": "JSON array of mana sources to tap when casting a spell. Each entry: {\"tap\": \"p3\"} to tap a permanent by short ID, or {\"pool\": \"RED\"} to spend mana from pool (valid types: WHITE, BLUE, BLACK, RED, GREEN, COLORLESS). Consumed in order as mana payment callbacks arrive. Example: [{\"tap\": \"p1\"}, {\"tap\": \"p2\"}]. The plan must be COMPLETE — if any entry fails (wrong ID, unavailable permanent) or the plan runs out before all mana is paid, the spell is cancelled. Avoid multi-ability permanents (filter lands, dual lands) — they cancel the spell. For X spells, include entries for both the X pips and the regular cost. Mutually exclusive with auto_tap.",
+          "type": "string"
+        },
+        "attackers": {
+          "description": "Declare multiple attackers at once. Array of short IDs (e.g. [\"p1\",\"p2\"]). Use [\"all\"] to declare all possible attackers. Automatically confirms after declaring.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockers": {
+          "description": "Declare multiple blockers at once. JSON array of assignments: [{\"id\":\"p5\",\"blocks\":\"p1\"},{\"id\":\"p6\",\"blocks\":\"p2\"}]. Each entry specifies which attacker the blocker should block (use IDs from incoming_attackers). Automatically confirms after declaring.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Short ID of the object to select (e.g. \"p3\"). Alternative to index. Mutually exclusive with index.",
           "type": "string"
         },
         "text": {
@@ -632,7 +667,7 @@
       }
     },
     "name": "choose_action",
-    "description": "Respond to pending action. Use index to pick a choice (card, attacker, blocker, target, ability, mana source). Use answer for yes/no, pass priority, or confirm combat (true=confirm attackers/blockers). Call get_action_choices first."
+    "description": "Respond to pending action. Use id or index to pick a choice (card, attacker, blocker, target, ability, mana source). Use answer for yes/no, pass priority, or confirm combat (true=confirm attackers/blockers). Use attackers/blockers for batch combat. Call get_action_choices first."
   },
   {
     "outputSchema": {
