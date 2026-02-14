@@ -773,12 +773,12 @@ def _update_website_youtube_url(game_dir: Path, url: str, project_root: Path) ->
 def _maybe_upload_and_export(game_dir: Path, project_root: Path) -> None:
     """Prompt user to upload recording to YouTube and export for website."""
     recording = game_dir / "recording.mov"
-    if not recording.exists():
-        return  # No recording, nothing to upload/export
+    has_recording = recording.exists()
 
+    prompt = "Upload to YouTube and export?" if has_recording else "Export for website?"
     while True:
         try:
-            answer = input("Upload to YouTube and export? [y/N]: ").strip().lower()
+            answer = input(f"{prompt} [y/N]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             return
@@ -788,21 +788,22 @@ def _maybe_upload_and_export(game_dir: Path, project_root: Path) -> None:
             return
         print(f"  Unrecognized answer: {answer!r} — please enter y or n")
 
-    # Upload to YouTube
-    try:
-        sys.path.insert(0, str(project_root / "scripts"))
-        from upload_youtube import upload_to_youtube
+    # Upload to YouTube (only if we have a recording)
+    if has_recording:
+        try:
+            sys.path.insert(0, str(project_root / "scripts"))
+            from upload_youtube import upload_to_youtube
 
-        url = upload_to_youtube(game_dir)
-        if url:
-            print(f"  YouTube: {url}")
-            _save_youtube_url(game_dir, url)
-            _update_website_youtube_url(game_dir, url, project_root)
-    except ImportError:
-        print("  Warning: YouTube upload requires google-api-python-client and google-auth-oauthlib")
-        print("  Run: cd puppeteer && uv sync")
-    except Exception as e:
-        print(f"  Warning: YouTube upload failed: {e}")
+            url = upload_to_youtube(game_dir)
+            if url:
+                print(f"  YouTube: {url}")
+                _save_youtube_url(game_dir, url)
+                _update_website_youtube_url(game_dir, url, project_root)
+        except ImportError:
+            print("  Warning: YouTube upload requires google-api-python-client and google-auth-oauthlib")
+            print("  Run: cd puppeteer && uv sync")
+        except Exception as e:
+            print(f"  Warning: YouTube upload failed: {e}")
 
     # Export for website
     try:

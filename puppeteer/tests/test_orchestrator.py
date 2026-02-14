@@ -430,7 +430,9 @@ def test_finalize_game_writes_logs():
         events_file = game_dir / "game_events.jsonl"
         events_file.write_text(json.dumps({"ts": "2024-01-01", "seq": 1, "type": "game_start"}) + "\n")
 
-        session = GameSession(index=0, game_dir=game_dir, config=Config())
+        config = Config()
+        config.skip_post_game_prompts = True
+        session = GameSession(index=0, game_dir=game_dir, config=config)
         _finalize_game(session, Path("/fake/root"), spectator_rc=0)
 
         assert (game_dir / "errors.log").exists()
