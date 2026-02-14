@@ -256,6 +256,15 @@ public class HeadlessClient {
                         break;
                     }
                 } else {
+                    // Game ended normally — wait for the Python pilot to close
+                    // stdin before shutting down, so MCP responses are delivered
+                    // cleanly and the pilot exits with code 0.
+                    logger.info("Game ended, waiting for MCP stdin to close...");
+                    try {
+                        mcpThread.join(30_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                     break;
                 }
             }
