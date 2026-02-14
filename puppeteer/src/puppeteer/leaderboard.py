@@ -15,7 +15,6 @@ _LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 
 _STARTING_RATING = 1600
 _K_FACTOR = 32
-_MIN_GAMES = 3  # Minimum games to appear on leaderboard
 
 # Map XMage deckType strings to canonical format names for leaderboard bucketing.
 _DECK_TYPE_TO_FORMAT: dict[str, str] = {
@@ -266,7 +265,6 @@ def generate_leaderboard(
     games_index: list[dict],
     model_registry: dict[str, str],
     games_dir: Path | None = None,
-    min_games: int = _MIN_GAMES,
 ) -> tuple[dict, dict[str, dict[str, dict[str, int]]]]:
     """Aggregate game results into leaderboard data.
 
@@ -325,8 +323,6 @@ def generate_leaderboard(
     for key, s in stats.items():
         model_id, effort = _split_key(key)
         games_played = int(s["games_played"])
-        if games_played < min_games:
-            continue
         wins = int(s["wins"])
         win_rate = wins / games_played
         avg_cost = s["total_cost"] / games_played
@@ -373,7 +369,6 @@ def generate_all_leaderboards(
     games_index: list[dict],
     model_registry: dict[str, str],
     games_dir: Path | None = None,
-    min_games: int = _MIN_GAMES,
 ) -> tuple[dict[str, dict], dict[str, dict[str, dict[str, int]]]]:
     """Generate per-format and combined leaderboards.
 
@@ -383,9 +378,7 @@ def generate_all_leaderboards(
     """
     # Combined leaderboard excludes commander (different format, skews ratings)
     non_commander = [g for g in games_index if derive_format(g) != "commander"]
-    combined_results, ratings_by_game = generate_leaderboard(
-        non_commander, model_registry, games_dir, min_games=min_games
-    )
+    combined_results, ratings_by_game = generate_leaderboard(non_commander, model_registry, games_dir)
 
     format_results: dict[str, dict] = {"combined": combined_results}
 
@@ -397,13 +390,13 @@ def generate_all_leaderboards(
 
     # Generate per-format leaderboards
     for fmt, fmt_games in by_format.items():
-        fmt_results, _ = generate_leaderboard(fmt_games, model_registry, games_dir, min_games=min_games)
+        fmt_results, _ = generate_leaderboard(fmt_games, model_registry, games_dir)
         format_results[fmt] = fmt_results
 
     return format_results, ratings_by_game
 
 
-def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path, min_games: int = _MIN_GAMES) -> Path:
+def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path) -> Path:
     """Generate leaderboard files from game data.
 
     Writes:
@@ -471,9 +464,7 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
     excluded_count = len(games_index) - len(rated_games)
 
     model_registry = load_model_registry(models_json)
-    format_results, ratings_by_game = generate_all_leaderboards(
-        rated_games, model_registry, games_dir, min_games=min_games
-    )
+    format_results, ratings_by_game = generate_all_leaderboards(rated_games, model_registry, games_dir)
 
     # Build output with backward-compatible top-level fields from combined
     combined = format_results.get("combined", {"generatedAt": "", "totalGames": 0, "models": []})
