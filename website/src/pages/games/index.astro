@@ -42,6 +42,7 @@ if (fs.existsSync(gamesDir)) {
       winner: data.winner,
       players: players,
       deckType: data.deckType || '',
+      harnessEpoch: data.harnessEpoch ?? null,
     };
     if (data.youtubeUrl) entry.youtubeUrl = data.youtubeUrl;
     const annotations = data.annotations || [];
@@ -449,6 +450,20 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     color: #ef4444;
   }
 
+  .epoch-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+
+  .epoch-old {
+    background: rgba(160, 160, 184, 0.15);
+    color: #a0a0b8;
+  }
+
   @media (max-width: 500px) {
     .game-players {
       grid-template-columns: 1fr;
@@ -490,6 +505,24 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     "legacy": "Legacy",
     "commander": "Commander",
   };
+
+  // Harness epoch inference for games that predate epoch tracking.
+  // Must match puppeteer/src/puppeteer/harness_epoch.py boundaries.
+  var MIN_LEADERBOARD_EPOCH = 2;
+  var EPOCH_BOUNDARIES = [
+    ["20260212_224200", 2],
+    ["20260214_084000", 3],
+  ];
+
+  function inferEpoch(gameId, harnessEpoch) {
+    if (harnessEpoch != null) return harnessEpoch;
+    var ts = gameId.replace("game_", "");
+    var epoch = 1;
+    for (var i = 0; i < EPOCH_BOUNDARIES.length; i++) {
+      if (ts >= EPOCH_BOUNDARIES[i][0]) epoch = EPOCH_BOUNDARIES[i][1];
+    }
+    return epoch;
+  }
 
   function getGameFormat(deckType) {
     return DECK_TYPE_FORMATS[deckType] || "commander";
@@ -669,6 +702,16 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       blunderEl.classList.add("severity-" + maxSev);
       blunderEl.textContent = game.blunderCount + " blunder" + (game.blunderCount !== 1 ? "s" : "");
       header.appendChild(blunderEl);
+    }
+
+    // Old harness badge
+    var epoch = inferEpoch(game.id, game.harnessEpoch);
+    if (epoch < MIN_LEADERBOARD_EPOCH) {
+      var epochBadge = document.createElement("span");
+      epochBadge.className = "epoch-badge epoch-old";
+      epochBadge.title = "Played on older harness (epoch " + epoch + "). Not included in ratings.";
+      epochBadge.textContent = "Old harness";
+      header.appendChild(epochBadge);
     }
 
     a.appendChild(header);

@@ -30,6 +30,8 @@ const allProviders = [
 ].sort();
 
 const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length > 1;
+const excludedGames = (benchmarkData as any).excludedGames ?? 0;
+const minEpoch = (benchmarkData as any).minEpoch ?? null;
 ---
 
 <Base title="Leaderboard">
@@ -38,6 +40,9 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
   {hasData ? (
     <p class="subtitle" id="subtitle">
       Model ratings based on {benchmarkData.totalGames.toLocaleString()} games.
+      {excludedGames > 0 && (
+        <span class="excluded-note">({excludedGames} older {excludedGames === 1 ? 'game' : 'games'} excluded)</span>
+      )}
       Last updated: <time>{new Date(benchmarkData.generatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</time>.
     </p>
 
@@ -65,6 +70,13 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
           The <strong>Combined</strong> leaderboard rates all 1v1 format games
           (Standard, Modern, Legacy) in a single unified rating pool.
         </p>
+        {minEpoch && excludedGames > 0 && (
+          <p>
+            Games from older harness versions (epoch &lt; {minEpoch}) are excluded from
+            ratings — they used different priority/mana systems that make results
+            non-comparable to current games.
+          </p>
+        )}
       </div>
     </details>
 
@@ -306,6 +318,11 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
 
   .subtitle time {
     color: #e0e0e0;
+  }
+
+  .excluded-note {
+    color: #fbbf24;
+    font-size: 0.85rem;
   }
 
   .format-tabs {
