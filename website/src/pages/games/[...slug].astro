@@ -392,10 +392,11 @@ const { slug } = Astro.params;
   }
 
   #action-list {
-    max-height: calc(100vh - 8rem);
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 0.8rem;
     line-height: 1.5;
+    word-break: break-word;
   }
 
 </style>
@@ -866,8 +867,14 @@ const { slug } = Astro.params;
         });
       }
 
-      // Auto-scroll to bottom (setTimeout lets images/layout settle)
-      setTimeout(function () { actionList.scrollTop = actionList.scrollHeight; }, 50);
+      // Sync game log height with left column, then auto-scroll to bottom
+      setTimeout(function () {
+        var leftHeight = document.getElementById("game-left").offsetHeight;
+        // Subtract action-log header (~60px for filters/title)
+        var headerHeight = actionList.parentElement.offsetHeight - actionList.offsetHeight;
+        actionList.style.maxHeight = Math.max(200, leftHeight - headerHeight) + "px";
+        actionList.scrollTop = actionList.scrollHeight;
+      }, 50);
 
       // Update transport
       slider.value = String(index);

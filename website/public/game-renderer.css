@@ -137,9 +137,10 @@
 }
 
 .side-zones {
-  width: 70px;
+  width: 80px;
   flex-shrink: 0;
   border-right: 1px dashed rgba(255, 255, 255, 0.06);
+  overflow: hidden;
 }
 
 .main-zones {
@@ -149,7 +150,7 @@
 
 /* Battlefield minimum height: space for creatures row + lands row */
 .battlefield-zone {
-  min-height: 190px;
+  min-height: 240px;
 }
 
 /* Zones */
@@ -162,7 +163,7 @@
   border-bottom: 0;
 }
 
-/* Side zones: compact styling */
+/* Side zones: compact styling with stacked/overlapping cards */
 .side-zones .zone {
   padding: 0.3rem 0.4rem;
 }
@@ -179,8 +180,24 @@
   width: 55px;
 }
 
+/* Stack cards with overlap in side zones (like Java graveyard) */
 .side-zones .cards-grid-sm {
-  gap: 3px;
+  gap: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.side-zones .card-thumb-sm {
+  width: 65px;
+}
+
+.side-zones .cards-grid-sm .card-thumb-sm {
+  margin-top: -35px;
+}
+
+.side-zones .cards-grid-sm .card-thumb-sm:first-child {
+  margin-top: 0;
 }
 
 .zone-title {
@@ -249,7 +266,7 @@
 
 .card-thumb {
   position: relative;
-  width: 60px;
+  width: 80px;
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid rgba(150, 195, 205, 0.2);
@@ -272,7 +289,7 @@
 
 .card-thumb.tapped {
   transform: rotate(90deg);
-  margin: 12px 12px;
+  margin: 16px 16px;
 }
 
 .card-thumb-pt {
@@ -334,7 +351,7 @@
 
 /* Small thumbnails for hand/graveyard/exile */
 .card-thumb-sm {
-  width: 45px;
+  width: 55px;
 }
 
 .cards-grid-sm {
@@ -708,6 +725,7 @@
   font-family: monospace;
   padding: 1px 0;
   list-style: disclosure-closed;
+  word-break: break-all;
 }
 
 .llm-tool-detail summary::-webkit-details-marker {
