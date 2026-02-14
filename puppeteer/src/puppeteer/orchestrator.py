@@ -862,6 +862,10 @@ def _setup_game(
         game_config.load_config()
         game_config.port = base_config.port
         game_config.timestamp = timestamp
+        # Each spectator needs a unique username on the server to avoid
+        # session conflicts (the server invalidates the old session when a
+        # new client connects with the same username).
+        game_config.user = f"spectator{index + 1}"
     else:
         game_config = base_config
 
