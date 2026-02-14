@@ -1,0 +1,10 @@
+{
+  "title": "Show mana pool on battlefield when mana is floating",
+  "description": "When a player has mana actively in their pool, it should be visible onscreen towards the bottom of their battlefield. Currently there's no visual indicator of floating mana, making it hard to see what mana is available before spending it.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["streaming-client", "ui"],
+  "created_at": "2025-02-13T12:00:00-08:00",
+  "updated_at": "2025-02-13T12:00:00-08:00"
+}
