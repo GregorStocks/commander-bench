@@ -11,11 +11,13 @@ import static mage.client.headless.tools.McpToolRegistry.json;
 public class PassPriorityTool {
     @Tool(
         name = "pass_priority",
-        description = "Pass priority. Without yield_until: passes once and returns. "
-            + "With yield_until: uses XMage's server-side yield system to efficiently skip ahead "
-            + "(like F4-F11 in the GUI). With yield_until_step: client-side yield that auto-passes "
-            + "until a specific game step within the current turn. Still stops for combat and "
-            + "non-priority actions. Auto-handles mechanical callbacks (mana payment failures, "
+        description = "Pass priority. Without until: passes once and returns. "
+            + "With until: skips ahead to a target step or phase. "
+            + "Step values (current turn, client-side): upkeep, draw, precombat_main, "
+            + "begin_combat, declare_attackers, declare_blockers, end_combat, postcombat_main. "
+            + "Cross-turn values (server-side): end_of_turn, my_turn, stack_resolved. "
+            + "Always stops for combat and non-priority actions. "
+            + "Auto-handles mechanical callbacks (mana payment failures, "
             + "optional targets with no legal targets). "
             + "Returns stop_reason indicating why the call returned.",
         output = {
@@ -36,32 +38,22 @@ public class PassPriorityTool {
     public static Map<String, Object> execute(
             BridgeCallbackHandler handler,
             @Param(
-                description = "Yield mode: skip ahead using XMage's server-side yield. "
-                    + "end_of_turn=F5, next_turn=F4 (stop on stack), "
-                    + "next_turn_skip_stack=F6, next_main=F7, "
-                    + "stack_resolved=F10, my_turn=F9, "
-                    + "end_step_before_my_turn=F11. "
-                    + "Omit to pass once and return. Cannot combine with yield_until_step.",
-                allowed_values = {
-                    "end_of_turn", "next_turn", "next_turn_skip_stack",
-                    "next_main", "stack_resolved", "my_turn",
-                    "end_step_before_my_turn"
-                }
-            ) String yield_until,
-            @Param(
-                description = "Yield to a specific game step (client-side). "
-                    + "Auto-passes priority and playable cards until the target step within "
-                    + "the current turn. Still stops for combat (declare attackers/blockers) "
-                    + "and non-priority actions (mandatory triggers). "
-                    + "Returns step_not_reached if the turn ends first. "
-                    + "Cannot combine with yield_until.",
+                description = "Skip ahead to a target. "
+                    + "Step values yield within the current turn (client-side): "
+                    + "upkeep, draw, precombat_main, begin_combat, declare_attackers, "
+                    + "declare_blockers, end_combat, postcombat_main. "
+                    + "Cross-turn values use server-side yield: "
+                    + "end_of_turn (skip rest of turn), my_turn (skip to your next turn), "
+                    + "stack_resolved (wait for stack to resolve). "
+                    + "Omit to pass once and return.",
                 allowed_values = {
                     "upkeep", "draw", "precombat_main", "begin_combat",
                     "declare_attackers", "declare_blockers",
-                    "end_combat", "postcombat_main", "end_turn"
+                    "end_combat", "postcombat_main",
+                    "end_of_turn", "my_turn", "stack_resolved"
                 }
-            ) String yield_until_step) {
-        return handler.passPriority(yield_until, yield_until_step);
+            ) String until) {
+        return handler.passPriority(until);
     }
 
     public static List<Map<String, Object>> examples() {

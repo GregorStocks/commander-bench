@@ -1919,18 +1919,14 @@ public class BridgeCallbackHandler {
         }
     }
 
-    // Mapping from yield_until parameter values to XMage PlayerAction constants.
+    // Mapping from "until" parameter values to XMage PlayerAction constants (server-side yield).
     private static final Map<String, PlayerAction> YIELD_ACTIONS = Map.of(
         "end_of_turn", PlayerAction.PASS_PRIORITY_UNTIL_TURN_END_STEP,
-        "next_turn", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN,
-        "next_turn_skip_stack", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN_SKIP_STACK,
-        "next_main", PlayerAction.PASS_PRIORITY_UNTIL_NEXT_MAIN_PHASE,
         "stack_resolved", PlayerAction.PASS_PRIORITY_UNTIL_STACK_RESOLVED,
-        "my_turn", PlayerAction.PASS_PRIORITY_UNTIL_MY_NEXT_TURN,
-        "end_step_before_my_turn", PlayerAction.PASS_PRIORITY_UNTIL_END_STEP_BEFORE_MY_NEXT_TURN
+        "my_turn", PlayerAction.PASS_PRIORITY_UNTIL_MY_NEXT_TURN
     );
 
-    // Mapping from yield_until_step parameter values to PhaseStep enum constants.
+    // Mapping from "until" parameter values to PhaseStep enum constants (client-side yield).
     // Only steps where players normally receive priority are exposed.
     private static final Map<String, PhaseStep> STEP_PHASES = Map.of(
         "upkeep", PhaseStep.UPKEEP,
@@ -1940,64 +1936,52 @@ public class BridgeCallbackHandler {
         "declare_attackers", PhaseStep.DECLARE_ATTACKERS,
         "declare_blockers", PhaseStep.DECLARE_BLOCKERS,
         "end_combat", PhaseStep.END_COMBAT,
-        "postcombat_main", PhaseStep.POSTCOMBAT_MAIN,
-        "end_turn", PhaseStep.END_TURN
+        "postcombat_main", PhaseStep.POSTCOMBAT_MAIN
     );
 
     /**
-     * Pass priority. Without yield_until: passes once and returns. With yield_until:
-     * sets XMage's native server-side yield flag, then waits for a meaningful callback.
-     * With yield_until_step: client-side yield that auto-passes until the target step
-     * is reached (within the current turn). Still stops for combat and non-priority actions.
+     * Pass priority. Without until: passes once and returns. With until set to a
+     * step name (upkeep, draw, etc.): client-side yield that auto-passes until
+     * the target step is reached within the current turn. With until set to a
+     * cross-turn value (end_of_turn, my_turn, stack_resolved): sets XMage's native
+     * server-side yield flag, then waits for a meaningful callback.
      *
      * Both modes auto-handle mechanical callbacks (GAME_PLAY_MANA auto-cancel,
      * optional GAME_TARGET with no legal targets). Returns stop_reason indicating
      * why the call returned.
      */
-    public Map<String, Object> passPriority(String yieldUntil, String yieldUntilStep) {
+    public Map<String, Object> passPriority(String until) {
         interactionsThisTurn++;
         int actionsPassed = 0;
 
-        // Mutual exclusivity check
-        if (yieldUntil != null && yieldUntilStep != null) {
-            Map<String, Object> result = new HashMap<>();
-            result.put("error", "yield_until and yield_until_step are mutually exclusive");
-            return result;
-        }
-
-        // Validate and activate server-side yield if requested
+        // Route the "until" parameter: check step phases first, then server-side yields
         boolean yieldActive = false;
         PhaseStep targetStep = null;
         int yieldStartTurn = lastTurnNumber;
-        if (yieldUntil != null) {
-            PlayerAction yieldAction = YIELD_ACTIONS.get(yieldUntil);
-            if (yieldAction == null) {
-                var result = new HashMap<String, Object>();
-                result.put("error", "Invalid yield_until value: " + yieldUntil
-                    + ". Valid values: " + String.join(", ", YIELD_ACTIONS.keySet()));
-                return result;
+        if (until != null) {
+            targetStep = STEP_PHASES.get(until);
+            if (targetStep != null) {
+                // Client-side step yield: do NOT sendPlayerAction.
+                yieldActive = true;
+            } else {
+                PlayerAction yieldAction = YIELD_ACTIONS.get(until);
+                if (yieldAction == null) {
+                    var allValues = new java.util.ArrayList<>(STEP_PHASES.keySet());
+                    allValues.addAll(YIELD_ACTIONS.keySet());
+                    var result = new HashMap<String, Object>();
+                    result.put("error", "Invalid until value: " + until
+                        + ". Valid values: " + String.join(", ", allValues));
+                    return result;
+                }
+                UUID gameId = currentGameId;
+                if (gameId == null) {
+                    var result = new HashMap<String, Object>();
+                    result.put("error", "No active game for yield");
+                    return result;
+                }
+                session.sendPlayerAction(yieldAction, gameId, null);
+                yieldActive = true;
             }
-            UUID gameId = currentGameId;
-            if (gameId == null) {
-                var result = new HashMap<String, Object>();
-                result.put("error", "No active game for yield");
-                return result;
-            }
-            session.sendPlayerAction(yieldAction, gameId, null);
-            yieldActive = true;
-        }
-
-        // Validate and activate client-side step yield if requested
-        if (yieldUntilStep != null) {
-            targetStep = STEP_PHASES.get(yieldUntilStep);
-            if (targetStep == null) {
-                Map<String, Object> result = new HashMap<>();
-                result.put("error", "Invalid yield_until_step value: " + yieldUntilStep
-                    + ". Valid values: " + String.join(", ", STEP_PHASES.keySet()));
-                return result;
-            }
-            // Client-side yield: do NOT sendPlayerAction. Just set yieldActive.
-            yieldActive = true;
         }
 
         long startTime = System.currentTimeMillis();
@@ -2262,8 +2246,8 @@ public class BridgeCallbackHandler {
      * Combined helper for models: wait using pass_priority, then return full choices.
      * This reduces one round trip compared to pass_priority + get_action_choices.
      */
-    public Map<String, Object> waitAndGetChoices(String yieldUntil, String yieldUntilStep) {
-        Map<String, Object> waitResult = passPriority(yieldUntil, yieldUntilStep);
+    public Map<String, Object> waitAndGetChoices(String until) {
+        Map<String, Object> waitResult = passPriority(until);
         if (!Boolean.TRUE.equals(waitResult.get("action_pending"))) {
             return waitResult;
         }

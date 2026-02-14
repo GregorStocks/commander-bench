@@ -246,8 +246,8 @@ def _make_llm_response(tool_name: str, args: str) -> MagicMock:
     return response
 
 
-_BAD_PASS_ARGS = '{"yield_until":"my_turn","yield_until_step":"draw"}'
-_PASS_ERROR = '{"error": "yield_until and yield_until_step are mutually exclusive"}'
+_BAD_PASS_ARGS = '{"until":"invalid_value"}'
+_PASS_ERROR = '{"error": "Invalid until value: invalid_value"}'
 _PASS_OK = '{"action_pending": false, "stop_reason": "passed"}'
 _TOOLS = [{"type": "function", "function": {"name": "pass_priority", "parameters": {}}}]
 
@@ -331,9 +331,9 @@ async def test_different_pass_errors_dont_trigger_forced_pass():
 
     session.call_tool = AsyncMock(side_effect=fake_call_tool)
 
-    bad_pass = _make_llm_response("pass_priority", '{"yield_until":"bad"}')
-    # Use yield_until for the exit call so it's distinguishable from forced {}
-    exit_pass = _make_llm_response("pass_priority", '{"yield_until":"my_turn"}')
+    bad_pass = _make_llm_response("pass_priority", '{"until":"bad"}')
+    # Use until for the exit call so it's distinguishable from forced {}
+    exit_pass = _make_llm_response("pass_priority", '{"until":"my_turn"}')
 
     client = MagicMock()
     client.chat.completions.create = AsyncMock(side_effect=[bad_pass, bad_pass, bad_pass, bad_pass, exit_pass])
@@ -382,8 +382,8 @@ async def test_successful_pass_resets_error_counter():
     session.call_tool = AsyncMock(side_effect=fake_call_tool)
 
     bad_pass = _make_llm_response("pass_priority", _BAD_PASS_ARGS)
-    # Use yield_until for the "ok" calls so they're distinguishable from forced {}
-    ok_pass = _make_llm_response("pass_priority", '{"yield_until":"my_turn"}')
+    # Use until for the "ok" calls so they're distinguishable from forced {}
+    ok_pass = _make_llm_response("pass_priority", '{"until":"my_turn"}')
 
     client = MagicMock()
     # 2 errors, 1 success, 2 errors, then game_over

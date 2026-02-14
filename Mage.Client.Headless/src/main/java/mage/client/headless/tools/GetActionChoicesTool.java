@@ -12,9 +12,9 @@ public class GetActionChoicesTool {
     @Tool(
         name = "get_action_choices",
         description = "Get available choices for the current pending action. Call before choose_action. "
-            + "With yield_until or yield_until_step: blocks like pass_priority until a decision is needed, "
+            + "With until: blocks like pass_priority until a decision is needed, "
             + "then returns choices in one call. "
-            + "Without yield: returns immediately (action_pending=false if nothing to do). "
+            + "Without until: returns immediately (action_pending=false if nothing to do). "
             + "Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). "
             + "response_type: select (cards to play, attackers, blockers), boolean (yes/no), "
             + "index (target/ability), amount, pile, or multi_amount. "
@@ -35,33 +35,23 @@ public class GetActionChoicesTool {
             @Tool.Field(name = "max_amount", type = "integer", description = "Maximum allowed value"),
             @Tool.Field(name = "actions_passed", type = "integer", description = "Number of priority passes performed before the decision"),
             @Tool.Field(name = "recent_chat", type = "array[string]", description = "Chat messages received since last check"),
-            @Tool.Field(name = "stop_reason", type = "string", description = "Why pass_priority returned (only when yield_until/yield_until_step is set)")
+            @Tool.Field(name = "stop_reason", type = "string", description = "Why pass_priority returned (only when until is set)")
         }
     )
     public static Map<String, Object> execute(
             BridgeCallbackHandler handler,
             @Param(
-                description = "Yield mode: pass priority using XMage's server-side yield, then return choices. "
-                    + "Same values as pass_priority's yield_until. Omit to return immediately. "
-                    + "Cannot combine with yield_until_step.",
-                allowed_values = {
-                    "end_of_turn", "next_turn", "next_turn_skip_stack",
-                    "next_main", "stack_resolved", "my_turn",
-                    "end_step_before_my_turn"
-                }
-            ) String yield_until,
-            @Param(
-                description = "Yield to a specific game step (client-side), then return choices. "
-                    + "Same values as pass_priority's yield_until_step. "
-                    + "Cannot combine with yield_until.",
+                description = "Skip ahead to a target, then return choices. "
+                    + "Same values as pass_priority's until parameter. Omit to return immediately.",
                 allowed_values = {
                     "upkeep", "draw", "precombat_main", "begin_combat",
                     "declare_attackers", "declare_blockers",
-                    "end_combat", "postcombat_main", "end_turn"
+                    "end_combat", "postcombat_main",
+                    "end_of_turn", "my_turn", "stack_resolved"
                 }
-            ) String yield_until_step) {
-        if (yield_until != null || yield_until_step != null) {
-            return handler.waitAndGetChoices(yield_until, yield_until_step);
+            ) String until) {
+        if (until != null) {
+            return handler.waitAndGetChoices(until);
         } else {
             return handler.getActionChoices();
         }
