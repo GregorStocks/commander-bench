@@ -5,6 +5,7 @@
     "gem25p-medium": { "model": "google/gemini-2.5-pro", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
     "gem3p-medium":  { "model": "google/gemini-3-pro-preview", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
     "haiku-low":     { "model": "anthropic/claude-haiku-4.5", "reasoning_effort": "low", "system_prompt": "default", "toolset": "default" },
+    "haiku-medium":  { "model": "anthropic/claude-haiku-4.5", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
     "sonnet-medium": { "model": "anthropic/claude-sonnet-4.5", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
     "opus-medium":   { "model": "anthropic/claude-opus-4.6", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },
     "o3-medium":     { "model": "openai/o3", "reasoning_effort": "medium", "system_prompt": "default", "toolset": "default" },

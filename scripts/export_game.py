@@ -345,6 +345,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         }
         if p.get("model"):
             entry["model"] = p["model"]
+        if p.get("reasoning_effort"):
+            entry["reasoningEffort"] = p["reasoning_effort"]
         if name in player_costs:
             entry["totalCostUsd"] = round(player_costs[name], 4)
         if name in placements:

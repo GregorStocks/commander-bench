@@ -830,7 +830,8 @@ const { slug } = Astro.params;
           playerColorMap[p.name] = i % 4;
           if (p.model || p.totalCostUsd != null) {
             var meta = { model: p.model, totalCostUsd: p.totalCostUsd };
-            var elo = p.model ? gameElo[p.model] : null;
+            var eloKey = p.model && p.reasoningEffort ? p.model + "::" + p.reasoningEffort : p.model;
+            var elo = eloKey ? gameElo[eloKey] : null;
             if (elo) {
               meta.eloBefore = elo.before;
               meta.eloAfter = elo.after;

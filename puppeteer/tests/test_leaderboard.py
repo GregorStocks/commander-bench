@@ -6,6 +6,8 @@ import tempfile
 from pathlib import Path
 
 from puppeteer.leaderboard import (
+    _player_key,
+    _split_key,
     capitalize_provider,
     compute_ratings,
     derive_display_name,
@@ -40,6 +42,7 @@ def _pilot(
     placement: int | None = None,
     tool_calls_ok: int | None = None,
     tool_calls_failed: int | None = None,
+    reasoning_effort: str | None = None,
 ) -> dict:
     d: dict = {"name": name, "type": "pilot", "model": model, "totalCostUsd": cost}
     if placement is not None:
@@ -48,6 +51,8 @@ def _pilot(
         d["toolCallsOk"] = tool_calls_ok
     if tool_calls_failed is not None:
         d["toolCallsFailed"] = tool_calls_failed
+    if reasoning_effort is not None:
+        d["reasoningEffort"] = reasoning_effort
     return d
 
 
@@ -257,10 +262,10 @@ def test_ratings_per_game_snapshots():
     assert per_game[0]["id"] == "g1"
     assert len(per_game[0]["players"]) == 2
 
-    alice = next(p for p in per_game[0]["players"] if p["model"] == "a/x")
+    alice = next(p for p in per_game[0]["players"] if p["key"] == "a/x")
     assert alice["ratingAfter"] > alice["ratingBefore"]
 
-    bob = next(p for p in per_game[0]["players"] if p["model"] == "b/y")
+    bob = next(p for p in per_game[0]["players"] if p["key"] == "b/y")
     assert bob["ratingAfter"] < bob["ratingBefore"]
 
 
@@ -718,3 +723,95 @@ def test_generate_leaderboard_file_has_formats_key():
         assert "combined" in result["formats"]
         assert "legacy" in result["formats"]
         assert result["formats"]["legacy"]["totalGames"] == 1
+
+
+# --- _player_key / _split_key ---
+
+
+def test_player_key_without_effort():
+    assert _player_key({"model": "a/x"}) == "a/x"
+
+
+def test_player_key_with_effort():
+    assert _player_key({"model": "a/x", "reasoningEffort": "medium"}) == "a/x::medium"
+
+
+def test_player_key_with_snake_case_effort():
+    assert _player_key({"model": "a/x", "reasoning_effort": "low"}) == "a/x::low"
+
+
+def test_split_key_without_effort():
+    assert _split_key("a/x") == ("a/x", None)
+
+
+def test_split_key_with_effort():
+    assert _split_key("a/x::medium") == ("a/x", "medium")
+
+
+# --- reasoning effort in leaderboard ---
+
+
+def test_generate_leaderboard_splits_by_reasoning_effort():
+    """Same model at different effort levels should produce separate entries."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/haiku", cost=1.0, placement=1, reasoning_effort="low"),
+                _pilot("Bob", "a/haiku", cost=2.0, placement=2, reasoning_effort="medium"),
+            ],
+        ),
+    ]
+    result, _ = generate_leaderboard(games, {"a/haiku": "Haiku"})
+    assert len(result["models"]) == 2
+    names = {m["modelName"] for m in result["models"]}
+    assert "Haiku (low)" in names
+    assert "Haiku (medium)" in names
+
+    # Both should have the same modelId
+    for m in result["models"]:
+        assert m["modelId"] == "a/haiku"
+
+    # Winner should have reasoningEffort field
+    winner = next(m for m in result["models"] if m["modelName"] == "Haiku (low)")
+    assert winner["reasoningEffort"] == "low"
+
+
+def test_generate_leaderboard_no_effort_no_suffix():
+    """Players without reasoningEffort should have no suffix in display name."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/model-a", cost=1.0, placement=1),
+                _pilot("Bob", "b/model-b", cost=2.0, placement=2),
+            ],
+        ),
+    ]
+    result, _ = generate_leaderboard(games, {"a/model-a": "Model A"})
+    model_a = next(m for m in result["models"] if m["modelId"] == "a/model-a")
+    assert model_a["modelName"] == "Model A"
+    assert "reasoningEffort" not in model_a
+
+
+def test_ratings_separate_by_effort():
+    """Same model at different efforts should have independent ratings."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/x", placement=1, reasoning_effort="medium"),
+                _pilot("Bob", "a/x", placement=2, reasoning_effort="low"),
+            ],
+        ),
+    ]
+    ratings, _ = compute_ratings(games)
+    assert "a/x::medium" in ratings
+    assert "a/x::low" in ratings
+    assert ratings["a/x::medium"] > ratings["a/x::low"]

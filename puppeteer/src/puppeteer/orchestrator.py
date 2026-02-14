@@ -218,6 +218,8 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
             entry["personality"] = player.personality
         if hasattr(player, "system_prompt") and player.system_prompt:
             entry["system_prompt"] = player.system_prompt
+        if hasattr(player, "reasoning_effort") and player.reasoning_effort:
+            entry["reasoning_effort"] = player.reasoning_effort
         players.append(entry)
 
     meta = {
