@@ -28,7 +28,15 @@ def _make_client(error: Exception) -> MagicMock:
     return client
 
 
+@pytest.fixture()
+def _no_prefetch():
+    """Patch _prefetch_first_action so run_pilot_loop tests don't block."""
+    with patch("puppeteer.pilot._prefetch_first_action", new_callable=AsyncMock, return_value="Game starting."):
+        yield
+
+
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_prefetch")
 async def test_403_raises_permanent_failure():
     """A 403 error (key quota exceeded) should raise PermanentLLMFailure."""
     session = _make_session()
@@ -46,6 +54,7 @@ async def test_403_raises_permanent_failure():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_prefetch")
 async def test_402_raises_permanent_failure():
     """A 402 error (credits exhausted) should raise PermanentLLMFailure."""
     session = _make_session()
@@ -63,6 +72,7 @@ async def test_402_raises_permanent_failure():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_prefetch")
 async def test_404_raises_permanent_failure():
     """A 404 error (model not found) should raise PermanentLLMFailure."""
     session = _make_session()
@@ -80,6 +90,7 @@ async def test_404_raises_permanent_failure():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("_no_prefetch")
 async def test_game_over_from_pass_priority_triggers_auto_pass():
     """When pass_priority returns game_over, pilot should switch to auto-pass."""
     session = _make_session()

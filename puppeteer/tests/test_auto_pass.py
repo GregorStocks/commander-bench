@@ -2,11 +2,18 @@
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from puppeteer.auto_pass import auto_pass_loop
+
+
+@pytest.fixture(autouse=True)
+def _no_sleep():
+    """Patch asyncio.sleep to avoid real delays in auto_pass_loop tests."""
+    with patch("puppeteer.auto_pass.asyncio.sleep", new_callable=AsyncMock):
+        yield
 
 
 def _make_session(responses: list[str]) -> MagicMock:
