@@ -5,6 +5,7 @@ import gzip
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 WEBSITE_GAMES_DIR = (
@@ -89,15 +90,49 @@ def _deck_display_name(player_meta: dict, deck_type: str) -> str | None:
     return _deck_name_from_path(player_meta.get("deck_path", ""))
 
 
+def compute_thinking_time(llm_events: list[dict]) -> dict[str, float]:
+    """Compute per-player thinking time from sorted LLM events.
+
+    For each consecutive pair of events, the time gap is attributed to the
+    player of the earlier event. This approximates wall-clock time each player
+    spent with priority (similar to a chess clock).
+
+    Returns {player_name: total_seconds}.
+    """
+    thinking: dict[str, float] = {}
+    for i in range(len(llm_events) - 1):
+        player = llm_events[i].get("player", "")
+        if not player:
+            continue
+        ts_a = llm_events[i].get("ts", "")
+        ts_b = llm_events[i + 1].get("ts", "")
+        if not ts_a or not ts_b:
+            continue
+        try:
+            dt_a = datetime.fromisoformat(ts_a)
+            dt_b = datetime.fromisoformat(ts_b)
+        except ValueError:
+            continue
+        gap = (dt_b - dt_a).total_seconds()
+        if gap > 0:
+            thinking[player] = thinking.get(player, 0.0) + gap
+    return thinking
+
+
 def _read_llm_events(
     game_dir: Path,
 ) -> tuple[
-    list[dict], dict[str, float], dict[str, list[str]], dict[str, tuple[int, int]]
+    list[dict],
+    dict[str, float],
+    dict[str, list[str]],
+    dict[str, tuple[int, int]],
+    dict[str, float],
 ]:
     """Read LLM events from all *_llm.jsonl files.
 
     Returns (llm_events sorted by timestamp, {player_name: total_cost_usd},
-    {player_name: available_tools}, {player_name: (ok_count, failed_count)}).
+    {player_name: available_tools}, {player_name: (ok_count, failed_count)},
+    {player_name: thinking_time_secs}).
     """
     events = []
     player_costs: dict[str, float] = {}
@@ -199,7 +234,9 @@ def _read_llm_events(
     # Sort by timestamp
     events.sort(key=lambda e: e.get("ts", ""))
 
-    return events, player_costs, player_tools, player_tool_calls
+    player_thinking = compute_thinking_time(events)
+
+    return events, player_costs, player_tools, player_tool_calls, player_thinking
 
 
 def _read_llm_trace(game_dir: Path) -> list[dict]:
@@ -283,8 +320,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             }
 
     # Read LLM logs
-    llm_events, player_costs, player_tools, player_tool_calls = _read_llm_events(
-        game_dir
+    llm_events, player_costs, player_tools, player_tool_calls, player_thinking = (
+        _read_llm_events(game_dir)
     )
     llm_trace = _read_llm_trace(game_dir)
 
@@ -357,6 +394,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
             ok, failed = player_tool_calls[name]
             entry["toolCallsOk"] = ok
             entry["toolCallsFailed"] = failed
+        if name in player_thinking:
+            entry["thinkingTimeSecs"] = round(player_thinking[name], 1)
         players_summary.append(entry)
 
     # Build output

@@ -35,6 +35,27 @@ if (fs.existsSync(gamesDir)) {
         }
       }
     }
+    // Compute thinking time from llmEvents if not already on players
+    if (players.length > 0 && !players.some((p: any) => p.thinkingTimeSecs != null)) {
+      const llmEvents: any[] = data.llmEvents || [];
+      if (llmEvents.length > 1) {
+        const thinking: Record<string, number> = {};
+        for (let i = 0; i < llmEvents.length - 1; i++) {
+          const player = llmEvents[i].player;
+          if (!player) continue;
+          const tsA = llmEvents[i].ts;
+          const tsB = llmEvents[i + 1].ts;
+          if (!tsA || !tsB) continue;
+          const gap = (new Date(tsB).getTime() - new Date(tsA).getTime()) / 1000;
+          if (gap > 0) thinking[player] = (thinking[player] || 0) + gap;
+        }
+        for (const p of players) {
+          if (thinking[p.name] != null) {
+            p.thinkingTimeSecs = Math.round(thinking[p.name] * 10) / 10;
+          }
+        }
+      }
+    }
     const entry: Record<string, unknown> = {
       id: data.id,
       timestamp: data.timestamp,
@@ -399,6 +420,12 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
     font-variant-numeric: tabular-nums;
   }
 
+  .player-thinking {
+    font-size: 0.75rem;
+    color: #a0a0b8;
+    font-variant-numeric: tabular-nums;
+  }
+
   .tool-fail {
     color: #e94560;
   }
@@ -523,6 +550,13 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       if (ts >= EPOCH_BOUNDARIES[i][0]) epoch = EPOCH_BOUNDARIES[i][1];
     }
     return epoch;
+  }
+
+  function formatTime(secs) {
+    if (secs < 60) return Math.round(secs) + "s";
+    var m = Math.floor(secs / 60);
+    var s = Math.round(secs % 60);
+    return s > 0 ? m + "m " + s + "s" : m + "m";
   }
 
   function getGameFormat(deckType) {
@@ -783,6 +817,14 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
           toolsEl.textContent = text;
         }
         cell.appendChild(toolsEl);
+      }
+
+      // Thinking time (only if present)
+      if (p.thinkingTimeSecs != null) {
+        var thinkEl = document.createElement("div");
+        thinkEl.className = "player-thinking";
+        thinkEl.textContent = formatTime(p.thinkingTimeSecs) + " thinking";
+        cell.appendChild(thinkEl);
       }
 
       // Elo (if available)

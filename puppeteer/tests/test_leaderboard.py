@@ -10,6 +10,7 @@ from puppeteer.leaderboard import (
     _split_key,
     capitalize_provider,
     compute_ratings,
+    compute_thinking_time,
     derive_display_name,
     derive_format,
     extract_placements,
@@ -1034,3 +1035,96 @@ def test_generate_leaderboard_file_explicit_epoch_overrides_inferred():
 
         assert result["totalGames"] == 1
         assert result["excludedGames"] == 0
+
+
+# --- compute_thinking_time ---
+
+
+def test_compute_thinking_time_basic():
+    events = [
+        {"ts": "2026-02-14T10:00:00-08:00", "player": "Alice", "type": "llm_response"},
+        {"ts": "2026-02-14T10:00:05-08:00", "player": "Alice", "type": "tool_call"},
+        {"ts": "2026-02-14T10:00:10-08:00", "player": "Bob", "type": "llm_response"},
+        {"ts": "2026-02-14T10:00:12-08:00", "player": "Bob", "type": "tool_call"},
+    ]
+    result = compute_thinking_time(events)
+    # Alice: 5s (own event) + 5s (gap to Bob) = 10s
+    assert result["Alice"] == 10.0
+    # Bob: 2s (own event, last event has no following gap)
+    assert result["Bob"] == 2.0
+
+
+def test_compute_thinking_time_empty():
+    assert compute_thinking_time([]) == {}
+
+
+def test_compute_thinking_time_single_event():
+    events = [{"ts": "2026-02-14T10:00:00-08:00", "player": "Alice", "type": "tool_call"}]
+    assert compute_thinking_time(events) == {}
+
+
+def test_compute_thinking_time_missing_player():
+    events = [
+        {"ts": "2026-02-14T10:00:00-08:00", "player": "", "type": "tool_call"},
+        {"ts": "2026-02-14T10:00:05-08:00", "player": "Alice", "type": "tool_call"},
+    ]
+    result = compute_thinking_time(events)
+    assert "" not in result
+
+
+# --- thinking time in leaderboard ---
+
+
+def test_generate_leaderboard_thinking_time():
+    """Thinking time should be averaged across games."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/model-a", placement=1),
+                _pilot("Bob", "b/model-b", placement=2),
+            ],
+        ),
+        _make_game(
+            "g2",
+            "20260102_000000",
+            "Bob",
+            [
+                _pilot("Alice", "a/model-a", placement=2),
+                _pilot("Bob", "b/model-b", placement=1),
+            ],
+        ),
+    ]
+    # Add thinking time to players
+    games[0]["players"][0]["thinkingTimeSecs"] = 120.0
+    games[0]["players"][1]["thinkingTimeSecs"] = 90.0
+    games[1]["players"][0]["thinkingTimeSecs"] = 80.0
+    games[1]["players"][1]["thinkingTimeSecs"] = 110.0
+
+    result, _ = generate_leaderboard(games, {})
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    bob = next(m for m in result["models"] if m["modelName"] == "Model B")
+
+    # Alice: (120 + 80) / 2 = 100.0
+    assert alice["avgThinkingTimeSecs"] == 100.0
+    # Bob: (90 + 110) / 2 = 100.0
+    assert bob["avgThinkingTimeSecs"] == 100.0
+
+
+def test_generate_leaderboard_missing_thinking_time():
+    """Old games without thinkingTimeSecs should default to 0."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/model-a", placement=1), _pilot("Bob", "b/model-b", placement=2)],
+        ),
+    ]
+    result, _ = generate_leaderboard(games, {})
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    assert alice["avgThinkingTimeSecs"] == 0.0
