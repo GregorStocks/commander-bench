@@ -1,0 +1,10 @@
+{
+  "title": "Land not offered in GAME_SELECT choices despite land_drops_used: 0",
+  "description": "In game_20260214_115320_g2, Gem25F Johnny had Ancient Tomb (p9) in hand with land_drops_used: 0, but the GAME_SELECT choices only listed castable spells (Fury p2, Chalice of the Void p6). The land was never offered across ~15 get_action_choices calls, trapping the model in an unwinnable loop where it kept trying choose_action(id=\"p9\") and getting \"Object p9 not found in current choices\".\n\nEarlier in the same game, Mountain (p4) WAS listed as action: \"land\" among the choices, so this is inconsistent. Possibly a timing issue with when XMage offers land plays vs spell plays in the same GAME_SELECT prompt, or the MCP layer filtering it out.\n\nNeeds investigation of the bridge logs to see what XMage actually offered vs what the MCP layer translated.",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "labels": ["mcp", "headless-bridge"],
+  "created_at": "2026-02-14T15:40:00.000000-08:00",
+  "updated_at": "2026-02-14T15:40:00.000000-08:00"
+}

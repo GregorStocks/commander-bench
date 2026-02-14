@@ -1,0 +1,10 @@
+{
+  "title": "Pilot keeps running after game ends, wasting LLM calls on dead bridge",
+  "description": "When a game ends and the Java bridge disconnects, the pilot loop continues calling the LLM indefinitely. All MCP tools return {\"error\": \"\"} (empty error string) but the pilot has no logic to detect this means the game is over.\n\nObserved in:\n- game_20260214_142305_g3: GPT5n Libby ran for 28 minutes after defeat, ~200 wasted LLM calls\n- game_20260214_115320_g1: Gem3P Stoic ran for 19 minutes after defeat, ~300 wasted LLM calls\n\nThe pattern: game ends → bridge logs GAME_OVER and disconnects → all tool results become {\"error\": \"\"} → pilot keeps calling LLM → stall detector fires every 20 turns → context resets → repeat forever.\n\nFix: detect when all tool calls return empty errors (or specifically detect the bridge disconnect) and exit the pilot loop gracefully.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "labels": ["puppeteer", "pilot"],
+  "created_at": "2026-02-14T15:40:00.000000-08:00",
+  "updated_at": "2026-02-14T15:40:00.000000-08:00"
+}
