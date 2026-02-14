@@ -5,6 +5,7 @@ import json
 from puppeteer.pilot import (
     CONTEXT_RECENT_COUNT,
     CONTEXT_SUMMARY_COUNT,
+    RENDER_INTERVAL,
     TOOL_RESULT_MAX_CHARS,
     _build_reset_message,
     _extract_last_reasoning,
@@ -283,14 +284,19 @@ def test_render_long_history_summarizes_old():
     history = _make_history(n)
     messages = _render_context(history, SYSTEM_PROMPT, STATE_SUMMARY)
 
-    # Should have: system + state bridge + summarised slice + recent slice
+    # Should have: system + summarised slice + state bridge + recent slice
     assert messages[0]["role"] == "system"
-    assert messages[1]["role"] == "user"
-    assert STATE_SUMMARY in messages[1]["content"]
 
-    # Find tool messages in the summarised section (between bridge and recent)
-    recent_start_idx = len(messages) - CONTEXT_RECENT_COUNT
-    summarised_section = messages[2:recent_start_idx]
+    # Find state bridge by content (position varies due to boundary adjustment)
+    bridge_idx = None
+    for i, msg in enumerate(messages):
+        if msg.get("role") == "user" and STATE_SUMMARY in msg.get("content", ""):
+            bridge_idx = i
+            break
+    assert bridge_idx is not None, "State bridge not found"
+
+    # Find tool messages in the summarised section (between system and bridge)
+    summarised_section = messages[1:bridge_idx]
     for msg in summarised_section:
         if msg["role"] == "tool":
             # Should be summarised (short)
@@ -310,12 +316,20 @@ def test_render_preserves_recent_full():
 
 
 def test_render_includes_state_summary():
-    """State bridge message should be present when history is long."""
+    """State bridge message should be present after summarised section, before recent."""
     history = _make_history(CONTEXT_RECENT_COUNT + 5)
     messages = _render_context(history, SYSTEM_PROMPT, STATE_SUMMARY)
-    assert messages[1]["role"] == "user"
-    assert STATE_SUMMARY in messages[1]["content"]
-    assert "pass_priority" in messages[1]["content"]
+    # Find the state bridge by content
+    bridge = None
+    bridge_idx = None
+    for i, msg in enumerate(messages):
+        if msg.get("role") == "user" and STATE_SUMMARY in msg.get("content", ""):
+            bridge = msg
+            bridge_idx = i
+            break
+    assert bridge is not None, "State bridge not found"
+    assert bridge_idx > 1, f"State bridge at position {bridge_idx}, expected after summarised section"
+    assert "pass_priority" in bridge["content"]
 
 
 def test_render_no_orphaned_tool_results():
@@ -450,3 +464,71 @@ def test_render_long_history_with_strategy():
     history = _make_history(n)
     messages = _render_context(history, SYSTEM_PROMPT, STATE_SUMMARY, saved_strategy="Control deck")
     assert "Your saved strategy notes: Control deck" in messages[0]["content"]
+
+
+# ---------------------------------------------------------------------------
+# State bridge position (prompt caching)
+# ---------------------------------------------------------------------------
+
+
+def test_render_state_bridge_after_summarized():
+    """State bridge should appear after summarized section, before recent window."""
+    n = CONTEXT_RECENT_COUNT + CONTEXT_SUMMARY_COUNT + 10
+    history = _make_history(n)
+    messages = _render_context(history, SYSTEM_PROMPT, STATE_SUMMARY)
+
+    # Find the state bridge by content
+    bridge_idx = None
+    for i, msg in enumerate(messages):
+        if msg.get("role") == "user" and STATE_SUMMARY in msg.get("content", ""):
+            bridge_idx = i
+            break
+    assert bridge_idx is not None, "State bridge not found in rendered messages"
+
+    # Should not be at position 1 (old behavior) — must be after summarized section
+    assert bridge_idx > 1, f"State bridge at position {bridge_idx}, expected after summarized section"
+
+    # Should be right before the recent window
+    recent_messages = messages[bridge_idx + 1 :]
+    assert len(recent_messages) >= CONTEXT_RECENT_COUNT
+
+
+# ---------------------------------------------------------------------------
+# Cached prefix reuse
+# ---------------------------------------------------------------------------
+
+
+def test_cached_prefix_reuse_concept():
+    """Verify that cached_render + new_history produces valid messages."""
+    n = CONTEXT_RECENT_COUNT + CONTEXT_SUMMARY_COUNT + 10
+    history = _make_history(n)
+    messages = _render_context(history, SYSTEM_PROMPT, STATE_SUMMARY)
+    cached_render = list(messages)
+    cached_history_len = len(history)
+
+    # Simulate 2 new history entries (assistant + tool pair)
+    new_entries = [
+        _make_assistant_msg([("call_new_1", "pass_priority")]),
+        _make_tool_msg("call_new_1", json.dumps({"actions_passed": 99})),
+    ]
+    history.extend(new_entries)
+
+    # Reuse cached prefix + new entries
+    reused = cached_render + history[cached_history_len:]
+    assert reused[: len(cached_render)] == cached_render
+    assert reused[len(cached_render) :] == new_entries
+
+    # Verify no orphaned tool results in the combined output
+    seen_call_ids: set[str] = set()
+    for msg in reused:
+        if msg.get("role") == "assistant":
+            for tc in msg.get("tool_calls", []):
+                seen_call_ids.add(tc["id"])
+        elif msg.get("role") == "tool":
+            assert msg["tool_call_id"] in seen_call_ids
+
+
+def test_render_interval_constant():
+    """RENDER_INTERVAL should be a positive integer."""
+    assert isinstance(RENDER_INTERVAL, int)
+    assert RENDER_INTERVAL > 0
