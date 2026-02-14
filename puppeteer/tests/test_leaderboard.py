@@ -331,7 +331,7 @@ def test_generate_leaderboard_basic():
             ],
         ),
     ]
-    result, ratings_by_game = generate_leaderboard(games, {})
+    result, ratings_by_game = generate_leaderboard(games, {}, min_games=1)
     assert result["totalGames"] == 2
     assert len(result["models"]) == 2
 
@@ -345,7 +345,7 @@ def test_generate_leaderboard_basic():
 
 
 def test_generate_leaderboard_no_games():
-    result, ratings_by_game = generate_leaderboard([], {})
+    result, ratings_by_game = generate_leaderboard([], {}, min_games=1)
     assert result["totalGames"] == 0
     assert result["models"] == []
     assert ratings_by_game == {}
@@ -353,7 +353,7 @@ def test_generate_leaderboard_no_games():
 
 def test_generate_leaderboard_no_pilots():
     games = [_make_game("g1", "20260101_000000", "CPU1", [_cpu("CPU1"), _cpu("CPU2")])]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
     assert result["totalGames"] == 1
     assert result["models"] == []
 
@@ -367,7 +367,7 @@ def test_generate_leaderboard_skips_non_pilot():
             [_pilot("Alice", "a/model-a", placement=1), _cpu("CPU1")],
         )
     ]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
     assert len(result["models"]) == 1
     assert result["models"][0]["modelName"] == "Model A"
 
@@ -375,7 +375,7 @@ def test_generate_leaderboard_skips_non_pilot():
 def test_generate_leaderboard_uses_registry():
     registry = {"a/model-a": "Fancy Model Name"}
     games = [_make_game("g1", "20260101_000000", "Alice", [_pilot("Alice", "a/model-a", placement=1)])]
-    result, _ = generate_leaderboard(games, registry)
+    result, _ = generate_leaderboard(games, registry, min_games=1)
     assert result["models"][0]["modelName"] == "Fancy Model Name"
 
 
@@ -391,7 +391,7 @@ def test_generate_leaderboard_sorted_by_rating():
             ],
         )
     ]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
     assert result["models"][0]["modelName"] == "Winner"
     assert result["models"][1]["modelName"] == "Loser"
 
@@ -399,7 +399,7 @@ def test_generate_leaderboard_sorted_by_rating():
 def test_generate_leaderboard_missing_cost():
     player = {"name": "Alice", "type": "pilot", "model": "a/x", "placement": 1}
     games = [_make_game("g1", "20260101_000000", "Alice", [player])]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
     assert result["models"][0]["avgApiCost"] == 0.0
 
 
@@ -408,7 +408,7 @@ def test_generate_leaderboard_avg_cost():
         _make_game("g1", "20260101_000000", "A", [_pilot("A", "a/x", cost=10.0, placement=1)]),
         _make_game("g2", "20260102_000000", "A", [_pilot("A", "a/x", cost=20.0, placement=1)]),
     ]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
     assert result["models"][0]["avgApiCost"] == 15.0
 
 
@@ -432,7 +432,7 @@ def test_generate_leaderboard_excludes_no_winner():
             [_pilot("Alice", "a/model-a", cost=3.0), _pilot("Bob", "b/model-b", cost=1.0)],
         ),
     ]
-    result, ratings_by_game = generate_leaderboard(games, {})
+    result, ratings_by_game = generate_leaderboard(games, {}, min_games=1)
     assert result["totalGames"] == 1
     for m in result["models"]:
         assert m["gamesPlayed"] == 1
@@ -452,7 +452,7 @@ def test_generate_leaderboard_all_no_winner():
         _make_game("g1", "20260101_000000", None, [_pilot("A", "a/x"), _pilot("B", "b/y")]),
         _make_game("g2", "20260102_000000", None, [_pilot("A", "a/x"), _pilot("B", "b/y")]),
     ]
-    result, ratings_by_game = generate_leaderboard(games, {})
+    result, ratings_by_game = generate_leaderboard(games, {}, min_games=1)
     assert result["totalGames"] == 0
     assert result["models"] == []
     assert ratings_by_game == {}
@@ -480,7 +480,7 @@ def test_generate_leaderboard_tool_calls():
             ],
         ),
     ]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
 
     alice = next(m for m in result["models"] if m["modelName"] == "Model A")
     bob = next(m for m in result["models"] if m["modelName"] == "Model B")
@@ -504,11 +504,52 @@ def test_generate_leaderboard_missing_tool_calls():
             [_pilot("Alice", "a/model-a", placement=1), _pilot("Bob", "b/model-b", placement=2)],
         ),
     ]
-    result, _ = generate_leaderboard(games, {})
+    result, _ = generate_leaderboard(games, {}, min_games=1)
 
     alice = next(m for m in result["models"] if m["modelName"] == "Model A")
     assert alice["avgToolCallsOk"] == 0.0
     assert alice["avgToolCallsFailed"] == 0.0
+
+
+def test_generate_leaderboard_min_games_filter():
+    """Models with fewer than min_games should be excluded from the models list."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/frequent", placement=1),
+                _pilot("Bob", "b/rare", placement=2),
+            ],
+        ),
+        _make_game(
+            "g2",
+            "20260102_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/frequent", placement=1),
+                _pilot("Carol", "c/also-rare", placement=2),
+            ],
+        ),
+        _make_game(
+            "g3",
+            "20260103_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/frequent", placement=1),
+                _pilot("Bob", "b/rare", placement=2),
+            ],
+        ),
+    ]
+    # With min_games=3, only "frequent" (3 games) should appear
+    result, _ = generate_leaderboard(games, {}, min_games=3)
+    assert len(result["models"]) == 1
+    assert result["models"][0]["modelId"] == "a/frequent"
+
+    # With min_games=1, all three models should appear
+    result, _ = generate_leaderboard(games, {}, min_games=1)
+    assert len(result["models"]) == 3
 
 
 # --- generate_leaderboard_file ---
@@ -531,6 +572,7 @@ def test_generate_leaderboard_file_integration():
                 _pilot("Bob", "google/gemini-2.5-flash", cost=1.0, placement=2),
             ],
         )
+        game["deckType"] = "Constructed - Standard"
         (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
 
         models_json = root / "models.json"
@@ -545,7 +587,7 @@ def test_generate_leaderboard_file_integration():
             )
         )
 
-        output_path = generate_leaderboard_file(games_dir, data_dir, models_json)
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
 
         # Verify benchmark-results.json
         assert output_path.exists()
@@ -573,7 +615,7 @@ def test_generate_leaderboard_file_no_games():
         games_dir.mkdir()
         data_dir = root / "data"
 
-        output_path = generate_leaderboard_file(games_dir, data_dir, root / "models.json")
+        output_path = generate_leaderboard_file(games_dir, data_dir, root / "models.json", min_games=1)
 
         result = json.loads(output_path.read_text())
         assert result["totalGames"] == 0
@@ -595,6 +637,7 @@ def test_generate_leaderboard_file_with_game_fallback():
             "Alice",
             [_pilot("Alice", "a/x"), _pilot("Bob", "b/y"), _pilot("Carol", "c/z")],
         )
+        game["deckType"] = "Constructed - Standard"
         game["actions"] = [
             {"seq": 100, "message": "Carol has lost the game."},
             {"seq": 200, "message": "Bob has lost the game."},
@@ -604,7 +647,7 @@ def test_generate_leaderboard_file_with_game_fallback():
         models_json = root / "models.json"
         models_json.write_text(json.dumps({"models": []}))
 
-        output_path = generate_leaderboard_file(games_dir, data_dir, models_json)
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
         result = json.loads(output_path.read_text())
 
         # Alice won (1st), Bob eliminated last (2nd), Carol eliminated first (3rd)
@@ -663,7 +706,7 @@ def test_generate_all_leaderboards_splits_by_format():
     )
     modern_game["deckType"] = "Constructed - Modern"
 
-    format_results, _ = generate_all_leaderboards([legacy_game, modern_game], {})
+    format_results, _ = generate_all_leaderboards([legacy_game, modern_game], {}, min_games=1)
 
     assert "combined" in format_results
     assert "legacy" in format_results
@@ -686,7 +729,7 @@ def test_generate_all_leaderboards_combined_includes_all():
         g["deckType"] = fmt
         games.append(g)
 
-    format_results, _ = generate_all_leaderboards(games, {})
+    format_results, _ = generate_all_leaderboards(games, {}, min_games=1)
     assert format_results["combined"]["totalGames"] == 3
 
 
@@ -710,7 +753,7 @@ def test_generate_leaderboard_file_has_formats_key():
         models_json = root / "models.json"
         models_json.write_text(json.dumps({"models": []}))
 
-        output_path = generate_leaderboard_file(games_dir, data_dir, models_json)
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
         result = json.loads(output_path.read_text())
 
         # Backward compat: top-level fields
@@ -764,7 +807,7 @@ def test_generate_leaderboard_splits_by_reasoning_effort():
             ],
         ),
     ]
-    result, _ = generate_leaderboard(games, {"a/haiku": "Haiku"})
+    result, _ = generate_leaderboard(games, {"a/haiku": "Haiku"}, min_games=1)
     assert len(result["models"]) == 2
     names = {m["modelName"] for m in result["models"]}
     assert "Haiku (low)" in names
@@ -792,7 +835,7 @@ def test_generate_leaderboard_no_effort_no_suffix():
             ],
         ),
     ]
-    result, _ = generate_leaderboard(games, {"a/model-a": "Model A"})
+    result, _ = generate_leaderboard(games, {"a/model-a": "Model A"}, min_games=1)
     model_a = next(m for m in result["models"] if m["modelId"] == "a/model-a")
     assert model_a["modelName"] == "Model A"
     assert "reasoningEffort" not in model_a
