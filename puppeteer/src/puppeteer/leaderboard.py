@@ -34,7 +34,6 @@ FORMAT_LABELS: dict[str, str] = {
     "standard": "Standard",
     "modern": "Modern",
     "legacy": "Legacy",
-    "commander": "Commander",
 }
 
 

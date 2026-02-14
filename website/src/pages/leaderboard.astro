@@ -7,10 +7,9 @@ const FORMAT_LABELS: Record<string, string> = {
   standard: 'Standard',
   modern: 'Modern',
   legacy: 'Legacy',
-  commander: 'Commander',
 };
 
-const FORMAT_ORDER = ['combined', 'standard', 'modern', 'legacy', 'commander'];
+const FORMAT_ORDER = ['combined', 'standard', 'modern', 'legacy'];
 
 // Build per-format data from the formats key (or fall back to single leaderboard)
 const formats: Record<string, any> = (benchmarkData as any).formats ?? {
@@ -69,8 +68,8 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
           decreases, and the rating converges toward the model's true skill (&mu;).
         </p>
         <p>
-          The <strong>Combined</strong> leaderboard runs all games across all formats
-          through a single unified rating pool.
+          The <strong>Combined</strong> leaderboard rates all 1v1 format games
+          (Standard, Modern, Legacy) in a single unified rating pool.
         </p>
       </div>
     </details>
@@ -474,9 +473,6 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
     text-align: right;
   }
 
-  table.format-combined .col-winrate {
-    display: none;
-  }
 
   tbody tr {
     transition: background 0.15s;
