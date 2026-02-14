@@ -684,13 +684,22 @@
       bodyRow.className = "player-body";
 
       // Side zones column (left)
+      var commanders = player.commanders || [];
+      if (commanders.length === 0 && player.commander) {
+        commanders = [typeof player.commander === "string" ? player.commander : player.commander];
+      }
       var hasAnySideZone = isCommander || player.graveyard.length > 0 || (player.exile && player.exile.length > 0);
       if (hasAnySideZone) {
         var sideCol = document.createElement("div");
         sideCol.className = "side-zones";
 
         if (isCommander) {
-          sideCol.appendChild(makeZone("Commander", player.commanders, zoneOpts));
+          var cmdZone = makeZone("Commander", commanders, {
+            cardImages: cardImages, previewEls: previewEls,
+            useThumbnails: commanders.length > 0, smallThumbs: true,
+          });
+          cmdZone.classList.add("commander-zone");
+          sideCol.appendChild(cmdZone);
         }
 
         var gyDiff = playerDiff ? {
@@ -698,10 +707,12 @@
           tapChangedNames: [],
           ghostCards: [],
         } : null;
-        sideCol.appendChild(makeZone("Graveyard", player.graveyard, {
+        var gyZone = makeZone("Graveyard", player.graveyard, {
           cardImages: cardImages, diffInfo: gyDiff, previewEls: previewEls,
           useThumbnails: player.graveyard.length > 0, smallThumbs: true,
-        }));
+        });
+        gyZone.classList.add("graveyard-zone");
+        sideCol.appendChild(gyZone);
 
         if (player.exile && player.exile.length > 0) {
           var exDiff = playerDiff ? {
@@ -709,13 +720,18 @@
             tapChangedNames: [],
             ghostCards: [],
           } : null;
-          sideCol.appendChild(makeZone("Exile", player.exile, {
+          var exZone = makeZone("Exile", player.exile, {
             cardImages: cardImages, diffInfo: exDiff, previewEls: previewEls,
             useThumbnails: true, smallThumbs: true,
-          }));
+          });
+          exZone.classList.add("exile-zone");
+          sideCol.appendChild(exZone);
         }
 
         bodyRow.appendChild(sideCol);
+
+        // Fit graveyard cards with overlap so entire zone is visible
+        _fitOverlappingCards(gyZone, 300, 90);
       }
 
       // Main column (battlefield + hand)
@@ -731,16 +747,51 @@
         tapChangedNames: [],
         ghostCards: [],
       } : null;
-      mainCol.appendChild(makeZone("Hand", player.hand, {
+      var handZone = makeZone("Hand", player.hand, {
         cardImages: cardImages, countOverride: player.hand_count, diffInfo: handDiff, previewEls: previewEls,
         useThumbnails: player.hand.length > 0, smallThumbs: true,
-      }));
+      });
+      handZone.classList.add("hand-zone");
+      mainCol.appendChild(handZone);
 
       bodyRow.appendChild(mainCol);
       card.appendChild(bodyRow);
 
       container.appendChild(card);
     });
+  }
+
+  // ── Overlapping card fit (graveyard/exile) ──
+
+  function _fitOverlappingCards(zoneEl, maxHeight, baseWidth) {
+    var grid = zoneEl.querySelector(".cards-grid-sm");
+    if (!grid) return;
+    var cards = grid.querySelectorAll(".card-thumb-sm");
+    var N = cards.length;
+    if (N <= 1) return;
+
+    var cardH = Math.round(baseWidth * 204 / 146);
+    var totalNatural = N * cardH;
+    if (totalNatural <= maxHeight) return; // fits without overlap
+
+    var minVisible = 16;
+    var overlap = Math.ceil((totalNatural - maxHeight) / (N - 1));
+    var visible = cardH - overlap;
+
+    if (visible < minVisible) {
+      // Shrink cards to fit
+      var newH = Math.max(minVisible * 2, maxHeight - (N - 1) * minVisible);
+      var newW = Math.round(newH * 146 / 204);
+      overlap = Math.max(0, newH - minVisible);
+      for (var i = 0; i < cards.length; i++) {
+        cards[i].style.width = newW + "px";
+        if (i > 0) cards[i].style.marginTop = "-" + overlap + "px";
+      }
+    } else {
+      for (var i = 1; i < cards.length; i++) {
+        cards[i].style.marginTop = "-" + overlap + "px";
+      }
+    }
   }
 
   // ── Stack rendering ──
@@ -752,7 +803,7 @@
       stack.forEach(function (item) {
         var name = typeof item === "string" ? item : (item.name || "?");
         var obj = typeof item === "string" ? null : item;
-        cardsContainer.appendChild(makeCardChip(name, obj, cardImages, false, previewEls));
+        cardsContainer.appendChild(makeCardThumbnail(name, obj, cardImages, false, previewEls));
       });
       container.classList.remove("hidden");
     } else {

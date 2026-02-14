@@ -6,6 +6,8 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
   margin-bottom: 0.75rem;
+  flex: 1;
+  min-width: 0;
 }
 
 /* 1v1: stack players vertically like XMage (opponent on top, you on bottom) */
@@ -133,11 +135,11 @@
 /* Player body: side zones + main zones horizontal layout */
 .player-body {
   display: flex;
-  gap: 0;
+  gap: 0.5rem;
 }
 
 .side-zones {
-  width: 80px;
+  width: 110px;
   flex-shrink: 0;
   border-right: 1px dashed rgba(255, 255, 255, 0.06);
   overflow: hidden;
@@ -169,35 +171,30 @@
 }
 
 .side-zones .zone-title {
-  font-size: 0.55rem;
+  font-size: 0.6rem;
 }
 
 .side-zones .cards-row {
   flex-direction: column;
 }
 
-.side-zones .card-thumb-sm {
-  width: 55px;
-}
-
 /* Stack cards with overlap in side zones (like Java graveyard) */
 .side-zones .cards-grid-sm {
   gap: 0;
-  max-height: 160px;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .side-zones .card-thumb-sm {
-  width: 65px;
+  width: 90px;
 }
 
-.side-zones .cards-grid-sm .card-thumb-sm {
-  margin-top: -35px;
+/* Graveyard zone colored border */
+.graveyard-zone {
+  border-bottom: 2px solid rgba(168, 85, 247, 0.3) !important;
 }
 
-.side-zones .cards-grid-sm .card-thumb-sm:first-child {
-  margin-top: 0;
+/* Hand zone colored border */
+.hand-zone {
+  border-bottom: 2px solid rgba(59, 130, 246, 0.3) !important;
 }
 
 .zone-title {
@@ -393,13 +390,24 @@
   margin-bottom: 0.4rem;
 }
 
-/* Stack */
+/* Stack (left sidebar next to battlefields) */
 #stack-section {
-  padding: 0.75rem 1rem;
+  width: 140px;
+  flex-shrink: 0;
+  padding: 0.5rem;
   background: #16213e;
   border: 1px solid #0f3460;
   border-radius: 8px;
-  margin-bottom: 0.75rem;
+  align-self: flex-start;
+}
+
+#stack-section .cards-row {
+  flex-direction: column;
+  gap: 6px;
+}
+
+#stack-section .card-thumb {
+  width: 100%;
 }
 
 /* Card preview */
@@ -647,6 +655,7 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  width: auto;
   max-width: 80vw;
   background: rgba(22, 33, 62, 0.92);
 }
