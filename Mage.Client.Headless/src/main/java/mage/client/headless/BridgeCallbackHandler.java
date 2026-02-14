@@ -2645,15 +2645,18 @@ public class BridgeCallbackHandler {
                 }
 
                 if (hasPlayableCards) {
-                    // Playable cards available — return so LLM can decide
-                    var result = new HashMap<String, Object>();
-                    result.put("action_pending", true);
-                    result.put("action_type", method.name());
-                    result.put("actions_passed", actionsPassed);
-                    result.put("has_playable_cards", true);
-                    result.put("stop_reason", "playable_cards");
-                    attachUnseenChat(result);
-                    return result;
+                    if (actionsPassed > 0) {
+                        // Already passed at least once — return so LLM can decide
+                        var result = new HashMap<String, Object>();
+                        result.put("action_pending", true);
+                        result.put("action_type", method.name());
+                        result.put("actions_passed", actionsPassed);
+                        result.put("has_playable_cards", true);
+                        result.put("stop_reason", "playable_cards");
+                        attachUnseenChat(result);
+                        return result;
+                    }
+                    // First pass — fall through to auto-pass so the game advances
                 }
 
                 // No playable cards — auto-pass this priority

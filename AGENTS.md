@@ -65,6 +65,16 @@ make test
 
 Tests run in CI alongside lint and typecheck. Keep tests fast and self-contained — use `tempfile` for file I/O, `unittest.mock.patch` for external dependencies.
 
+## Pull Requests
+
+Before adding commits to an existing PR, verify it's still open:
+
+```bash
+gh pr view <number> --json state -q .state
+```
+
+If the PR is closed/merged, create a new one instead of pushing to a dead branch.
+
 ## Pre-PR Checklist
 
 Always run `make check` before creating a PR. This runs lint, typecheck, and tests in one shot:
