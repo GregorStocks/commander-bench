@@ -11,7 +11,8 @@ import static mage.client.headless.tools.McpToolRegistry.json;
 public class PassPriorityTool {
     @Tool(
         name = "pass_priority",
-        description = "Pass priority. Without until: passes once and returns. "
+        description = "Pass priority. Blocks until you have a pending action (playable cards, "
+            + "combat, non-priority action like mulligan/targeting). "
             + "With until: skips ahead to a target step or phase. "
             + "Step values (current turn, client-side): upkeep, draw, precombat_main, "
             + "begin_combat, declare_attackers, declare_blockers, end_combat, postcombat_main. "
@@ -31,8 +32,7 @@ public class PassPriorityTool {
             @Tool.Field(name = "player_dead", type = "boolean", description = "Whether you died during priority passing"),
             @Tool.Field(name = "stop_reason", type = "string",
                 description = "Why the call returned: playable_cards, combat, non_priority_action, "
-                    + "passed (single pass, no yield), no_action (nothing pending), "
-                    + "reached_step (target step reached), step_not_reached (turn ended without reaching step)")
+                    + "game_over, reached_step (target step reached), step_not_reached (turn ended without reaching step)")
         }
     )
     public static Map<String, Object> execute(
@@ -45,7 +45,7 @@ public class PassPriorityTool {
                     + "Cross-turn values use server-side yield: "
                     + "end_of_turn (skip rest of turn), my_turn (skip to your next turn), "
                     + "stack_resolved (wait for stack to resolve). "
-                    + "Omit to pass once and return.",
+                    + "Omit to block until next actionable priority.",
                 allowed_values = {
                     "upkeep", "draw", "precombat_main", "begin_combat",
                     "declare_attackers", "declare_blockers",
@@ -71,10 +71,11 @@ public class PassPriorityTool {
                 "has_playable_cards", false,
                 "combat_phase", "declare_attackers",
                 "stop_reason", "combat")),
-            example("Single pass (no yield)", json(
-                "action_pending", false,
-                "actions_passed", 1,
-                "stop_reason", "passed")),
+            example("Non-priority action (mulligan, targeting)", json(
+                "action_pending", true,
+                "action_type", "GAME_ASK",
+                "actions_passed", 0,
+                "stop_reason", "non_priority_action")),
             example("Yield until next turn", json(
                 "action_pending", true,
                 "action_type", "GAME_SELECT",

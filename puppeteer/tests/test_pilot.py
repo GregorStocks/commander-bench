@@ -194,26 +194,24 @@ async def test_prefetch_mulligan():
 
 @pytest.mark.asyncio
 async def test_prefetch_waits_for_action():
-    """Pre-fetch should poll pass_priority until action_pending is true."""
+    """Pre-fetch calls pass_priority once (it blocks) and gets action."""
     session = MagicMock()
     calls = []
 
     async def fake_call_tool(name, args):
         calls.append(name)
         if name == "pass_priority":
-            if len([c for c in calls if c == "pass_priority"]) < 3:
-                return _mock_tool_result('{"action_pending": false}')
+            # pass_priority now blocks until action is pending
             return _mock_tool_result('{"action_pending": true, "action_type": "GAME_ASK"}')
         if name == "get_action_choices":
             return _mock_tool_result('{"action_type": "GAME_ASK", "message": "Choose play or draw"}')
         raise AssertionError(f"Unexpected tool: {name}")
 
     session.call_tool = AsyncMock(side_effect=fake_call_tool)
-    with patch("puppeteer.pilot.asyncio.sleep", new_callable=AsyncMock):
-        msg = await _prefetch_first_action(session)
+    msg = await _prefetch_first_action(session)
     assert "GAME_ASK" in msg
-    # Should have polled pass_priority multiple times
-    assert calls.count("pass_priority") == 3
+    # Single blocking call, no polling
+    assert calls.count("pass_priority") == 1
 
 
 @pytest.mark.asyncio
