@@ -159,6 +159,16 @@ const { slug } = Astro.params;
     text-align: right;
   }
 
+  #epoch-banner {
+    font-size: 0.85rem;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    border-radius: 6px;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+
   #blunder-summary {
     font-size: 0.8rem;
     color: #f97316;
@@ -1007,6 +1017,26 @@ const { slug } = Astro.params;
 
           // Render timeline markers
           renderAnnotationMarkers(game.annotations, game.snapshots.length);
+        }
+
+        // Old harness epoch banner
+        var epochBoundaries = [["20260212_224200", 2], ["20260214_084000", 3]];
+        var minEpoch = 3;
+        var gameEpoch = game.harnessEpoch;
+        if (gameEpoch == null) {
+          var gameTs = game.id.replace("game_", "");
+          gameEpoch = 1;
+          for (var eb = 0; eb < epochBoundaries.length; eb++) {
+            if (gameTs >= epochBoundaries[eb][0]) gameEpoch = epochBoundaries[eb][1];
+          }
+        }
+        if (gameEpoch < minEpoch) {
+          var epochBanner = document.createElement("div");
+          epochBanner.id = "epoch-banner";
+          epochBanner.textContent =
+            "This game was played on an older harness version (epoch " + gameEpoch +
+            "). Its results are not included in leaderboard ratings.";
+          document.getElementById("game-header").after(epochBanner);
         }
 
         // Set up transport

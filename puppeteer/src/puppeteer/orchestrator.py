@@ -14,6 +14,7 @@ from pathlib import Path
 from puppeteer.config import Config, PilotPlayer
 from puppeteer.deck_choice import resolve_choice_decks
 from puppeteer.game_log import merge_game_log, read_decklist
+from puppeteer.harness_epoch import HARNESS_EPOCH
 from puppeteer.llm_cost import DEFAULT_BASE_URL as DEFAULT_LLM_BASE_URL
 from puppeteer.llm_cost import required_api_key_env
 from puppeteer.port import PortReservation, find_available_overlay_port, find_available_port, wait_for_port
@@ -248,6 +249,7 @@ def _write_game_meta(game_dir: Path, config: Config, project_root: Path) -> None
         "config": config.run_tag,
         "game_type": config.game_type,
         "deck_type": config.deck_type,
+        "harness_epoch": HARNESS_EPOCH,
         "players": players,
         "git_branch": _git("rev-parse --abbrev-ref HEAD", project_root),
         "git_commit": _git("rev-parse --short HEAD", project_root),

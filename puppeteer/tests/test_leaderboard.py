@@ -573,6 +573,7 @@ def test_generate_leaderboard_file_integration():
             ],
         )
         game["deckType"] = "Constructed - Standard"
+        game["harnessEpoch"] = 3
         (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
 
         models_json = root / "models.json"
@@ -638,6 +639,7 @@ def test_generate_leaderboard_file_with_game_fallback():
             [_pilot("Alice", "a/x"), _pilot("Bob", "b/y"), _pilot("Carol", "c/z")],
         )
         game["deckType"] = "Constructed - Standard"
+        game["harnessEpoch"] = 3
         game["actions"] = [
             {"seq": 100, "message": "Carol has lost the game."},
             {"seq": 200, "message": "Bob has lost the game."},
@@ -748,6 +750,7 @@ def test_generate_leaderboard_file_has_formats_key():
             [_pilot("Alice", "a/x", cost=5.0, placement=1), _pilot("Bob", "b/y", cost=2.0, placement=2)],
         )
         game["deckType"] = "Constructed - Legacy"
+        game["harnessEpoch"] = 3
         (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
 
         models_json = root / "models.json"
@@ -916,3 +919,81 @@ def test_ratings_separate_by_effort():
     assert "a/x::medium" in ratings
     assert "a/x::low" in ratings
     assert ratings["a/x::medium"] > ratings["a/x::low"]
+
+
+# --- epoch filtering ---
+
+
+def test_generate_leaderboard_file_excludes_old_epochs():
+    """Games from old epochs should be excluded from ratings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        games_dir = root / "games"
+        games_dir.mkdir()
+        data_dir = root / "data"
+
+        # Epoch 1 game (old, should be excluded)
+        old_game = _make_game(
+            "game_20260210_090000",
+            "20260210_090000",
+            "Alice",
+            [_pilot("Alice", "a/x", placement=1), _pilot("Bob", "b/y", placement=2)],
+        )
+        old_game["deckType"] = "Constructed - Standard"
+        (games_dir / "game_20260210_090000.json.gz").write_bytes(gzip.compress(json.dumps(old_game).encode()))
+
+        # Epoch 3 game (current, should be included)
+        new_game = _make_game(
+            "game_20260215_090000",
+            "20260215_090000",
+            "Carol",
+            [_pilot("Carol", "c/z", placement=1), _pilot("Dave", "d/w", placement=2)],
+        )
+        new_game["deckType"] = "Constructed - Standard"
+        (games_dir / "game_20260215_090000.json.gz").write_bytes(gzip.compress(json.dumps(new_game).encode()))
+
+        models_json = root / "models.json"
+        models_json.write_text(json.dumps({"models": []}))
+
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
+        result = json.loads(output_path.read_text())
+
+        # Only the epoch 3 game should be in ratings
+        assert result["totalGames"] == 1
+        assert result["excludedGames"] == 1
+        assert result["minEpoch"] == 3
+        assert result["epochCounts"] == {"1": 1, "3": 1}
+
+        # Only epoch-3 models should appear
+        model_ids = {m["modelId"] for m in result["models"]}
+        assert "c/z" in model_ids
+        assert "a/x" not in model_ids
+
+
+def test_generate_leaderboard_file_explicit_epoch_overrides_inferred():
+    """Explicit harnessEpoch in game data should override timestamp inference."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        games_dir = root / "games"
+        games_dir.mkdir()
+        data_dir = root / "data"
+
+        # Old timestamp but explicit epoch 3 — should be included
+        game = _make_game(
+            "game_20260101_000000",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/x", placement=1), _pilot("Bob", "b/y", placement=2)],
+        )
+        game["deckType"] = "Constructed - Standard"
+        game["harnessEpoch"] = 3
+        (games_dir / "game_20260101_000000.json.gz").write_bytes(gzip.compress(json.dumps(game).encode()))
+
+        models_json = root / "models.json"
+        models_json.write_text(json.dumps({"models": []}))
+
+        output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
+        result = json.loads(output_path.read_text())
+
+        assert result["totalGames"] == 1
+        assert result["excludedGames"] == 0

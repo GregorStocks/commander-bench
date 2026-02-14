@@ -375,6 +375,8 @@ def export_game(game_dir: Path, website_games_dir: Path) -> Path:
         "llmTrace": llm_trace,
         "gameOver": game_over,
     }
+    if meta.get("harness_epoch") is not None:
+        output["harnessEpoch"] = meta["harness_epoch"]
     if meta.get("youtube_url"):
         output["youtubeUrl"] = meta["youtube_url"]
 
