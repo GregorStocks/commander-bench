@@ -17,7 +17,7 @@ HARNESS_EPOCH = 3
 
 # Minimum epoch for leaderboard inclusion. Games below this are shown
 # in the games list but excluded from ELO ratings.
-MIN_LEADERBOARD_EPOCH = 3
+MIN_LEADERBOARD_EPOCH = 2
 
 # Epoch boundary timestamps, used to infer epoch for games that predate
 # epoch tracking. Format matches game_id timestamps: "YYYYMMDD_HHMMSS".

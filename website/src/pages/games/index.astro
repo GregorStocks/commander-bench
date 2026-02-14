@@ -508,7 +508,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 
   // Harness epoch inference for games that predate epoch tracking.
   // Must match puppeteer/src/puppeteer/harness_epoch.py boundaries.
-  var MIN_LEADERBOARD_EPOCH = 3;
+  var MIN_LEADERBOARD_EPOCH = 2;
   var EPOCH_BOUNDARIES = [
     ["20260212_224200", 2],
     ["20260214_084000", 3],

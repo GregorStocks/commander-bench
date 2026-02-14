@@ -958,13 +958,13 @@ def test_generate_leaderboard_file_excludes_old_epochs():
         output_path = generate_leaderboard_file(games_dir, data_dir, models_json, min_games=1)
         result = json.loads(output_path.read_text())
 
-        # Only the epoch 3 game should be in ratings
+        # Only the epoch 3 game should be in ratings (epoch 1 excluded, min is 2)
         assert result["totalGames"] == 1
         assert result["excludedGames"] == 1
-        assert result["minEpoch"] == 3
+        assert result["minEpoch"] == 2
         assert result["epochCounts"] == {"1": 1, "3": 1}
 
-        # Only epoch-3 models should appear
+        # Only epoch-3 models should appear (epoch 1 is below MIN_LEADERBOARD_EPOCH=2)
         model_ids = {m["modelId"] for m in result["models"]}
         assert "c/z" in model_ids
         assert "a/x" not in model_ids
