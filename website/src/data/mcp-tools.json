@@ -51,9 +51,17 @@
           "description": "Whether requested cursor was too old and had to be reset to oldest retained log offset",
           "type": "boolean"
         },
+        "since_player": {
+          "description": "The player whose turn the log starts from",
+          "type": "string"
+        },
         "log": {
           "description": "Game log text (may be truncated if max_chars was set)",
           "type": "string"
+        },
+        "since_turn": {
+          "description": "The per-player turn number the log starts from",
+          "type": "integer"
         },
         "truncated": {
           "description": "Whether older content was omitted",
@@ -68,11 +76,15 @@
     "examples": [
       {
         "label": "Truncated log",
-        "value": "{\n  \"log\": \"Turn 3 - Player1: Mountain entered the battlefield...\",\n  \"total_length\": 5234,\n  \"truncated\": true,\n  \"cursor\": 5234\n}"
+        "value": "{\n  \"log\": \"Alice turn 3 (20 - 15)\\nAlice casts Lightning Bolt...\",\n  \"total_length\": 5234,\n  \"truncated\": true,\n  \"cursor\": 5234\n}"
       },
       {
         "label": "Cursor delta",
-        "value": "{\n  \"log\": \"Player2 casts Swords to Plowshares targeting Goblin Guide.\",\n  \"total_length\": 5301,\n  \"truncated\": false,\n  \"cursor\": 5301\n}"
+        "value": "{\n  \"log\": \"Bob casts Swords to Plowshares targeting Goblin Guide.\",\n  \"total_length\": 5301,\n  \"truncated\": false,\n  \"cursor\": 5301\n}"
+      },
+      {
+        "label": "Since turn recap",
+        "value": "{\n  \"log\": \"Bob turn 2 (20 - 18)\\nBob casts Sol Ring\\nAlice turn 3 (20 - 18)\\nAlice plays Forest\",\n  \"total_length\": 5400,\n  \"truncated\": false,\n  \"cursor\": 5400,\n  \"since_turn\": 2,\n  \"since_player\": \"Bob\"\n}"
       }
     ],
     "inputSchema": {
@@ -80,17 +92,25 @@
       "type": "object",
       "properties": {
         "cursor": {
-          "description": "Cursor offset from previous get_game_log call. Returns new log text since this offset.",
+          "description": "Cursor offset from previous get_game_log call. Returns new log text since this offset. Mutually exclusive with since_turn.",
           "type": "integer"
         },
         "max_chars": {
           "description": "Max characters to return (0 or omit for all)",
           "type": "integer"
+        },
+        "since_player": {
+          "description": "Player name for since_turn filter. Defaults to you (the calling player). Only used with since_turn.",
+          "type": "string"
+        },
+        "since_turn": {
+          "description": "Return log entries starting from this player turn number. Turn markers use per-player numbering (e.g. 'Alice turn 3'). Mutually exclusive with cursor.",
+          "type": "integer"
         }
       }
     },
     "name": "get_game_log",
-    "description": "Get game log text. Returns log, total_length, truncated. Use max_chars for recent entries only."
+    "description": "Get game log text. Three modes: (1) since_turn=N to get events since a player's Nth turn (best for recapping opponents' turns in multiplayer), (2) cursor from a previous call for incremental updates, (3) max_chars for the most recent N characters."
   },
   {
     "outputSchema": {

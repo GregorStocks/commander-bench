@@ -130,6 +130,22 @@ def _summarize_tool_result(tool_name: str, content: str) -> str:
             parts.append(f"{name}:{life}hp/{bf}perm")
         return "; ".join(parts) if parts else content[:TOOL_RESULT_MAX_CHARS]
 
+    if tool_name == "get_game_log":
+        total = data.get("total_length", "?")
+        truncated = data.get("truncated", False)
+        since = data.get("since_turn")
+        log_text = data.get("log", "")
+        prefix = f"log({total} chars"
+        if since is not None:
+            prefix += f", since_turn={since}"
+        if truncated:
+            prefix += ", truncated"
+        prefix += "): "
+        remaining = TOOL_RESULT_MAX_CHARS - len(prefix)
+        if remaining > 0 and log_text:
+            return prefix + log_text[:remaining]
+        return prefix.rstrip(": ")
+
     if tool_name == "save_strategy":
         return f"saved {data.get('chars', '?')} chars"
 
