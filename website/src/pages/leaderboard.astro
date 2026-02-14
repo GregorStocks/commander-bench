@@ -56,16 +56,10 @@ const hasData = benchmarkData.models.length > 0 || Object.keys(formats).length >
       <summary>How ratings work</summary>
       <div class="rating-info-body">
         <p>
-          Ratings use the <a href="https://openskill.me/" target="_blank" rel="noopener">OpenSkill</a>
-          PlackettLuce model, a Bayesian rating system that handles both 1v1 and multiplayer games.
-          For Commander (4-player), it uses the full finishing order (1st through 4th).
-          For 1v1 formats (Standard, Modern, Legacy), it reduces to pairwise comparison.
-        </p>
-        <p>
-          Each model starts at <strong>1600</strong>. The displayed rating is a
-          conservative estimate: <code>&mu; &minus; 3&sigma;</code>, scaled to a
-          familiar range. As a model plays more games, its uncertainty (&sigma;)
-          decreases, and the rating converges toward the model's true skill (&mu;).
+          Ratings use the <a href="https://en.wikipedia.org/wiki/Elo_rating_system" target="_blank" rel="noopener">Elo</a>
+          rating system with K-factor 32. Each model starts at <strong>1600</strong>.
+          After each game, the winner gains points and the loser loses points based on
+          the expected outcome — an upset yields a bigger swing.
         </p>
         <p>
           The <strong>Combined</strong> leaderboard rates all 1v1 format games

@@ -1,4 +1,4 @@
-"""Generate leaderboard data from game results using OpenSkill ratings."""
+"""Generate leaderboard data from game results using Elo ratings."""
 
 from __future__ import annotations
 
@@ -9,14 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from openskill.models import PlackettLuce
-
 _LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 
-# Scale raw OpenSkill ordinals (centered at 0) to a DCI-style rating.
-# DCI Magic used Elo starting at 1600.
-_RATING_BASE = 1600
-_RATING_SCALE = 100
+_STARTING_RATING = 1600
+_K_FACTOR = 32
 _MIN_GAMES = 3  # Minimum games to appear on leaderboard
 
 # Map XMage deckType strings to canonical format names for leaderboard bucketing.
@@ -53,9 +49,9 @@ def derive_format(game: dict) -> str:
     return deck_type.lower().replace(" ", "-")
 
 
-def _display_rating(ordinal: float) -> int:
-    """Convert raw OpenSkill ordinal to display rating."""
-    return round(ordinal * _RATING_SCALE + _RATING_BASE)
+def _expected_score(ra: float, rb: float) -> float:
+    """Elo expected score for player A against player B."""
+    return 1.0 / (1.0 + 10.0 ** ((rb - ra) / 400.0))
 
 
 _PROVIDER_DISPLAY: dict[str, str] = {
@@ -173,18 +169,16 @@ def compute_ratings(
     games_index: list[dict],
     games_dir: Path | None = None,
 ) -> tuple[dict[str, float], list[dict]]:
-    """Compute OpenSkill ratings from game history.
+    """Compute Elo ratings from game history.
 
-    Uses PlackettLuce model with full placement orderings when available.
+    Processes games chronologically, updating ratings for 1v1 results.
     Games with no placement data are skipped (no rating update) but still
     record snapshots.
 
     Returns (final_ratings, per_game_ratings) where per_game_ratings is a list
-    of dicts with {id, players: [{model, ratingBefore, ratingAfter}]}.
+    of dicts with {id, players: [{key, ratingBefore, ratingAfter}]}.
     """
-    model = PlackettLuce()
-    # model_id -> OpenSkill rating object
-    ratings: dict[str, Any] = {}
+    ratings: dict[str, float] = {}
     per_game: list[dict] = []
 
     sorted_games = sorted(games_index, key=lambda g: g.get("timestamp", ""))
@@ -196,10 +190,10 @@ def compute_ratings(
             for p in pilots:
                 key = _player_key(p)
                 if key not in ratings:
-                    ratings[key] = model.rating(name=key)
+                    ratings[key] = float(_STARTING_RATING)
             if pilots:
                 key = _player_key(pilots[0])
-                display = _display_rating(ratings[key].ordinal())
+                display = round(ratings[key])
                 per_game.append(
                     {
                         "id": game.get("id", ""),
@@ -212,37 +206,38 @@ def compute_ratings(
         for p in pilots:
             key = _player_key(p)
             if key not in ratings:
-                ratings[key] = model.rating(name=key)
+                ratings[key] = float(_STARTING_RATING)
 
         # Record before ratings
         pilot_keys = [_player_key(p) for p in pilots]
-        before = {key: _display_rating(ratings[key].ordinal()) for key in pilot_keys}
+        before = {key: round(ratings[key]) for key in pilot_keys}
 
         # Get placements
         placements = extract_placements(game, games_dir)
 
-        # Build teams (each player is a 1-person team) and ranks
-        teams = [[ratings[key]] for key in pilot_keys]
-
         has_placements = any(p["name"] in placements for p in pilots)
         if has_placements:
-            # Convert placements to ranks for OpenSkill (lower = better)
-            ranks: list[float] = []
-            for p in pilots:
-                placement = placements.get(p["name"])
-                # Default to last place if no placement
-                ranks.append(float(placement if placement is not None else len(pilots)))
-            updated = model.rate(teams, ranks=ranks)
-        else:
-            # No placement data — skip rating update
-            updated = teams
-
-        # Update ratings
-        for i, key in enumerate(pilot_keys):
-            ratings[key] = updated[i][0]
+            # Pairwise Elo updates for all pilot pairs
+            deltas: dict[str, float] = {key: 0.0 for key in pilot_keys}
+            for i, pi in enumerate(pilots):
+                for j, pj in enumerate(pilots):
+                    if i >= j:
+                        continue
+                    ki = _player_key(pi)
+                    kj = _player_key(pj)
+                    pi_place = placements.get(pi["name"], len(pilots))
+                    pj_place = placements.get(pj["name"], len(pilots))
+                    if pi_place == pj_place:
+                        continue
+                    ea = _expected_score(ratings[ki], ratings[kj])
+                    sa = 1.0 if pi_place < pj_place else 0.0
+                    deltas[ki] += _K_FACTOR * (sa - ea)
+                    deltas[kj] += _K_FACTOR * ((1.0 - sa) - (1.0 - ea))
+            for key in pilot_keys:
+                ratings[key] += deltas[key]
 
         # Record after ratings
-        after = {key: _display_rating(ratings[key].ordinal()) for key in pilot_keys}
+        after = {key: round(ratings[key]) for key in pilot_keys}
         per_game.append(
             {
                 "id": game.get("id", ""),
@@ -260,7 +255,7 @@ def compute_ratings(
     # Build final display ratings
     final: dict[str, float] = {}
     for mid, r in ratings.items():
-        final[mid] = _display_rating(r.ordinal())
+        final[mid] = round(r)
 
     return final, per_game
 
@@ -334,7 +329,7 @@ def generate_leaderboard(
         win_rate = wins / games_played
         avg_cost = s["total_cost"] / games_played
         provider_slug = model_id.split("/", 1)[0]
-        rating = final_ratings.get(key, _RATING_BASE)
+        rating = final_ratings.get(key, _STARTING_RATING)
 
         display_name = model_registry.get(model_id) or derive_display_name(model_id)
         if effort:
