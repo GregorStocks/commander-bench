@@ -345,26 +345,19 @@ async def execute_tool(session: ClientSession, name: str, arguments: dict) -> st
 async def _prefetch_first_action(session: ClientSession) -> str:
     """Wait for the first game decision and return a descriptive initial message.
 
-    Calls pass_priority() until a decision arrives (e.g. mulligan, choose
-    play/draw), then fetches the action choices and builds a message that
-    tells the LLM exactly what it needs to decide — avoiding the confusing
-    "call pass_priority to begin" prompt.
+    Calls pass_priority() which blocks until a decision arrives (e.g.
+    mulligan, choose play/draw), then fetches the action choices and builds
+    a message that tells the LLM exactly what it needs to decide.
     """
-    # Wait for the first pending action (mulligan, play/draw choice, etc.)
-    for _ in range(60):  # up to ~60s
-        result_text = await execute_tool(session, "pass_priority", {})
-        try:
-            result = json.loads(result_text)
-        except (json.JSONDecodeError, TypeError):
-            await asyncio.sleep(1)
-            continue
-        if result.get("game_over"):
-            return "The game is over."
-        if result.get("action_pending"):
-            break
-        await asyncio.sleep(1)
-    else:
-        # Timed out waiting — fall back to generic prompt
+    # pass_priority blocks until this player's first action is pending
+    result_text = await execute_tool(session, "pass_priority", {})
+    try:
+        result = json.loads(result_text)
+    except (json.JSONDecodeError, TypeError):
+        return "The game is starting. Call get_action_choices to see your first decision."
+    if result.get("game_over"):
+        return "The game is over."
+    if not result.get("action_pending"):
         return "The game is starting. Call get_action_choices to see your first decision."
 
     # Fetch the actual choices

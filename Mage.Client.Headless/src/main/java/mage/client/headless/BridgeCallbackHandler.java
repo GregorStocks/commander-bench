@@ -1618,6 +1618,34 @@ public class BridgeCallbackHandler {
             }
         }
 
+        // After successful action, wait for next pending action before returning.
+        // This prevents the LLM from waking up to an empty state.
+        if (Boolean.TRUE.equals(result.get("success"))) {
+            long waitStart = System.currentTimeMillis();
+            while (pendingAction == null) {
+                if (playerDead || (activeGames.isEmpty() && gameEverStarted)) {
+                    break;
+                }
+                if (System.currentTimeMillis() - waitStart > STALL_NUDGE_MS) {
+                    break;
+                }
+                synchronized (actionLock) {
+                    try {
+                        actionLock.wait(200);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                retryLastResponseIfLost();
+            }
+            PendingAction next = pendingAction;
+            if (next != null) {
+                result.put("next_action_pending", true);
+                result.put("next_action_type", next.method().name());
+            }
+        }
+
         return result;
     }
 
@@ -2167,27 +2195,7 @@ public class BridgeCallbackHandler {
                 session.sendPlayerBoolean(action.gameId(), false);
                 actionsPassed++;
 
-                // Without yield: we passed once, return immediately
-                if (!yieldActive) {
-                    var result = new HashMap<String, Object>();
-                    result.put("action_pending", false);
-                    result.put("actions_passed", actionsPassed);
-                    result.put("stop_reason", "passed");
-                    attachUnseenChat(result);
-                    return result;
-                }
-                // With yield: continue waiting for the server to send us a real callback
-            }
-
-            // No pending action — wait for one
-            // Without yield: if no action is pending, return immediately (nothing to pass)
-            if (!yieldActive && action == null) {
-                var result = new HashMap<String, Object>();
-                result.put("action_pending", false);
-                result.put("actions_passed", actionsPassed);
-                result.put("stop_reason", "no_action");
-                attachUnseenChat(result);
-                return result;
+                // Continue waiting for the server to send us the next callback
             }
 
             synchronized (actionLock) {
@@ -2199,35 +2207,42 @@ public class BridgeCallbackHandler {
                 }
             }
 
-            // Stall recovery — only in yield mode (where we expect long waits).
-            // Without yield, we return immediately above, so these never run.
-            if (yieldActive) {
-                // Lost response retry
-                if (retryLastResponseIfLost()) {
-                    startTime = System.currentTimeMillis();
-                }
+            // Game over bail-out: don't block forever if the game ended
+            if (playerDead || (activeGames.isEmpty() && gameEverStarted)) {
+                var result = new HashMap<String, Object>();
+                result.put("action_pending", false);
+                result.put("actions_passed", actionsPassed);
+                result.put("stop_reason", "game_over");
+                attachUnseenChat(result);
+                return result;
+            }
 
-                // Lost callback recovery
-                if (pendingAction == null && lastResponseSentAt == 0) {
-                    long now = System.currentTimeMillis();
-                    long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
-                    boolean transportAlive = lastCallbackReceivedAt > startTime;
-                    UUID gameId = currentGameId;
-                    if (gameId != null && activeGames.containsKey(gameId)
-                            && now - lastStallNudgeAt > STALL_NUDGE_MS) {
-                        if (idleTime > STALL_NUDGE_MS && transportAlive) {
-                            lastStallNudgeAt = now;
-                            logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
-                                    + "no actionable callback for " + idleTime + "ms, sending speculative pass");
-                            session.sendPlayerBoolean(gameId, false);
-                            startTime = System.currentTimeMillis();
-                        } else if (idleTime > STALL_NUDGE_FALLBACK_MS && !transportAlive) {
-                            lastStallNudgeAt = now;
-                            logger.warn("[" + client.getUsername() + "] Lost callback recovery (no transport): "
-                                    + "absolute silence for " + idleTime + "ms, sending speculative pass");
-                            session.sendPlayerBoolean(gameId, false);
-                            startTime = System.currentTimeMillis();
-                        }
+            // Stall recovery: lost response retry and lost callback nudge.
+            // Lost response retry
+            if (retryLastResponseIfLost()) {
+                startTime = System.currentTimeMillis();
+            }
+
+            // Lost callback recovery
+            if (pendingAction == null && lastResponseSentAt == 0) {
+                long now = System.currentTimeMillis();
+                long idleTime = now - Math.max(lastActionableCallbackAt, startTime);
+                boolean transportAlive = lastCallbackReceivedAt > startTime;
+                UUID gameId = currentGameId;
+                if (gameId != null && activeGames.containsKey(gameId)
+                        && now - lastStallNudgeAt > STALL_NUDGE_MS) {
+                    if (idleTime > STALL_NUDGE_MS && transportAlive) {
+                        lastStallNudgeAt = now;
+                        logger.warn("[" + client.getUsername() + "] Lost callback recovery: "
+                                + "no actionable callback for " + idleTime + "ms, sending speculative pass");
+                        session.sendPlayerBoolean(gameId, false);
+                        startTime = System.currentTimeMillis();
+                    } else if (idleTime > STALL_NUDGE_FALLBACK_MS && !transportAlive) {
+                        lastStallNudgeAt = now;
+                        logger.warn("[" + client.getUsername() + "] Lost callback recovery (no transport): "
+                                + "absolute silence for " + idleTime + "ms, sending speculative pass");
+                        session.sendPlayerBoolean(gameId, false);
+                        startTime = System.currentTimeMillis();
                     }
                 }
             }

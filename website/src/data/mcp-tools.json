@@ -180,7 +180,7 @@
           "type": "string"
         },
         "stop_reason": {
-          "description": "Why the call returned: playable_cards, combat, non_priority_action, passed (single pass, no yield), no_action (nothing pending), reached_step (target step reached), step_not_reached (turn ended without reaching step)",
+          "description": "Why the call returned: playable_cards, combat, non_priority_action, game_over, reached_step (target step reached), step_not_reached (turn ended without reaching step)",
           "type": "string"
         },
         "recent_chat": {
@@ -214,8 +214,8 @@
         "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_SELECT\",\n  \"actions_passed\": 5,\n  \"has_playable_cards\": false,\n  \"combat_phase\": \"declare_attackers\",\n  \"stop_reason\": \"combat\"\n}"
       },
       {
-        "label": "Single pass (no yield)",
-        "value": "{\n  \"action_pending\": false,\n  \"actions_passed\": 1,\n  \"stop_reason\": \"passed\"\n}"
+        "label": "Non-priority action (mulligan, targeting)",
+        "value": "{\n  \"action_pending\": true,\n  \"action_type\": \"GAME_ASK\",\n  \"actions_passed\": 0,\n  \"stop_reason\": \"non_priority_action\"\n}"
       },
       {
         "label": "Yield until next turn",
@@ -234,8 +234,21 @@
       "additionalProperties": false,
       "type": "object",
       "properties": {
-        "until": {
-          "description": "Skip ahead to a target. Step values yield within the current turn (client-side): upkeep, draw, precombat_main, begin_combat, declare_attackers, declare_blockers, end_combat, postcombat_main. Cross-turn values use server-side yield: end_of_turn (skip rest of turn), my_turn (skip to your next turn), stack_resolved (wait for stack to resolve). Omit to pass once and return.",
+        "yield_until": {
+          "description": "Yield mode: skip ahead using XMage's server-side yield, also auto-passing priority windows where you have playable cards. end_of_turn=F5, next_turn=F4 (stop on stack), next_turn_skip_stack=F6, next_main=F7, stack_resolved=F10, my_turn=F9, end_step_before_my_turn=F11. Omit to block until next actionable priority. Cannot combine with yield_until_step.",
+          "type": "string",
+          "enum": [
+            "end_of_turn",
+            "next_turn",
+            "next_turn_skip_stack",
+            "next_main",
+            "stack_resolved",
+            "my_turn",
+            "end_step_before_my_turn"
+          ]
+        },
+        "yield_until_step": {
+          "description": "Yield to a specific game step (client-side). Auto-passes priority and playable cards until the target step within the current turn. Still stops for combat (declare attackers/blockers) and non-priority actions (mandatory triggers). Returns step_not_reached if the turn ends first. Cannot combine with yield_until.",
           "type": "string",
           "enum": [
             "upkeep",
@@ -246,15 +259,13 @@
             "declare_blockers",
             "end_combat",
             "postcombat_main",
-            "end_of_turn",
-            "my_turn",
-            "stack_resolved"
+            "end_turn"
           ]
         }
       }
     },
     "name": "pass_priority",
-    "description": "Pass priority. Without until: passes once and returns. With until: skips ahead to a target step or phase. Step values (current turn, client-side): upkeep, draw, precombat_main, begin_combat, declare_attackers, declare_blockers, end_combat, postcombat_main. Cross-turn values (server-side): end_of_turn, my_turn, stack_resolved. Always stops for combat and non-priority actions. Auto-handles mechanical callbacks (mana payment failures, optional targets with no legal targets). Returns stop_reason indicating why the call returned."
+    "description": "Pass priority. Blocks until you have a pending action (playable cards, combat, non-priority action like mulligan/targeting). With yield_until: uses XMage's server-side yield system to efficiently skip ahead (like F4-F11 in the GUI), also auto-passing playable-card priority windows. With yield_until_step: client-side yield that auto-passes until a specific game step within the current turn. Still stops for combat and non-priority actions. Auto-handles mechanical callbacks (mana payment failures, optional targets with no legal targets). Returns stop_reason indicating why the call returned."
   },
   {
     "outputSchema": {
@@ -444,7 +455,7 @@
           "type": "string"
         },
         "stop_reason": {
-          "description": "Why pass_priority returned (only when until is set)",
+          "description": "Why pass_priority returned (only when yield_until/yield_until_step is set)",
           "type": "string"
         },
         "untapped_lands": {
@@ -512,8 +523,21 @@
       "additionalProperties": false,
       "type": "object",
       "properties": {
-        "until": {
-          "description": "Skip ahead to a target, then return choices. Same values as pass_priority's until parameter. Omit to return immediately.",
+        "yield_until": {
+          "description": "Yield mode: pass priority using XMage's server-side yield, then return choices. Same values as pass_priority's yield_until. Omit to return immediately. Cannot combine with yield_until_step.",
+          "type": "string",
+          "enum": [
+            "end_of_turn",
+            "next_turn",
+            "next_turn_skip_stack",
+            "next_main",
+            "stack_resolved",
+            "my_turn",
+            "end_step_before_my_turn"
+          ]
+        },
+        "yield_until_step": {
+          "description": "Yield to a specific game step (client-side), then return choices. Same values as pass_priority's yield_until_step. Cannot combine with yield_until.",
           "type": "string",
           "enum": [
             "upkeep",
@@ -524,15 +548,13 @@
             "declare_blockers",
             "end_combat",
             "postcombat_main",
-            "end_of_turn",
-            "my_turn",
-            "stack_resolved"
+            "end_turn"
           ]
         }
       }
     },
     "name": "get_action_choices",
-    "description": "Get available choices for the current pending action. Call before choose_action. With until: blocks like pass_priority until a decision is needed, then returns choices in one call. Without until: returns immediately (action_pending=false if nothing to do). Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
+    "description": "Get available choices for the current pending action. Call before choose_action. With yield_until or yield_until_step: blocks like pass_priority until a decision is needed, then returns choices in one call. Without yield: returns immediately (action_pending=false if nothing to do). Includes context (phase/turn), players (life totals), and land_drops_used (during your main phase). response_type: select (cards to play, attackers, blockers), boolean (yes/no), index (target/ability), amount, pile, or multi_amount. During combat: combat_phase indicates declare_attackers or declare_blockers."
   },
   {
     "outputSchema": {
