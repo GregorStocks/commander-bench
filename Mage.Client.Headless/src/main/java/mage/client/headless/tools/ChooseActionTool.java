@@ -77,7 +77,7 @@ public class ChooseActionTool {
                 "mana_plan_size", 3)),
             example("Error", json(
                 "success", false,
-                "error", "Index 5 out of range (call get_action_choices first)",
+                "error", "Index 5 is out of range (valid: 0-3). Call get_action_choices to see current options.",
                 "error_code", "index_out_of_range",
                 "retryable", true)));
     }
