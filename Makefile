@@ -94,7 +94,7 @@ run: website-build
 	  *) CONFIG_PATH="configs/$$CONFIG_PATH.json" ;; \
 	esac; \
 	uv run --project puppeteer python -m puppeteer --streaming \
-	  $(if $(GAMES),--games $(GAMES),--record$(if $(OUTPUT),=$(OUTPUT))) \
+	  --record$(if $(OUTPUT),=$(OUTPUT)) $(if $(GAMES),--games $(GAMES)) \
 	  --config "$$CONFIG_PATH" $(ARGS)
 
 # List available configs

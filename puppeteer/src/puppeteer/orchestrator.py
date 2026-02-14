@@ -854,7 +854,7 @@ def _setup_game(
         game_config = Config(
             config_file=base_config.config_file,
             streaming=base_config.streaming,
-            record=False,  # Validated earlier: --record is an error with --games
+            record=base_config.record,
             overlay=False,  # Overlay disabled for parallel mode
             overlay_port=base_config.overlay_port,
             overlay_host=base_config.overlay_host,
@@ -1064,8 +1064,8 @@ def main() -> int:
 
     try:
         # Validate parallel mode constraints
-        if batch and config.record:
-            print("ERROR: --record cannot be used with --games (recording is a single-game feature)")
+        if batch and config.record_output:
+            print("ERROR: --record=PATH cannot be used with --games (use --record without a path instead)")
             return 2
 
         # Load player config as early as possible so invalid LLM setup fails fast.
