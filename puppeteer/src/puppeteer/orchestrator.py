@@ -1085,9 +1085,9 @@ def main() -> int:
             print("Recording requires streaming mode, enabling --streaming")
             config.streaming = True
 
-        # Parallel mode: force skip post-game prompts and disable overlay
+        # Parallel mode: disable overlay (each streaming client would need its
+        # own port; not worth the complexity for batch eval)
         if batch:
-            config.skip_post_game_prompts = True
             config.overlay = False
 
         # Create log directory
