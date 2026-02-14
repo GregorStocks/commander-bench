@@ -396,6 +396,7 @@ async def run_pilot_loop(
     game_log: GameLogWriter | None = None,
     trace_log: GameLogWriter | None = None,
     reasoning_effort: str = "",
+    ignore_providers: list[str] | None = None,
 ) -> None:
     """Run the LLM-driven game-playing loop."""
     # Pre-fetch the first decision so the LLM knows what it's deciding
@@ -468,10 +469,13 @@ async def run_pilot_loop(
                 tool_choice="auto",
                 max_tokens=MAX_TOKENS,
             )
+            extra_body: dict = {}
             if reasoning_effort:
-                create_kwargs["extra_body"] = {
-                    "reasoning": {"effort": reasoning_effort},
-                }
+                extra_body["reasoning"] = {"effort": reasoning_effort}
+            if ignore_providers:
+                extra_body["provider"] = {"ignore": ignore_providers}
+            if extra_body:
+                create_kwargs["extra_body"] = extra_body
             response = await asyncio.wait_for(
                 client.chat.completions.create(**create_kwargs),
                 timeout=LLM_REQUEST_TIMEOUT_SECS,
@@ -882,6 +886,7 @@ async def run_pilot(
     max_interactions_per_turn: int | None = None,
     reasoning_effort: str = "",
     tools: set[str] | None = None,
+    ignore_providers: list[str] | None = None,
 ) -> None:
     """Run the pilot client."""
     _log(f"[pilot] Starting for {username}@{server}:{port}")
@@ -891,6 +896,8 @@ async def run_pilot(
         _log(f"[pilot] Reasoning effort: {reasoning_effort}")
     if tools is not None:
         _log(f"[pilot] Custom toolset: {sorted(tools)}")
+    if ignore_providers:
+        _log(f"[pilot] Ignoring providers: {ignore_providers}")
 
     # Initialize OpenAI-compatible client
     llm_client = AsyncOpenAI(
@@ -985,6 +992,7 @@ async def run_pilot(
                     game_log=game_log,
                     trace_log=trace_log,
                     reasoning_effort=reasoning_effort,
+                    ignore_providers=ignore_providers,
                 )
         finally:
             if game_log:
@@ -1007,6 +1015,7 @@ def main() -> int:
     parser.add_argument("--max-interactions-per-turn", type=int, help="Loop detection threshold (default 25)")
     parser.add_argument("--reasoning-effort", default="", help="OpenRouter reasoning effort: low, medium, high")
     parser.add_argument("--tools", default="", help="Comma-separated MCP tool names (default: all)")
+    parser.add_argument("--ignore-providers", default="", help="Comma-separated OpenRouter providers to exclude")
     args = parser.parse_args()
 
     # Determine project root
@@ -1035,6 +1044,7 @@ def main() -> int:
 
     # Parse tool names: CLI arg > default
     pilot_tools = set(args.tools.split(",")) if args.tools else None
+    ignore_providers = args.ignore_providers.split(",") if args.ignore_providers else None
 
     try:
         asyncio.run(
@@ -1053,6 +1063,7 @@ def main() -> int:
                 max_interactions_per_turn=args.max_interactions_per_turn,
                 reasoning_effort=args.reasoning_effort,
                 tools=pilot_tools,
+                ignore_providers=ignore_providers,
             )
         )
     except KeyboardInterrupt:
