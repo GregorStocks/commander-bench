@@ -72,9 +72,9 @@ const minEpoch = (benchmarkData as any).minEpoch ?? null;
         </p>
         {minEpoch && excludedGames > 0 && (
           <p>
-            Games from older harness versions (epoch &lt; {minEpoch}) are excluded from
-            ratings — they used different priority/mana systems that make results
-            non-comparable to current games.
+            {excludedGames} older {excludedGames === 1 ? 'game is' : 'games are'} excluded
+            from ratings. The evaluation harness has improved over time, so games played on
+            early versions aren't representative of current model quality.
           </p>
         )}
       </div>

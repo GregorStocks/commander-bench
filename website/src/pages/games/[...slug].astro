@@ -1034,8 +1034,8 @@ const { slug } = Astro.params;
           var epochBanner = document.createElement("div");
           epochBanner.id = "epoch-banner";
           epochBanner.textContent =
-            "This game was played on an older harness version (epoch " + gameEpoch +
-            "). Its results are not included in leaderboard ratings.";
+            "This game was played on an early version of the evaluation harness." +
+            " Its results are not included in leaderboard ratings.";
           document.getElementById("game-header").after(epochBanner);
         }
 
