@@ -37,7 +37,7 @@ class PermanentLLMFailure(Exception):
     """Raised when the LLM is permanently unreachable (model not found, credits exhausted)."""
 
 
-MAX_TOKENS = 512
+MAX_TOKENS = 4096
 LLM_REQUEST_TIMEOUT_SECS = 45
 MAX_CONSECUTIVE_TIMEOUTS = 3
 MAX_GAME_DURATION_SECS = 3 * 3600  # 3 hours absolute maximum
@@ -481,6 +481,18 @@ async def run_pilot_loop(
                 _log("[pilot] LLM returned empty/null choices, retrying...")
                 continue
             choice = response.choices[0]
+
+            # Warn loudly if the response was truncated due to max_tokens.
+            # This means the model ran out of output budget (often reasoning
+            # models burning tokens on thinking) and couldn't emit a tool call.
+            if choice.finish_reason == "length":
+                tokens_used = (response.usage.completion_tokens or 0) if response.usage else "?"
+                _log_error(
+                    game_dir,
+                    username,
+                    f"[pilot] OUTPUT TRUNCATED: finish_reason=length, completion_tokens={tokens_used}/{MAX_TOKENS}. "
+                    "Model hit max_tokens cap before producing a tool call.",
+                )
 
             # Log full LLM request/response to trace file
             if trace_log:
