@@ -126,6 +126,7 @@ public class BridgeCallbackHandler {
     private final List<String> unseenChat = new ArrayList<>(); // Chat messages from other players not yet shown to LLM
     private volatile boolean playerDead = false; // Set when we see "{name} has lost the game" in chat
     private final Map<String, String> castOwners = new HashMap<>(); // objectId → playerName from cast messages
+    private final Map<String, Integer> playerTurnCounts = new HashMap<>(); // playerName → per-player turn count
     private volatile String lastChatMessage = null; // For deduplicating outgoing chat
     private volatile long lastChatTimeMs = 0; // Timestamp of last outgoing chat
     private static final long CHAT_DEDUP_WINDOW_MS = 30_000; // Suppress identical messages within 30s
@@ -1823,6 +1824,58 @@ public class BridgeCallbackHandler {
         return result;
     }
 
+    /**
+     * Return game log entries starting from a specific player's Nth turn.
+     * Scans for "{player} turn {sinceTurn}" marker in the log.
+     * If player is null, defaults to this client's player name.
+     */
+    public Map<String, Object> getGameLogSinceTurn(String player, int sinceTurn) {
+        if (player == null) {
+            player = client.getUsername();
+        }
+        var result = new HashMap<String, Object>();
+        int totalLength = getGameLogLength();
+        String marker = player + " turn " + sinceTurn;
+
+        synchronized (gameLog) {
+            String logStr = gameLog.toString();
+            // Search for the marker at start of line (after newline or at position 0)
+            int startPos = -1;
+            if (logStr.startsWith(marker)) {
+                startPos = 0;
+            } else {
+                int idx = logStr.indexOf("\n" + marker);
+                if (idx >= 0) {
+                    startPos = idx + 1; // skip the newline
+                }
+            }
+
+            if (startPos >= 0) {
+                result.put("log", logStr.substring(startPos));
+                result.put("truncated", false);
+                result.put("since_turn", sinceTurn);
+                result.put("since_player", player);
+            } else {
+                // Marker not found: either trimmed (too old) or hasn't happened yet
+                Integer currentTurn = playerTurnCounts.get(player);
+                if (currentTurn != null && sinceTurn <= currentTurn && !logStr.isEmpty()) {
+                    // Turn existed but was trimmed from the buffer
+                    result.put("log", logStr);
+                    result.put("truncated", true);
+                    result.put("since_player", player);
+                } else {
+                    // Turn hasn't happened yet or player not found
+                    result.put("log", "");
+                    result.put("truncated", false);
+                }
+            }
+
+            result.put("total_length", totalLength);
+            result.put("cursor", totalLength);
+        }
+        return result;
+    }
+
     public boolean sendChatMessage(String message) {
         UUID gameId = currentGameId;
         if (gameId == null) {
@@ -3071,10 +3124,19 @@ public class BridgeCallbackHandler {
                 }
             }
             if (logEntry != null && !logEntry.isEmpty()) {
-                // Fix "TURN X" messages to show game round instead of raw turn count
+                // Rewrite "TURN X for <Player> (lives)" to per-player turn numbers: "Player turn N (lives)"
                 Matcher turnMatcher = TURN_MSG_PATTERN.matcher(logEntry);
                 if (turnMatcher.find()) {
-                    logEntry = "TURN " + roundTracker.getGameRound() + logEntry.substring(turnMatcher.end());
+                    String activePlayer = lastGameView != null ? lastGameView.getActivePlayerName() : null;
+                    if (activePlayer != null) {
+                        int playerTurn = playerTurnCounts.merge(activePlayer, 1, Integer::sum);
+                        String rest = logEntry.substring(turnMatcher.end());
+                        int parenIdx = rest.indexOf('(');
+                        String lifePart = parenIdx >= 0 ? " " + rest.substring(parenIdx).trim() : "";
+                        logEntry = activePlayer + " turn " + playerTurn + lifePart;
+                    } else {
+                        logEntry = "TURN " + roundTracker.getGameRound() + logEntry.substring(turnMatcher.end());
+                    }
                 }
                 synchronized (gameLog) {
                     if (gameLog.length() > 0) {

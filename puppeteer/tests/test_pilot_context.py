@@ -188,6 +188,70 @@ def test_summarize_get_game_state():
     assert len(result) <= TOOL_RESULT_MAX_CHARS
 
 
+def test_summarize_get_game_log_basic():
+    content = json.dumps(
+        {
+            "log": "Alice turn 3 (20 - 15)\nAlice casts Sol Ring",
+            "total_length": 5234,
+            "truncated": False,
+            "cursor": 5234,
+        }
+    )
+    result = _summarize_tool_result("get_game_log", content)
+    assert "log(" in result
+    assert "5234 chars" in result
+    assert "Alice turn 3" in result
+    assert len(result) <= TOOL_RESULT_MAX_CHARS
+
+
+def test_summarize_get_game_log_since_turn():
+    content = json.dumps(
+        {
+            "log": "Bob turn 2 (20 - 18)\nBob casts Sol Ring\nAlice turn 3 (20 - 18)\nAlice plays Forest",
+            "total_length": 5400,
+            "truncated": False,
+            "cursor": 5400,
+            "since_turn": 2,
+            "since_player": "Bob",
+        }
+    )
+    result = _summarize_tool_result("get_game_log", content)
+    assert "since_turn=2" in result
+    assert "Bob turn 2" in result
+    assert len(result) <= TOOL_RESULT_MAX_CHARS
+
+
+def test_summarize_get_game_log_truncated():
+    content = json.dumps(
+        {
+            "log": "Alice turn 2 (20 - 18)\nAlice attacks with Goblin Guide",
+            "total_length": 10000,
+            "truncated": True,
+            "cursor": 10000,
+            "since_turn": 1,
+            "since_player": "Alice",
+        }
+    )
+    result = _summarize_tool_result("get_game_log", content)
+    assert "truncated" in result
+    assert "since_turn=1" in result
+    assert len(result) <= TOOL_RESULT_MAX_CHARS
+
+
+def test_summarize_get_game_log_empty():
+    content = json.dumps(
+        {
+            "log": "",
+            "total_length": 0,
+            "truncated": False,
+            "cursor": 0,
+        }
+    )
+    result = _summarize_tool_result("get_game_log", content)
+    assert "log(" in result
+    assert "0 chars" in result
+
+
 def test_summarize_invalid_json():
     result = _summarize_tool_result("get_game_state", "not valid json at all")
     assert result == "not valid json at all"[:TOOL_RESULT_MAX_CHARS]
