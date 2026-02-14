@@ -50,6 +50,7 @@ CONTEXT_RECENT_COUNT = 40  # recent history entries kept at full fidelity
 CONTEXT_SUMMARY_COUNT = 20  # older entries included as compact summaries
 TOOL_RESULT_MAX_CHARS = 200  # max chars for a summarised tool result
 STRATEGY_MAX_CHARS = 500  # max chars for save_strategy notes
+RENDER_INTERVAL = 5  # re-render context every N iterations when history is long
 
 
 def _log(msg: str) -> None:
@@ -193,19 +194,9 @@ def _render_context(
         messages.extend(history)
         return messages
 
-    # Long history — add state bridge, then summarised + full slices
-    messages.append(
-        {
-            "role": "user",
-            "content": (
-                f"{state_summary}"
-                "Continue playing. Use pass_priority to skip ahead, "
-                "then get_action_choices before choose_action. "
-                "All cards listed are playable right now. "
-                "Play cards with index=N, pass with answer=false."
-            ),
-        }
-    )
+    # Long history — summarised prefix (cacheable), state bridge, recent slice.
+    # State bridge is placed after the summarised section so the prefix
+    # (system + summarised) stays stable across iterations for prompt caching.
 
     # Find a clean boundary for the recent slice — don't split assistant/tool pairs.
     # Walk the recent boundary backward so it doesn't start on a tool message.
@@ -226,6 +217,20 @@ def _render_context(
             messages.append({**msg, "content": _summarize_tool_result(tool_name, msg["content"])})
         else:
             messages.append(msg)
+
+    # State bridge — after cacheable prefix, before recent window
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"{state_summary}"
+                "Continue playing. Use pass_priority to skip ahead, "
+                "then get_action_choices before choose_action. "
+                "All cards listed are playable right now. "
+                "Play cards with index=N, pass with answer=false."
+            ),
+        }
+    )
 
     # Recent slice — full fidelity
     messages.extend(history[recent_start:])
@@ -400,6 +405,12 @@ async def run_pilot_loop(
     turns_without_progress = 0  # LLM turns without a successful game action
     MAX_TURNS_WITHOUT_PROGRESS = 20
     game_start = time.monotonic()
+    # Render caching: reuse rendered prefix between full re-renders to improve
+    # prompt cache hit rates.  Only re-render every RENDER_INTERVAL iterations.
+    cached_render: list[dict] | None = None
+    cached_history_len: int = 0
+    render_counter: int = 0
+    last_strategy_at_render: str = ""
 
     while True:
         if time.monotonic() - game_start > MAX_GAME_DURATION_SECS:
@@ -409,10 +420,27 @@ async def run_pilot_loop(
             await auto_pass_loop(session, game_dir, username, "pilot")
             return
         try:
-            # Render context from history; fetch fresh state summary when needed
+            # Render context from history; use cached prefix when possible
             if len(history) > CONTEXT_RECENT_COUNT:
-                state_summary = await _fetch_state_summary(session)
-            messages = _render_context(history, system_prompt, state_summary, saved_strategy)
+                render_counter += 1
+                need_rerender = (
+                    cached_render is None
+                    or render_counter % RENDER_INTERVAL == 0
+                    or saved_strategy != last_strategy_at_render
+                )
+                if need_rerender:
+                    state_summary = await _fetch_state_summary(session)
+                    messages = _render_context(history, system_prompt, state_summary, saved_strategy)
+                    cached_render = list(messages)
+                    cached_history_len = len(history)
+                    last_strategy_at_render = saved_strategy
+                    render_counter = 0
+                else:
+                    messages = list(cached_render) + history[cached_history_len:]
+            else:
+                messages = _render_context(history, system_prompt, state_summary, saved_strategy)
+                cached_render = None
+                render_counter = 0
 
             if game_log and len(history) > CONTEXT_RECENT_COUNT:
                 game_log.emit(
@@ -697,6 +725,9 @@ async def run_pilot_loop(
                     },
                 ]
                 state_summary = ""
+                cached_render = None
+                cached_history_len = 0
+                render_counter = 0
                 continue
 
         except asyncio.TimeoutError:
@@ -733,6 +764,9 @@ async def run_pilot_loop(
                     },
                 ]
                 state_summary = ""
+                cached_render = None
+                cached_history_len = 0
+                render_counter = 0
                 consecutive_timeouts = 0
 
         except Exception as e:
@@ -778,6 +812,9 @@ async def run_pilot_loop(
                 },
             ]
             state_summary = ""
+            cached_render = None
+            cached_history_len = 0
+            render_counter = 0
 
 
 async def run_pilot(
