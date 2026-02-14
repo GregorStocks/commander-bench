@@ -719,6 +719,8 @@ def start_pilot_client(
         args.extend(["--reasoning-effort", player.reasoning_effort])
     if player.tools is not None:
         args.extend(["--tools", ",".join(player.tools)])
+    if player.ignore_providers:
+        args.extend(["--ignore-providers", ",".join(player.ignore_providers)])
     if game_dir:
         args.extend(["--game-dir", str(game_dir)])
 

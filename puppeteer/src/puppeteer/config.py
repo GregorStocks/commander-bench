@@ -46,6 +46,7 @@ class PilotPlayer:
     personality: str | None = None  # Named personality from personalities.json
     prompt_suffix: str | None = None  # Extra prompt text (set by personality resolution)
     tools: list[str] | None = None  # MCP tool names (resolved from preset -> toolsets.json)
+    ignore_providers: list[str] | None = None  # OpenRouter providers to exclude (from models.json)
 
 
 @dataclass
@@ -247,6 +248,13 @@ def _resolve_randoms(
 
         # Apply preset (sets model, reasoning_effort, system_prompt, tools)
         _resolve_preset(player, presets_data, prompts, toolsets)
+
+        # Apply model-level settings from models.json
+        if player.model and player.ignore_providers is None:
+            models_by_id = {m["id"]: m for m in models_data.get("models", [])}
+            model_entry = models_by_id.get(player.model, {})
+            if "ignore_providers" in model_entry:
+                player.ignore_providers = model_entry["ignore_providers"]
 
         # Generate name if needed (personality was random and no explicit name)
         if was_random_personality and not had_explicit_name:

@@ -329,7 +329,8 @@
       "context_k": 1000,
       "thinking": false,
       "tier": "dirt-cheap",
-      "notes": "Meta's latest Llama 4. 1M context. No reasoning mode. Non-thinking baseline."
+      "ignore_providers": ["google"],
+      "notes": "Meta's latest Llama 4. 1M context. No reasoning mode. Non-thinking baseline. Google provider breaks tool calling (outputs ReAct-style text instead of tool_calls)."
     }
   ],
   "recommendations": {
