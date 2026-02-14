@@ -1,11 +1,15 @@
 ## Git
 
-Local `master` is often behind. Always use `origin/master` as the source of truth for rebasing and diffing:
+Local `master` is often behind. Always use `origin/master` as the source of truth.
+
+**Never rebase, never force-push** — not even on feature branches. Always merge:
 
 ```bash
 git fetch origin
-git rebase origin/master
+git merge origin/master
 ```
+
+When this document or other instructions say "rebase", they mean "merge in master" as shown above.
 
 ## Code Isolation Philosophy
 

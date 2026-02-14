@@ -642,15 +642,22 @@ def start_pilot_client(
         args.extend(["--model", player.model])
     if player.base_url:
         args.extend(["--base-url", player.base_url])
-    # System prompt is resolved from preset; append personality suffix if present
-    effective_prompt = player.system_prompt or ""
+    # System prompt is resolved from preset and is always required.
+    # Personality suffix is fenced to make clear it only affects chat/narration,
+    # not gameplay decisions.
+    assert player.system_prompt, f"Pilot player {player.name} has no system_prompt (check preset)"
+    effective_prompt = player.system_prompt
     if player.prompt_suffix:
-        if effective_prompt:
-            effective_prompt = effective_prompt + "\n\n" + player.prompt_suffix
-        else:
-            effective_prompt = player.prompt_suffix
-    if effective_prompt:
-        args.extend(["--system-prompt", effective_prompt])
+        effective_prompt += (
+            "\n\n## Chat Personality\n"
+            "You have a chat personality described below. Use it to flavor your "
+            "narration and trash-talk — be expressive, have fun with it, and "
+            "react to your opponent's chat messages in character. But your actual "
+            "gameplay decisions (card choices, attacks, blocks, targets, sequencing) "
+            "must always be based on optimal Magic strategy. Never let the persona "
+            "influence which play you choose.\n\n" + player.prompt_suffix
+        )
+    args.extend(["--system-prompt", effective_prompt])
     if player.max_interactions_per_turn is not None:
         args.extend(["--max-interactions-per-turn", str(player.max_interactions_per_turn)])
     if player.reasoning_effort:
