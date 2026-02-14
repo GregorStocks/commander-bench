@@ -32,6 +32,7 @@ import mage.view.CommanderView;
 import mage.view.CommandObjectView;
 import mage.view.CounterView;
 import mage.view.GameView;
+import mage.view.ManaPoolView;
 import mage.view.PermanentView;
 import mage.view.PlayerView;
 import mage.view.SimpleCardsView;
@@ -111,7 +112,9 @@ public class StreamingGamePanel extends GamePanel {
     private final Map<UUID, CommanderPanel> commanderPanels = new HashMap<>();
     private final Map<UUID, StreamingGraveyardPanel> streamingGraveyardPanels = new HashMap<>();
     private final Map<UUID, StreamingExilePanel> streamingExilePanels = new HashMap<>();
+    private final Map<UUID, StreamingManaPoolPanel> manaPoolPanels = new HashMap<>();
     private boolean zonePanelsInjected = false;
+    private boolean manaPoolPanelsInjected = false;
 
     // Commander avatar replacement (player UUID -> commander UUID that was used)
     private final Map<UUID, UUID> playerCommanderAvatars = new HashMap<>();
@@ -289,6 +292,10 @@ public class StreamingGamePanel extends GamePanel {
         // Inject streaming zone panels (commander, graveyard, exile) into west panel
         // Must happen before distributing cards to those panels
         injectZonePanels(game);
+        // Inject mana pool overlays into battlefields (one-shot)
+        injectManaPoolPanels(game);
+        // Update mana pool displays on every game update
+        updateManaPoolDisplays(game);
         // Distribute zone cards to the streaming panels
         distributeGraveyards(game);
         distributeExile(game);
@@ -1253,6 +1260,78 @@ public class StreamingGamePanel extends GamePanel {
     }
 
     /**
+     * Inject mana pool overlay panels into each player's BattlefieldPanel.
+     * Added at JLayeredPane.PALETTE_LAYER (above the default scroll pane layer).
+     * Called once after play areas are created.
+     */
+    private void injectManaPoolPanels(GameView game) {
+        if (manaPoolPanelsInjected || game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+        if (players.isEmpty()) {
+            return;
+        }
+
+        for (PlayerView player : game.getPlayers()) {
+            PlayAreaPanel playArea = players.get(player.getPlayerId());
+            if (playArea == null) {
+                continue;
+            }
+
+            double scale = computeScaleFactor(playArea);
+            var manaPanel = new StreamingManaPoolPanel(scale);
+            playArea.getBattlefieldPanel().add(manaPanel, JLayeredPane.PALETTE_LAYER);
+            manaPoolPanels.put(player.getPlayerId(), manaPanel);
+        }
+
+        manaPoolPanelsInjected = true;
+    }
+
+    /**
+     * Update mana pool overlay panels for all players.
+     * Shows/hides based on total mana and repositions at bottom-center of battlefield.
+     */
+    private void updateManaPoolDisplays(GameView game) {
+        if (game == null || game.getPlayers() == null) {
+            return;
+        }
+
+        Map<UUID, PlayAreaPanel> players = getPlayers();
+
+        for (PlayerView player : game.getPlayers()) {
+            UUID playerId = player.getPlayerId();
+            StreamingManaPoolPanel manaPanel = manaPoolPanels.get(playerId);
+            if (manaPanel == null) {
+                continue;
+            }
+
+            manaPanel.update(player.getManaPool());
+
+            if (manaPanel.isVisible()) {
+                PlayAreaPanel playArea = players.get(playerId);
+                if (playArea != null) {
+                    var battlefieldPanel = playArea.getBattlefieldPanel();
+                    int bfWidth = battlefieldPanel.getWidth();
+                    int bfHeight = battlefieldPanel.getHeight();
+
+                    int panelWidth = manaPanel.computePreferredWidth();
+                    int panelHeight = manaPanel.getPreferredHeight();
+
+                    panelWidth = Math.min(panelWidth, bfWidth - 20);
+
+                    int x = (bfWidth - panelWidth) / 2;
+                    int bottomMargin = (int) (8 * computeScaleFactor(battlefieldPanel));
+                    int y = bfHeight - panelHeight - bottomMargin;
+
+                    manaPanel.setBounds(x, y, panelWidth, panelHeight);
+                }
+            }
+        }
+    }
+
+    /**
      * Distribute commander cards to each player's CommanderPanel.
      * Filters command objects to only include actual commander cards.
      */
@@ -1722,9 +1801,12 @@ public class StreamingGamePanel extends GamePanel {
         keyBuilder.append(game.getPhase()).append("|");
         keyBuilder.append(game.getStep()).append("|");
         for (PlayerView p : game.getPlayers()) {
+            ManaPoolView pool = p.getManaPool();
             keyBuilder.append(p.getName()).append(":").append(p.getLife()).append(":")
                       .append(p.getHandCount()).append(":")
-                      .append(p.getBattlefield() != null ? p.getBattlefield().size() : 0).append(",");
+                      .append(p.getBattlefield() != null ? p.getBattlefield().size() : 0).append(":")
+                      .append(pool.getRed()).append(pool.getGreen()).append(pool.getBlue())
+                      .append(pool.getWhite()).append(pool.getBlack()).append(pool.getColorless()).append(",");
         }
         String key = keyBuilder.toString();
         if (key.equals(lastSnapshotKey)) {
@@ -1752,6 +1834,7 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.addProperty("is_active", player.isActive());
             playerJson.addProperty("has_left", player.hasLeft());
             playerJson.add("counters", countersToJson(player));
+            playerJson.add("mana_pool", manaPoolToJson(player.getManaPool()));
 
             // Battlefield - compact (name + tapped only)
             var bfArray = new JsonArray();
@@ -2016,6 +2099,7 @@ public class StreamingGamePanel extends GamePanel {
             playerJson.add("commanders", commandersToJson(player, layout));
             playerJson.add("graveyard", cardsToJson(player.getGraveyard(), "graveyard", playerId, layout));
             playerJson.add("exile", cardsToJson(player.getExile(), "exile", playerId, layout));
+            playerJson.add("manaPool", manaPoolToJson(player.getManaPool()));
 
             CardsView handCards = getHandCardsForPlayer(player, game, loadedCards);
             playerJson.add("hand", cardsToJson(handCards, "hand", playerId, layout));
@@ -2035,6 +2119,17 @@ public class StreamingGamePanel extends GamePanel {
             counters.add(counterJson);
         }
         return counters;
+    }
+
+    private JsonObject manaPoolToJson(ManaPoolView pool) {
+        var mana = new JsonObject();
+        mana.addProperty("W", pool.getWhite());
+        mana.addProperty("U", pool.getBlue());
+        mana.addProperty("B", pool.getBlack());
+        mana.addProperty("R", pool.getRed());
+        mana.addProperty("G", pool.getGreen());
+        mana.addProperty("C", pool.getColorless());
+        return mana;
     }
 
     private JsonArray battlefieldToJson(PlayerView player, OverlayLayoutSnapshot layout) {
