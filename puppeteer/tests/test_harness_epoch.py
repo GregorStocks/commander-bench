@@ -25,13 +25,20 @@ def test_infer_epoch_2_yield_until():
 def test_infer_epoch_3_priority_blocking():
     assert infer_epoch("game_20260214_090914_g1", None) == 3
     assert infer_epoch("game_20260214_120000", None) == 3
-    assert infer_epoch("game_20260215_000000", None) == 3
+    assert infer_epoch("game_20260214_195959", None) == 3
+
+
+def test_infer_epoch_4_short_ids_batch_combat():
+    assert infer_epoch("game_20260214_200000", None) == 4
+    assert infer_epoch("game_20260214_210000", None) == 4
+    assert infer_epoch("game_20260215_000000", None) == 4
 
 
 def test_epoch_boundary_exact():
     """Boundary timestamps themselves map to the new epoch."""
     assert infer_epoch("game_20260212_224200", None) == 2
     assert infer_epoch("game_20260214_084000", None) == 3
+    assert infer_epoch("game_20260214_200000", None) == 4
 
 
 def test_constants():

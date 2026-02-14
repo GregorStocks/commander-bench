@@ -13,7 +13,8 @@ games at or above MIN_LEADERBOARD_EPOCH.
 #   1 - Foundation: basic priority passing (Feb 10)
 #   2 - yield_until + mana sourcing + error codes (Feb 12)
 #   3 - Priority blocking + simplified pass_priority API (Feb 14)
-HARNESS_EPOCH = 3
+#   4 - Short object IDs + batch combat (Feb 14)
+HARNESS_EPOCH = 4
 
 # Minimum epoch for leaderboard inclusion. Games below this are shown
 # in the games list but excluded from ELO ratings.
@@ -24,6 +25,7 @@ MIN_LEADERBOARD_EPOCH = 2
 _EPOCH_BOUNDARIES = [
     ("20260212_224200", 2),  # yield_until landed
     ("20260214_084000", 3),  # priority blocking landed
+    ("20260214_200000", 4),  # short object IDs + batch combat
 ]
 
 
