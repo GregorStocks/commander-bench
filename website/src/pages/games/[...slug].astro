@@ -265,8 +265,35 @@ const { slug } = Astro.params;
     font-size: 0.8rem;
     color: #a0a0b8;
     white-space: nowrap;
-    min-width: 6rem;
+    min-width: 4rem;
     text-align: right;
+  }
+
+  @media (max-width: 600px) {
+    #transport {
+      flex-wrap: wrap;
+    }
+
+    #slider-container {
+      flex-basis: 100%;
+      order: 10;
+    }
+
+    #snapshot-jump {
+      width: 3.5rem;
+    }
+
+    #snapshot-counter {
+      min-width: auto;
+    }
+
+    #game-header {
+      flex-wrap: wrap;
+    }
+
+    #turn-info {
+      font-size: 0.75rem;
+    }
   }
 
   /* Two-column layout */

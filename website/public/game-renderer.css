@@ -349,6 +349,7 @@
   bottom: 12px;
   width: min(420px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
+  overflow: hidden;
   display: grid;
   grid-template-columns: 160px 1fr;
   gap: 10px;

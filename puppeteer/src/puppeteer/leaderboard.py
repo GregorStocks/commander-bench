@@ -292,6 +292,13 @@ def generate_leaderboard(
     # Aggregate per-player-key stats (model_id::effort or just model_id)
     stats: dict[str, dict[str, float]] = {}
     for game in scored_games:
+        # Build name -> blunder count from annotations
+        blunders_by_name: dict[str, int] = {}
+        for ann in game.get("annotations", []):
+            if ann.get("type") == "blunder":
+                name = ann.get("player", "")
+                blunders_by_name[name] = blunders_by_name.get(name, 0) + 1
+
         for p in game.get("players", []):
             if p.get("type") != "pilot" or not p.get("model"):
                 continue
@@ -303,6 +310,8 @@ def generate_leaderboard(
                     "total_cost": 0.0,
                     "total_tool_calls_ok": 0,
                     "total_tool_calls_failed": 0,
+                    "total_blunders": 0,
+                    "annotated_games": 0,
                 }
             stats[key]["games_played"] += 1
             if game.get("winner") == p["name"]:
@@ -310,9 +319,12 @@ def generate_leaderboard(
             stats[key]["total_cost"] += p.get("totalCostUsd", 0.0)
             stats[key]["total_tool_calls_ok"] += p.get("toolCallsOk", 0)
             stats[key]["total_tool_calls_failed"] += p.get("toolCallsFailed", 0)
+            if game.get("annotations") is not None:
+                stats[key]["annotated_games"] += 1
+                stats[key]["total_blunders"] += blunders_by_name.get(p["name"], 0)
 
     # Build models list
-    models: list[dict[str, str | int | float]] = []
+    models: list[dict[str, str | int | float | None]] = []
     for key, s in stats.items():
         model_id, effort = _split_key(key)
         games_played = int(s["games_played"])
@@ -330,7 +342,9 @@ def generate_leaderboard(
 
         avg_tool_calls_ok = s["total_tool_calls_ok"] / games_played
         avg_tool_calls_failed = s["total_tool_calls_failed"] / games_played
-        entry: dict[str, str | int | float] = {
+        annotated_games = int(s["annotated_games"])
+        avg_blunders = s["total_blunders"] / annotated_games if annotated_games > 0 else None
+        entry: dict[str, str | int | float | None] = {
             "modelId": model_id,
             "modelName": display_name,
             "provider": capitalize_provider(provider_slug),
@@ -340,6 +354,7 @@ def generate_leaderboard(
             "avgApiCost": round(avg_cost, 2),
             "avgToolCallsOk": round(avg_tool_calls_ok, 1),
             "avgToolCallsFailed": round(avg_tool_calls_failed, 1),
+            "avgBlundersPerGame": round(avg_blunders, 1) if avg_blunders is not None else None,
         }
         if effort:
             entry["reasoningEffort"] = effort
@@ -434,17 +449,18 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
                     p["toolCallsOk"] = tool_ok.get(name, 0)
                     p["toolCallsFailed"] = tool_failed.get(name, 0)
 
-        games_index.append(
-            {
-                "id": game["id"],
-                "timestamp": game.get("timestamp", ""),
-                "gameType": game.get("gameType", ""),
-                "deckType": game.get("deckType", ""),
-                "totalTurns": game.get("totalTurns", 0),
-                "winner": game.get("winner"),
-                "players": players,
-            }
-        )
+        game_entry: dict[str, Any] = {
+            "id": game["id"],
+            "timestamp": game.get("timestamp", ""),
+            "gameType": game.get("gameType", ""),
+            "deckType": game.get("deckType", ""),
+            "totalTurns": game.get("totalTurns", 0),
+            "winner": game.get("winner"),
+            "players": players,
+        }
+        if "annotations" in game:
+            game_entry["annotations"] = game["annotations"]
+        games_index.append(game_entry)
 
     model_registry = load_model_registry(models_json)
     format_results, ratings_by_game = generate_all_leaderboards(
