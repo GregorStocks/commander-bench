@@ -269,6 +269,7 @@ import Base from '../../layouts/Base.astro';
             playersGrid.classList.remove("hidden");
             positionLayer.classList.add("hidden");
             if (visualizer) visualizer.classList.remove("positioned-mode");
+            var liveIsCommander = (state.players || []).some(function (p) { return p.commanders && p.commanders.length > 0; });
             R.renderPlayers(playersGrid, state.players, {
               cardImages: {},
               playerColorMap: playerColorMap,
@@ -276,9 +277,11 @@ import Base from '../../layouts/Base.astro';
               previewEls: previewEls,
               showTimer: true,
               priorityPlayerName: state.priority_player,
+              isCommander: liveIsCommander,
             });
           }
         } else {
+          var liveIsCommander2 = (state.players || []).some(function (p) { return p.commanders && p.commanders.length > 0; });
           R.renderPlayers(playersGrid, state.players, {
             cardImages: {},
             playerColorMap: playerColorMap,
@@ -286,6 +289,7 @@ import Base from '../../layouts/Base.astro';
             previewEls: previewEls,
             showTimer: true,
             priorityPlayerName: state.priority_player,
+            isCommander: liveIsCommander2,
           });
         }
 

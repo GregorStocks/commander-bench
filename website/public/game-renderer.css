@@ -130,6 +130,28 @@
   padding: 0.15rem 0.75rem;
 }
 
+/* Player body: side zones + main zones horizontal layout */
+.player-body {
+  display: flex;
+  gap: 0;
+}
+
+.side-zones {
+  width: 70px;
+  flex-shrink: 0;
+  border-right: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.main-zones {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Battlefield minimum height: space for creatures row + lands row */
+.battlefield-zone {
+  min-height: 190px;
+}
+
 /* Zones */
 .zone {
   padding: 0.4rem 0.75rem;
@@ -138,6 +160,27 @@
 
 .zone:last-child {
   border-bottom: 0;
+}
+
+/* Side zones: compact styling */
+.side-zones .zone {
+  padding: 0.3rem 0.4rem;
+}
+
+.side-zones .zone-title {
+  font-size: 0.55rem;
+}
+
+.side-zones .cards-row {
+  flex-direction: column;
+}
+
+.side-zones .card-thumb-sm {
+  width: 55px;
+}
+
+.side-zones .cards-grid-sm {
+  gap: 3px;
 }
 
 .zone-title {
@@ -618,13 +661,6 @@
   margin-top: 2px;
 }
 
-.llm-thought .llm-tool-calls {
-  color: #888;
-  font-size: 0.72rem;
-  font-family: monospace;
-  margin-top: 2px;
-}
-
 .llm-thinking-block {
   margin: 4px 0;
   font-size: 0.72rem;
@@ -660,32 +696,29 @@
   font-weight: 600;
 }
 
-.llm-tool-result {
+/* Inline tool result (expandable) within merged LLM events */
+.llm-tool-detail {
   font-size: 0.72rem;
   color: #888;
-  margin: 1px 0;
+  margin: 2px 0;
 }
 
-.llm-tool-result summary {
+.llm-tool-detail summary {
   cursor: pointer;
   font-family: monospace;
   padding: 1px 0;
   list-style: disclosure-closed;
 }
 
-.llm-tool-result summary::-webkit-details-marker {
+.llm-tool-detail summary::-webkit-details-marker {
   color: #666;
 }
 
-.llm-tool-result[open] summary {
+.llm-tool-detail[open] summary {
   list-style: disclosure-open;
 }
 
-.llm-tool-result .llm-player {
-  font-weight: 600;
-}
-
-.llm-tool-result pre {
+.llm-tool-detail pre {
   margin: 4px 0 4px 16px;
   padding: 6px 8px;
   background: rgba(0, 0, 0, 0.3);
@@ -711,31 +744,6 @@
   font-size: 0.65rem;
   font-family: monospace;
   margin-left: 6px;
-}
-
-/* Full LLM I/O trace (expandable) */
-.llm-trace-block {
-  margin: 4px 0;
-  font-size: 0.72rem;
-}
-
-.llm-trace-block summary {
-  color: #60a5fa;
-  cursor: pointer;
-  font-style: italic;
-}
-
-.llm-trace-text {
-  color: #94a3b8;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.68rem;
-  max-height: 30rem;
-  overflow-y: auto;
-  margin-top: 2px;
-  padding: 4px;
-  background: rgba(59, 130, 246, 0.06);
-  border-radius: 4px;
 }
 
 /* Player-colored left borders and background tints for LLM thoughts */

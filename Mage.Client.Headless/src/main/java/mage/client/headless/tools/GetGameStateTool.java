@@ -53,8 +53,8 @@ public class GetGameStateTool {
                         "is_active", true,
                         "is_you", true,
                         "hand", List.of(
-                            json("name", "Lightning Bolt", "mana_cost", "{R}", "mana_value", 1, "playable", true),
-                            json("name", "Mountain", "mana_value", 0, "is_land", true, "playable", true)),
+                            json("name", "Lightning Bolt", "mana_cost", "{R}", "playable", true),
+                            json("name", "Mountain", "is_land", true, "playable", true)),
                         "battlefield", List.of(
                             json("name", "Mountain", "tapped", false),
                             json("name", "Goblin Guide", "tapped", false, "power", 2, "toughness", 2)),
