@@ -105,7 +105,7 @@ const minEpoch = (benchmarkData as any).minEpoch ?? null;
             <th data-sort="rating" data-type="number" class="sorted desc">Rating <span class="sort-arrow">&#9660;</span></th>
             <th data-sort="gamesPlayed" data-type="number">Games Played</th>
             <th data-sort="winRate" data-type="number" class="col-winrate">Win Rate</th>
-            <th data-sort="avgBlundersPerGame" data-type="number">Blunders</th>
+            <th data-sort="avgBlundersPerGame" data-type="number">Blunders/Game</th>
             <th data-sort="avgApiCost" data-type="number">Avg Cost</th>
           </tr>
         </thead>
@@ -120,7 +120,7 @@ const minEpoch = (benchmarkData as any).minEpoch ?? null;
                 data-rating={m.rating}
                 data-games-played={m.gamesPlayed}
                 data-win-rate={m.winRate}
-                data-avg-blunders-per-game={m.avgBlundersPerGame ?? ''}
+                data-avg-blunders-per-game={m.avgBlundersPerGame ?? 0}
                 data-avg-api-cost={m.avgApiCost}
               >
                 <td class="rank-cell">{i + 1}</td>
@@ -129,7 +129,7 @@ const minEpoch = (benchmarkData as any).minEpoch ?? null;
                 <td class="num">{m.rating}</td>
                 <td class="num"><a class="games-link" href={`/games?model=${encodeURIComponent(m.modelId)}`}>{m.gamesPlayed}</a></td>
                 <td class="num col-winrate">{(m.winRate * 100).toFixed(1)}%</td>
-                <td class="num">{m.avgBlundersPerGame != null ? m.avgBlundersPerGame.toFixed(1) : '—'}</td>
+                <td class="num">{(m.avgBlundersPerGame ?? 0).toFixed(1)}</td>
                 <td class="num">${m.avgApiCost.toFixed(2)}</td>
               </tr>
             ))}
