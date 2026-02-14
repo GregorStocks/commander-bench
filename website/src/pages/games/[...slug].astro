@@ -71,9 +71,19 @@ const { slug } = Astro.params;
           <div id="action-log">
             <div class="action-log-header">
               <span class="section-title">Game Log</span>
-              <label id="llm-toggle-label" class="hidden">
-                <input type="checkbox" id="llm-toggle" checked /> Show LLM thinking
-              </label>
+              <div class="log-filters">
+                <select id="player-filter" class="hidden" title="Filter by player">
+                  <option value="">All players</option>
+                </select>
+                <select id="event-type-filter" class="hidden" title="Filter by event type">
+                  <option value="">All events</option>
+                  <option value="llm">LLM calls only</option>
+                  <option value="game">Game actions only</option>
+                </select>
+                <label id="llm-toggle-label" class="hidden">
+                  <input type="checkbox" id="llm-toggle" checked /> Show LLM thinking
+                </label>
+              </div>
             </div>
             <div id="action-list"></div>
           </div>
@@ -339,6 +349,25 @@ const { slug } = Astro.params;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .log-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  #player-filter, #event-type-filter {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #1a4a8a;
+    border-radius: 4px;
+    padding: 0.2rem 0.3rem;
+    font-size: 0.72rem;
+    cursor: pointer;
   }
 
   #llm-toggle-label {
@@ -419,12 +448,28 @@ const { slug } = Astro.params;
     var turnStartIndices = [];
     var showLlm = true;
     var traceByTs = {};  // ts -> trace event lookup for LLM I/O display
+    var filterPlayer = "";  // "" = all players
+    var filterEventType = "";  // "" = all, "llm" = LLM only, "game" = game actions only
 
     // LLM toggle
     var llmToggleLabel = document.getElementById("llm-toggle-label");
     var llmToggle = document.getElementById("llm-toggle");
     llmToggle.addEventListener("change", function () {
       showLlm = llmToggle.checked;
+      renderSnapshot(currentIndex);
+    });
+
+    // Player filter
+    var playerFilter = document.getElementById("player-filter");
+    playerFilter.addEventListener("change", function () {
+      filterPlayer = playerFilter.value;
+      renderSnapshot(currentIndex);
+    });
+
+    // Event type filter
+    var eventTypeFilter = document.getElementById("event-type-filter");
+    eventTypeFilter.addEventListener("change", function () {
+      filterEventType = eventTypeFilter.value;
       renderSnapshot(currentIndex);
     });
 
@@ -720,47 +765,72 @@ const { slug } = Astro.params;
       var prevSeq = index > 0 ? game.snapshots[index - 1].seq : 0;
       var curSeq = snap.seq;
 
+      // When filtering by player, show ALL LLM events (not just current step window)
+      // so you can see the full call log for that player
+      var showAllLlm = filterPlayer || filterEventType === "llm";
+
       // All game actions + chat up to current snapshot
       var allActions = game.actions.filter(function (a) {
-        return a.seq <= curSeq;
+        if (a.seq > curSeq) return false;
+        if (filterPlayer) {
+          if (a.type === "chat") {
+            if (a.from !== filterPlayer) return false;
+          } else {
+            if (a.message.indexOf(filterPlayer) === -1) return false;
+          }
+        }
+        return true;
       });
 
-      // LLM events: only show for the current step (windowed) since they're verbose
+      // LLM events
       var hasLlmEvents = game.llmEvents && game.llmEvents.length > 0;
       var relevantLlm = [];
       if (hasLlmEvents && showLlm) {
-        var prevTs = prevSnap ? (prevSnap.ts || "") : "";
-        var curTs = snap.ts || "";
-        if (curTs) {
+        if (showAllLlm) {
+          // Show all LLM events up to current snapshot timestamp
+          var curTs = snap.ts || "";
           relevantLlm = game.llmEvents.filter(function (e) {
-            return e.ts > prevTs && e.ts <= curTs;
+            if (curTs && e.ts > curTs) return false;
+            if (filterPlayer && e.player !== filterPlayer) return false;
+            return true;
           });
+        } else {
+          // Default: windowed to current step
+          var prevTs = prevSnap ? (prevSnap.ts || "") : "";
+          var curTs = snap.ts || "";
+          if (curTs) {
+            relevantLlm = game.llmEvents.filter(function (e) {
+              return e.ts > prevTs && e.ts <= curTs;
+            });
+          }
         }
       }
 
-      // Render accumulated game actions and chat
-      allActions.forEach(function (a) {
-        if (a.type === "chat") {
-          var line = document.createElement("div");
-          line.className = "chat-line";
-          var fromIdx = playerColorMap[a.from];
-          var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
-          line.innerHTML = '<span class="chat-badge">chat</span><span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
-          actionList.appendChild(line);
-        } else {
-          var line = document.createElement("div");
-          line.className = "action-line";
-          // Highlight actions from the current step
-          if (a.seq > prevSeq) {
-            line.style.color = "#e0e0f0";
+      // Render accumulated game actions and chat (unless filtering to LLM only)
+      if (filterEventType !== "llm") {
+        allActions.forEach(function (a) {
+          if (a.type === "chat") {
+            var line = document.createElement("div");
+            line.className = "chat-line";
+            var fromIdx = playerColorMap[a.from];
+            var fromCls = fromIdx != null ? "action-" + R.PLAYER_COLORS[fromIdx] : "";
+            line.innerHTML = '<span class="chat-badge">chat</span><span class="chat-from ' + fromCls + '">' + escapeHtml(a.from || "") + ':</span> ' + escapeHtml(a.message);
+            actionList.appendChild(line);
+          } else {
+            var line = document.createElement("div");
+            line.className = "action-line";
+            // Highlight actions from the current step
+            if (a.seq > prevSeq) {
+              line.style.color = "#e0e0f0";
+            }
+            line.innerHTML = colorizePlayerNames(a.message);
+            actionList.appendChild(line);
           }
-          line.innerHTML = colorizePlayerNames(a.message);
-          actionList.appendChild(line);
-        }
-      });
+        });
+      }
 
-      // Append LLM events for current step at the end
-      if (relevantLlm.length > 0) {
+      // Append LLM events (unless filtering to game actions only)
+      if (filterEventType !== "game" && relevantLlm.length > 0) {
         relevantLlm.forEach(function (e) {
           var el = renderLlmEvent(e);
           if (el) actionList.appendChild(el);
@@ -867,9 +937,21 @@ const { slug } = Astro.params;
           }
         });
 
-        // Show LLM toggle if we have LLM events
+        // Show LLM toggle and filters if we have LLM events
         if (game.llmEvents && game.llmEvents.length > 0) {
           llmToggleLabel.classList.remove("hidden");
+          eventTypeFilter.classList.remove("hidden");
+        }
+
+        // Populate player filter dropdown
+        if (game.players && game.players.length > 1) {
+          game.players.forEach(function (p) {
+            var opt = document.createElement("option");
+            opt.value = p.name;
+            opt.textContent = p.name;
+            playerFilter.appendChild(opt);
+          });
+          playerFilter.classList.remove("hidden");
         }
 
         // Build trace lookup by timestamp
