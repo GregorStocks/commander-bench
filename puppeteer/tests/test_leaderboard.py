@@ -841,6 +841,64 @@ def test_generate_leaderboard_no_effort_no_suffix():
     assert "reasoningEffort" not in model_a
 
 
+def test_generate_leaderboard_avg_blunders():
+    """Average blunders per game should be computed from annotations."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [
+                _pilot("Alice", "a/model-a", placement=1),
+                _pilot("Bob", "b/model-b", placement=2),
+            ],
+        ),
+        _make_game(
+            "g2",
+            "20260102_000000",
+            "Bob",
+            [
+                _pilot("Alice", "a/model-a", placement=2),
+                _pilot("Bob", "b/model-b", placement=1),
+            ],
+        ),
+    ]
+    games[0]["annotations"] = [
+        {"type": "blunder", "player": "Alice", "severity": "major"},
+        {"type": "blunder", "player": "Alice", "severity": "minor"},
+        {"type": "blunder", "player": "Bob", "severity": "moderate"},
+    ]
+    games[1]["annotations"] = [
+        {"type": "blunder", "player": "Bob", "severity": "major"},
+    ]
+    result, _ = generate_leaderboard(games, {}, min_games=1)
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    bob = next(m for m in result["models"] if m["modelName"] == "Model B")
+
+    # Alice: 2 blunders in game1, 0 in game2 -> 1.0 avg
+    assert alice["avgBlundersPerGame"] == 1.0
+    # Bob: 1 blunder in game1, 1 in game2 -> 1.0 avg
+    assert bob["avgBlundersPerGame"] == 1.0
+
+
+def test_generate_leaderboard_blunders_no_annotations():
+    """Games without annotations should not count toward blunder average."""
+    games = [
+        _make_game(
+            "g1",
+            "20260101_000000",
+            "Alice",
+            [_pilot("Alice", "a/model-a", placement=1), _pilot("Bob", "b/model-b", placement=2)],
+        ),
+    ]
+    # No annotations key at all
+    result, _ = generate_leaderboard(games, {}, min_games=1)
+
+    alice = next(m for m in result["models"] if m["modelName"] == "Model A")
+    assert alice["avgBlundersPerGame"] is None
+
+
 def test_ratings_separate_by_effort():
     """Same model at different efforts should have independent ratings."""
     games = [

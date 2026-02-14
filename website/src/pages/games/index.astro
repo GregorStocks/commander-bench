@@ -63,6 +63,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 <Base title="Games">
   <h1>Games</h1>
   <p class="subtitle">Replay past mage-bench games.</p>
+  <div id="format-tabs" class="format-tabs"></div>
   <div id="filter-bar" style="display:none"></div>
   <div id="games-list">
     <p class="loading">Loading games...</p>
@@ -86,6 +87,42 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 </style>
 
 <style is:global>
+  .format-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .format-tab {
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.9rem;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 20px;
+    color: #a0a0b8;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .format-tab:hover {
+    border-color: #e94560;
+    color: #e0e0e0;
+  }
+
+  .format-tab.active {
+    background: #e94560;
+    border-color: #e94560;
+    color: #fff;
+  }
+
+  .tab-count {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-left: 0.2rem;
+  }
+
   .filter-bar {
     display: flex;
     align-items: center;
@@ -712,6 +749,42 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
 
   var __eloData = {};
 
+  function renderFormatTabs(games) {
+    var tabsEl = document.getElementById("format-tabs");
+    if (!tabsEl) return;
+    var counts = {};
+    games.forEach(function (game) {
+      var fmt = getGameFormat(game.deckType);
+      counts[fmt] = (counts[fmt] || 0) + 1;
+    });
+    var formats = ["standard", "modern", "legacy", "commander"];
+    var activeFormats = formats.filter(function (f) { return counts[f] > 0; });
+    if (activeFormats.length <= 1) {
+      tabsEl.style.display = "none";
+      return;
+    }
+    tabsEl.innerHTML = "";
+    var filters = getFilters();
+
+    var allBtn = document.createElement("button");
+    allBtn.className = "format-tab" + (!filters.format ? " active" : "");
+    allBtn.textContent = "All";
+    allBtn.onclick = function () {
+      var f = getFilters(); f.format = ""; setFilters(f); renderAll();
+    };
+    tabsEl.appendChild(allBtn);
+
+    activeFormats.forEach(function (fmt) {
+      var btn = document.createElement("button");
+      btn.className = "format-tab" + (filters.format === fmt ? " active" : "");
+      btn.innerHTML = (FORMAT_DISPLAY[fmt] || fmt) + ' <span class="tab-count">(' + counts[fmt] + ")</span>";
+      btn.onclick = function () {
+        var f = getFilters(); f.format = fmt; setFilters(f); renderAll();
+      };
+      tabsEl.appendChild(btn);
+    });
+  }
+
   function renderAll() {
     var games = __games;
     var eloData = __eloData;
@@ -724,6 +797,7 @@ games.sort((a, b) => String(b.id).localeCompare(String(a.id)));
       return;
     }
 
+    renderFormatTabs(games);
     var filters = getFilters();
     var filtered = filterGames(games, filters);
     renderFilterBar(filters, games.length, filtered.length);
