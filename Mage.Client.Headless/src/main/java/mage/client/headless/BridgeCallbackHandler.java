@@ -3816,9 +3816,11 @@ public class BridgeCallbackHandler {
         logger.info("[" + client.getUsername() + "] Game over: " + message.getMessage());
 
         if (mcpMode) {
-            // In MCP mode, the external controller manages the lifecycle.
-            // Don't auto-disconnect — a new game in the match may start shortly.
-            logger.info("[" + client.getUsername() + "] Game ended (MCP mode, waiting for controller)");
+            // In MCP mode, each game gets its own pilot process + bridge client.
+            // Disconnect immediately so the XMage server doesn't auto-join us
+            // into the next game in a parallel gauntlet.
+            logger.info("[" + client.getUsername() + "] Game ended (MCP mode, stopping client)");
+            client.stop();
         } else if (keepAliveAfterGame) {
             logger.info("[" + client.getUsername() + "] Game ended (staller mode, staying connected)");
         } else if (activeGames.isEmpty()) {
