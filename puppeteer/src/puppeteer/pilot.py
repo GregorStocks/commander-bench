@@ -417,6 +417,8 @@ async def run_pilot_loop(
     consecutive_pass_errors = 0  # consecutive identical pass_priority errors
     last_pass_error_msg = ""
     MAX_CONSECUTIVE_PASS_ERRORS = 3
+    consecutive_empty_errors = 0  # consecutive tool calls returning {"error": ""}
+    MAX_CONSECUTIVE_EMPTY_ERRORS = 10  # bridge is dead if every tool returns empty error
     game_start = time.monotonic()
     # Render caching: reuse rendered prefix between full re-renders to improve
     # prompt cache hit rates.  Only re-render every RENDER_INTERVAL iterations.
@@ -598,6 +600,26 @@ async def run_pilot_loop(
                             result=result_text,
                             latency_ms=tool_latency_ms,
                         )
+
+                    # Detect dead bridge: all tools return {"error": ""}
+                    if result_text == '{"error": ""}':
+                        consecutive_empty_errors += 1
+                        if consecutive_empty_errors >= MAX_CONSECUTIVE_EMPTY_ERRORS:
+                            _log_error(
+                                game_dir,
+                                username,
+                                f"[pilot] {consecutive_empty_errors} consecutive empty errors "
+                                f"— bridge is dead, exiting",
+                            )
+                            if game_log:
+                                game_log.emit(
+                                    "auto_pilot_mode",
+                                    reason="bridge_dead",
+                                    consecutive_empty_errors=consecutive_empty_errors,
+                                )
+                            return
+                    else:
+                        consecutive_empty_errors = 0
 
                     # Log interesting results and track for stall detection
                     turn_tools_called.add(fn.name)
