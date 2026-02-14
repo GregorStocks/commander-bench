@@ -343,6 +343,7 @@ class Config:
     overlay: bool = True
     overlay_port: int = 17888
     overlay_host: str = "127.0.0.1"
+    num_games: int = 1  # Number of parallel games on the same server
 
     # Match timer settings (XMage enum names, e.g. "MIN__20", "SEC__10")
     match_time_limit: str = ""
