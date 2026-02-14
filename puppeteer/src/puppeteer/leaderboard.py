@@ -13,6 +13,36 @@ from puppeteer.harness_epoch import MIN_LEADERBOARD_EPOCH, infer_epoch
 
 _LOST_GAME_RE = re.compile(r"^(.+?) has lost the game\.$")
 
+
+def compute_thinking_time(llm_events: list[dict]) -> dict[str, float]:
+    """Compute per-player thinking time from sorted LLM events.
+
+    For each consecutive pair of events, the time gap is attributed to the
+    player of the earlier event. This approximates wall-clock time each player
+    spent with priority (similar to a chess clock).
+
+    Returns {player_name: total_seconds}.
+    """
+    thinking: dict[str, float] = {}
+    for i in range(len(llm_events) - 1):
+        player = llm_events[i].get("player", "")
+        if not player:
+            continue
+        ts_a = llm_events[i].get("ts", "")
+        ts_b = llm_events[i + 1].get("ts", "")
+        if not ts_a or not ts_b:
+            continue
+        try:
+            dt_a = datetime.fromisoformat(ts_a)
+            dt_b = datetime.fromisoformat(ts_b)
+        except ValueError:
+            continue
+        gap = (dt_b - dt_a).total_seconds()
+        if gap > 0:
+            thinking[player] = thinking.get(player, 0.0) + gap
+    return thinking
+
+
 _STARTING_RATING = 1600
 _K_FACTOR = 32
 
@@ -305,6 +335,7 @@ def generate_leaderboard(
                     "total_cost": 0.0,
                     "total_tool_calls_ok": 0,
                     "total_tool_calls_failed": 0,
+                    "total_thinking_time": 0.0,
                     "total_blunders": 0,
                     "annotated_games": 0,
                 }
@@ -314,6 +345,7 @@ def generate_leaderboard(
             stats[key]["total_cost"] += p.get("totalCostUsd", 0.0)
             stats[key]["total_tool_calls_ok"] += p.get("toolCallsOk", 0)
             stats[key]["total_tool_calls_failed"] += p.get("toolCallsFailed", 0)
+            stats[key]["total_thinking_time"] += p.get("thinkingTimeSecs", 0.0)
             if game.get("annotations") is not None:
                 stats[key]["annotated_games"] += 1
                 stats[key]["total_blunders"] += blunders_by_name.get(p["name"], 0)
@@ -335,6 +367,7 @@ def generate_leaderboard(
 
         avg_tool_calls_ok = s["total_tool_calls_ok"] / games_played
         avg_tool_calls_failed = s["total_tool_calls_failed"] / games_played
+        avg_thinking_time = s["total_thinking_time"] / games_played
         annotated_games = int(s["annotated_games"])
         avg_blunders = s["total_blunders"] / annotated_games if annotated_games > 0 else None
         entry: dict[str, str | int | float | None] = {
@@ -347,6 +380,7 @@ def generate_leaderboard(
             "avgApiCost": round(avg_cost, 2),
             "avgToolCallsOk": round(avg_tool_calls_ok, 1),
             "avgToolCallsFailed": round(avg_tool_calls_failed, 1),
+            "avgThinkingTimeSecs": round(avg_thinking_time, 1),
             "avgBlundersPerGame": round(avg_blunders, 1) if avg_blunders is not None else None,
         }
         if effort:
@@ -438,6 +472,16 @@ def generate_leaderboard_file(games_dir: Path, data_dir: Path, models_json: Path
                 if name in tool_ok or name in tool_failed:
                     p["toolCallsOk"] = tool_ok.get(name, 0)
                     p["toolCallsFailed"] = tool_failed.get(name, 0)
+
+        # Compute thinking time from llmEvents if not already on players
+        if players and not any("thinkingTimeSecs" in p for p in players):
+            llm_events = game.get("llmEvents", [])
+            if llm_events:
+                thinking = compute_thinking_time(llm_events)
+                for p in players:
+                    name = p.get("name", "")
+                    if name in thinking:
+                        p["thinkingTimeSecs"] = round(thinking[name], 1)
 
         game_entry: dict[str, Any] = {
             "id": game["id"],
