@@ -1,0 +1,10 @@
+{
+  "title": "Re-run mana tapping analysis with 30+ post-feature games",
+  "description": "Precondition: at least 81 total exported games in website/public/games/ (currently 51). Only 11 games post-date the mana_plan feature (commit 74a49b5af0, 2026-02-12 22:43).\n\nOnce we have 30+ more games, re-run the mana tapping analysis script filtering to games after the mana_plan commit:\n\n  uv run python scripts/analysis/mana_tapping.py website/public/games/\n\nAnalyze only games with timestamp >= 20260212_224324. Report findings on:\n- How often LLMs use mana_plan vs auto_tap\n- mana_plan success/failure rate by model\n- Whether certain models should default to auto_tap\n- Whether mana_plan is worth keeping or should be simplified/removed\n\nInclude the findings in the PR description and update this issue accordingly.",
+  "status": "open",
+  "priority": 4,
+  "type": "investigation",
+  "labels": ["headless-client", "mcp", "evaluation"],
+  "created_at": "2026-02-13T00:00:00.000000-08:00",
+  "updated_at": "2026-02-13T00:00:00.000000-08:00"
+}
