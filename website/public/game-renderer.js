@@ -731,7 +731,7 @@
         bodyRow.appendChild(sideCol);
 
         // Fit graveyard cards with overlap so entire zone is visible
-        _fitOverlappingCards(gyZone, 300, 90);
+        _fitOverlappingCards(gyZone, 300, 70);
       }
 
       // Main column (battlefield + hand)
@@ -798,16 +798,14 @@
 
   function renderStack(container, cardsContainer, stack, cardImages, previewEls) {
     if (!container) return;
+    container.classList.remove("hidden");
+    cardsContainer.innerHTML = "";
     if (stack && stack.length > 0) {
-      cardsContainer.innerHTML = "";
       stack.forEach(function (item) {
         var name = typeof item === "string" ? item : (item.name || "?");
         var obj = typeof item === "string" ? null : item;
         cardsContainer.appendChild(makeCardThumbnail(name, obj, cardImages, false, previewEls));
       });
-      container.classList.remove("hidden");
-    } else {
-      container.classList.add("hidden");
     }
   }
 

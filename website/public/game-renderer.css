@@ -139,7 +139,7 @@
 }
 
 .side-zones {
-  width: 110px;
+  width: 95px;
   flex-shrink: 0;
   border-right: 1px dashed rgba(255, 255, 255, 0.06);
   overflow: hidden;
@@ -184,7 +184,7 @@
 }
 
 .side-zones .card-thumb-sm {
-  width: 90px;
+  width: 70px;
 }
 
 /* Graveyard zone colored border */
@@ -392,13 +392,13 @@
 
 /* Stack (left sidebar next to battlefields) */
 #stack-section {
-  width: 140px;
+  width: 120px;
   flex-shrink: 0;
   padding: 0.5rem;
   background: #16213e;
   border: 1px solid #0f3460;
   border-radius: 8px;
-  align-self: flex-start;
+  align-self: stretch;
 }
 
 #stack-section .cards-row {
