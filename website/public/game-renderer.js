@@ -802,7 +802,8 @@
     cardsContainer.innerHTML = "";
     if (stack && stack.length > 0) {
       stack.forEach(function (item) {
-        var name = typeof item === "string" ? item : (item.name || "?");
+        var name = typeof item === "string" ? item : (item.name || "");
+        if (!name) return; // skip empty-named stack items (legacy StackAbilityView bug)
         var obj = typeof item === "string" ? null : item;
         cardsContainer.appendChild(makeCardThumbnail(name, obj, cardImages, false, previewEls));
       });
