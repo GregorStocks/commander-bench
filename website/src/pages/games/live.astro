@@ -17,14 +17,14 @@ import Base from '../../layouts/Base.astro';
       <!-- Main content: board left, log right -->
       <div id="game-content">
         <div id="game-left">
-          <!-- Board: 2x2 player grid -->
-          <div id="players-grid"></div>
-
-          <!-- Stack -->
-          <div id="stack-section" class="hidden">
+          <!-- Stack (left sidebar) -->
+          <div id="stack-section">
             <div class="section-title">Stack</div>
             <div id="stack-cards" class="cards-row"></div>
           </div>
+
+          <!-- Board: 2x2 player grid -->
+          <div id="players-grid"></div>
         </div>
 
         <div id="game-right">
@@ -105,6 +105,9 @@ import Base from '../../layouts/Base.astro';
   #game-left {
     flex: 1;
     min-width: 0;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
   }
 
   #game-right {
