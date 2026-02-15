@@ -902,6 +902,7 @@ def _setup_game(
     project_root: Path,
     log_dir: Path,
     timestamp: str,
+    used_player_names: set[str] | None = None,
 ) -> GameSession:
     """Set up a single game: create dir, load config, start spectator + clients.
 
@@ -925,13 +926,31 @@ def _setup_game(
             overlay_host=base_config.overlay_host,
             num_games=num_games,
         )
-        game_config.load_config()
+        game_config.load_config(cross_game_used_names=used_player_names)
         game_config.port = base_config.port
         game_config.timestamp = timestamp
         # Each spectator needs a unique username on the server to avoid
         # session conflicts (the server invalidates the old session when a
         # new client connects with the same username).
         game_config.user = f"spectator{index + 1}"
+        # Track all player names so later games can avoid duplicates.
+        # Two bridge clients with the same XMage username create an
+        # infinite disconnect/reconnect loop (same-host kick race).
+        if used_player_names is not None:
+            all_players = (
+                game_config.pilot_players
+                + game_config.potato_players
+                + game_config.staller_players
+                + game_config.sleepwalker_players
+            )
+            for p in all_players:
+                assert p.name not in used_player_names, (
+                    f"Duplicate player name {p.name!r} across parallel games — "
+                    f"two bridge clients with the same XMage username will "
+                    f"endlessly kick each other. Reduce num_games or use "
+                    f"unique player names."
+                )
+                used_player_names.add(p.name)
     else:
         game_config = base_config
 
@@ -1218,8 +1237,20 @@ def main() -> int:
             print(f"Starting {config.num_games} parallel games...")
 
         # --- Per-game setup (staggered for parallel) ---
+        # Track player names across games to prevent duplicate XMage
+        # usernames, which cause an infinite disconnect/reconnect loop.
+        used_player_names: set[str] = set()
         for i in range(config.num_games):
-            session = _setup_game(i, config.num_games, config, pm, project_root, log_dir, config.timestamp)
+            session = _setup_game(
+                i,
+                config.num_games,
+                config,
+                pm,
+                project_root,
+                log_dir,
+                config.timestamp,
+                used_player_names=used_player_names if batch else None,
+            )
             sessions.append(session)
 
         # Bring the GUI window to the foreground on macOS (single game only)
