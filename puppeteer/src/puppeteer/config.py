@@ -205,11 +205,16 @@ def _resolve_randoms(
     prompts: dict[str, str],
     models_data: dict,
     toolsets: dict[str, list[str]] | None = None,
+    cross_game_used_names: set[str] | None = None,
 ) -> None:
     """Resolve 'random' preset/personality values and apply preset/personality defaults.
 
     Each player tuple is (player, had_explicit_name). Modifies players in-place.
     Avoids duplicate personalities and presets across players.
+
+    cross_game_used_names: names already taken by other games in a parallel
+    batch.  When a randomly generated name collides, the personality is
+    re-rolled to produce a unique name.
     """
     has_randoms = any(p.preset == "random" or p.personality == "random" for p, _ in players)
     if has_randoms:
@@ -260,6 +265,25 @@ def _resolve_randoms(
         if was_random_personality and not had_explicit_name:
             assert player.model is not None, "Model must be set before name generation"
             player.name = _generate_player_name(player.model, player.personality, models_data, personalities)
+
+            # Avoid cross-game name collisions in parallel batches.  Two bridge
+            # clients with the same XMage username on the same server will
+            # endlessly kick each other's sessions (same-host duplicate
+            # detection), so we re-roll personality until the name is unique.
+            if cross_game_used_names is not None:
+                while player.name in cross_game_used_names:
+                    remaining = [k for k in available_personalities if k not in used_personalities]
+                    assert remaining, (
+                        f"Cannot generate unique player name for model {player.model!r}: "
+                        f"all personality combinations collide with names from other games "
+                        f"({cross_game_used_names}). Reduce num_games or add more "
+                        f"personalities/presets."
+                    )
+                    chosen_p = random.choice(remaining)
+                    used_personalities.add(chosen_p)
+                    player.personality = chosen_p
+                    player.name = _generate_player_name(player.model, player.personality, models_data, personalities)
+
             # Mark as having a name so _resolve_personality skips the name requirement
             had_explicit_name = True
 
@@ -376,8 +400,13 @@ class Config:
     pilot_players: list[PilotPlayer] = field(default_factory=list)
     cpu_players: list[CpuPlayer] = field(default_factory=list)
 
-    def load_config(self) -> None:
-        """Load player configuration from JSON file."""
+    def load_config(self, cross_game_used_names: set[str] | None = None) -> None:
+        """Load player configuration from JSON file.
+
+        cross_game_used_names: names already claimed by earlier games in a
+        parallel batch.  Passed to _resolve_randoms so it can re-roll
+        personalities to avoid duplicate XMage usernames.
+        """
         if self.config_file is None:
             # Try default locations in order
             candidates = [
@@ -451,7 +480,15 @@ class Config:
             )
 
             # Second pass: resolve random presets/personalities and generate names
-            _resolve_randoms(llm_players, personalities, presets_data, prompts, models_data, toolsets)
+            _resolve_randoms(
+                llm_players,
+                personalities,
+                presets_data,
+                prompts,
+                models_data,
+                toolsets,
+                cross_game_used_names=cross_game_used_names,
+            )
 
     def get_players_config_json(self) -> str:
         """Serialize resolved player config to JSON for passing to spectator/GUI client."""

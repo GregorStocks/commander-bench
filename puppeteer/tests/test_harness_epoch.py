@@ -31,7 +31,12 @@ def test_infer_epoch_3_priority_blocking():
 def test_infer_epoch_4_short_ids_batch_combat():
     assert infer_epoch("game_20260214_200000", None) == 4
     assert infer_epoch("game_20260214_210000", None) == 4
-    assert infer_epoch("game_20260215_000000", None) == 4
+    assert infer_epoch("game_20260214_225959", None) == 4
+
+
+def test_infer_epoch_5_duplicate_username_fix():
+    assert infer_epoch("game_20260214_230000", None) == 5
+    assert infer_epoch("game_20260215_000000", None) == 5
 
 
 def test_epoch_boundary_exact():
@@ -39,6 +44,7 @@ def test_epoch_boundary_exact():
     assert infer_epoch("game_20260212_224200", None) == 2
     assert infer_epoch("game_20260214_084000", None) == 3
     assert infer_epoch("game_20260214_200000", None) == 4
+    assert infer_epoch("game_20260214_230000", None) == 5
 
 
 def test_constants():

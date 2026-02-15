@@ -588,6 +588,50 @@ def test_resolve_randoms_non_random_untouched():
     assert player.name == "ModA Hero"  # Generated from model + personality
 
 
+def test_resolve_randoms_cross_game_dedup():
+    """Random resolution should re-roll personality to avoid cross-game name collisions."""
+    player = PilotPlayer(name="player-0", personality="random", preset="random")
+    players = [(player, False)]
+    used_names = {"ModA Hero"}  # "hero" + "preset-a" would produce this name
+
+    # First call returns "hero" (collides), second call returns "chill" (unique)
+    choices = ["hero", "preset-a", "chill"]
+    with patch("puppeteer.config.random.choice", side_effect=choices):
+        _resolve_randoms(
+            players,
+            SAMPLE_PERSONALITIES_WITH_PARTS,
+            SAMPLE_PRESETS_WITH_POOL,
+            SAMPLE_PROMPTS,
+            SAMPLE_MODELS_DATA,
+            cross_game_used_names=used_names,
+        )
+
+    assert player.name == "ModA Chill"
+    assert player.personality == "chill"
+
+
+def test_resolve_randoms_cross_game_dedup_crashes_when_exhausted():
+    """Should crash when all personalities collide with cross-game names."""
+    player = PilotPlayer(name="player-0", personality="random", preset="random")
+    players = [(player, False)]
+    # All possible names for preset-a are taken
+    used_names = {"ModA Hero", "ModA Chill", "ModA Nerd"}
+
+    choices = ["hero", "preset-a", "chill", "nerd"]
+    with (
+        patch("puppeteer.config.random.choice", side_effect=choices),
+        pytest.raises(AssertionError, match="Cannot generate unique player name"),
+    ):
+        _resolve_randoms(
+            players,
+            SAMPLE_PERSONALITIES_WITH_PARTS,
+            SAMPLE_PRESETS_WITH_POOL,
+            SAMPLE_PROMPTS,
+            SAMPLE_MODELS_DATA,
+            cross_game_used_names=used_names,
+        )
+
+
 def test_random_end_to_end_config_load():
     """Full integration: config with random values resolves to concrete players."""
     with tempfile.TemporaryDirectory() as tmpdir:
