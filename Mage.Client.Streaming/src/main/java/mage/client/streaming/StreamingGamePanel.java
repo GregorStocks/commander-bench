@@ -28,6 +28,7 @@ import mage.constants.PlayerAction;
 import mage.constants.Zone;
 import mage.view.CardView;
 import mage.view.CardsView;
+import mage.view.StackAbilityView;
 import mage.view.CommanderView;
 import mage.view.CommandObjectView;
 import mage.view.CounterView;
@@ -1809,7 +1810,7 @@ public class StreamingGamePanel extends GamePanel {
         if (game.getStack() != null) {
             for (CardView card : game.getStack().values()) {
                 var stackJson = new JsonObject();
-                stackJson.addProperty("name", safe(card.getDisplayName()));
+                stackJson.addProperty("name", stackCardName(card));
                 if (card.getId() != null) {
                     String owner = castOwners.get(card.getId().toString());
                     if (owner != null) {
@@ -2369,6 +2370,24 @@ public class StreamingGamePanel extends GamePanel {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    /**
+     * Get a display name for a stack card suitable for Scryfall image lookup.
+     * StackAbilityView never sets displayName, so fall back to the source card's name.
+     */
+    private static String stackCardName(CardView card) {
+        String name = card.getDisplayName();
+        if ((name == null || name.isEmpty()) && card instanceof StackAbilityView) {
+            CardView source = ((StackAbilityView) card).getSourceCard();
+            if (source != null) {
+                name = source.getDisplayName();
+            }
+        }
+        if (name == null || name.isEmpty()) {
+            name = card.getName();
+        }
+        return safe(name);
     }
 
     /**
